@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
@@ -31,9 +31,15 @@ pub enum Command {
         width: usize,
         request: u64,
     },
+    Polling(ControlRequest, u64),
+    SettingsChanged,
+    EpochSuspend(u64),
+    EpochResume(u64),
     Quit,
 }
 pub enum Event {
+    Polling(Box<ControlOutcome>),
+    PollingInvalidated(u64),
     Snapshot(Snapshot),
     Alert(Notification),
     History(u64, Result<Vec<Reading>, ProviderError>),
@@ -65,10 +71,18 @@ struct Completed {
     provider: Box<dyn BatteryProvider>,
     result: PollResult,
 }
+enum WorkerJob {
+    Battery(Job),
+    Polling(Box<ControlRequest>, Arc<AtomicBool>, u64),
+}
+enum WorkerCompleted {
+    Battery(Completed),
+    Polling(Box<ControlOutcome>),
+}
 enum Work {
     Command(Result<Command, crossbeam_channel::RecvError>),
     ConnectionEvent,
-    Completed(Result<Completed, crossbeam_channel::RecvError>),
+    Completed(Result<WorkerCompleted, crossbeam_channel::RecvError>),
     Idle,
 }
 fn effective_interval(interval: u64, quiet: bool) -> Duration {
@@ -139,10 +153,40 @@ impl Events {
         r
     }
 }
+pub(crate) struct ControlPermission {
+    enabled: AtomicBool,
+    epoch: AtomicU64,
+    suspended: AtomicBool,
+    desired_enabled: AtomicBool,
+    acknowledged: AtomicU64,
+    pending_settings: Mutex<Option<(Settings, u64)>>,
+}
+impl ControlPermission {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled: AtomicBool::new(enabled),
+            epoch: AtomicU64::new(0),
+            suspended: AtomicBool::new(false),
+            desired_enabled: AtomicBool::new(enabled),
+            acknowledged: AtomicU64::new(0),
+            pending_settings: Mutex::new(None),
+        }
+    }
+}
+struct Lifecycle {
+    cancel: Arc<AtomicBool>,
+    permission: Arc<ControlPermission>,
+}
+struct WorkerAccess {
+    gates: BTreeMap<u16, Mutex<()>>,
+    permission: Arc<ControlPermission>,
+}
 pub struct Runtime {
-    pub commands: Sender<Command>,
+    commands: Sender<Command>,
     pub events: Receiver<Event>,
     thread: Option<JoinHandle<()>>,
+    permission: Arc<ControlPermission>,
+    sink: Events,
     cancel: Arc<AtomicBool>,
     window: Arc<AtomicUsize>,
 }
@@ -153,19 +197,27 @@ impl Runtime {
         let (commands, rx) = bounded(32);
         let (events, events_rx) = bounded(64);
         let cancelled = cancel.clone();
+        let permission = Arc::new(ControlPermission::new(settings.polling_controls));
+        let lifecycle = Lifecycle {
+            cancel: cancelled,
+            permission: permission.clone(),
+        };
         let window = Arc::new(AtomicUsize::new(0));
         let sink = Events {
             tx: events,
             window: window.clone(),
         };
+        let output = sink.clone();
         let thread = thread::Builder::new()
             .name("state".into())
             .stack_size(512 * 1024)
-            .spawn(move || run(dir, settings, simulate, hid, cancelled, rx, sink))?;
+            .spawn(move || run(dir, settings, simulate, hid, lifecycle, rx, output))?;
         Ok(Self {
             commands,
             events: events_rx,
             thread: Some(thread),
+            permission,
+            sink,
             cancel,
             window,
         })
@@ -184,14 +236,59 @@ impl Runtime {
         }
     }
     pub fn send(&self, command: Command) {
-        let _ = self.commands.try_send(command);
+        let command = match command {
+            Command::Settings(settings) => {
+                self.permission.enabled.store(false, Ordering::Release);
+                let epoch = self.permission.epoch.fetch_add(1, Ordering::AcqRel) + 1;
+                self.permission
+                    .desired_enabled
+                    .store(settings.polling_controls, Ordering::Release);
+                *self
+                    .permission
+                    .pending_settings
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner()) = Some((settings, epoch));
+                Command::SettingsChanged
+            }
+            Command::Suspend => {
+                self.permission.suspended.store(true, Ordering::Release);
+                self.permission.enabled.store(false, Ordering::Release);
+                let epoch = self.permission.epoch.fetch_add(1, Ordering::AcqRel) + 1;
+                Command::EpochSuspend(epoch)
+            }
+            Command::Resume => {
+                self.permission.suspended.store(false, Ordering::Release);
+                self.permission.enabled.store(false, Ordering::Release);
+                let epoch = self.permission.epoch.fetch_add(1, Ordering::AcqRel) + 1;
+                Command::EpochResume(epoch)
+            }
+            command => command,
+        };
+        if self.commands.try_send(command).is_err() {
+            let _ = self.sink.try_send(Event::Error("Command queue is busy; retry the action. Device configuration remains revoked until settings or resume is acknowledged.".into()));
+        }
+    }
+    pub fn submit_control(&self, request: ControlRequest) -> Result<(), ProviderError> {
+        let epoch = self.permission.epoch.load(Ordering::Acquire);
+        if !self.permission.enabled.load(Ordering::Acquire)
+            || !self.permission.desired_enabled.load(Ordering::Acquire)
+            || self.permission.suspended.load(Ordering::Acquire)
+            || self.permission.acknowledged.load(Ordering::Acquire) != epoch
+        {
+            return Err(ProviderError::new(
+                "Polling controls are disabled or awaiting settings/resume acknowledgment; retry Refresh",
+            ));
+        }
+        self.commands
+            .try_send(Command::Polling(request, epoch))
+            .map_err(|e| ProviderError::new(format!("Configuration request rejected: {e}")))
     }
     pub fn stop(&mut self) {
         if self.thread.is_none() {
             return;
         }
         self.cancel.store(true, Ordering::Relaxed);
-        let _ = self.commands.send(Command::Quit);
+        let _ = self.commands.try_send(Command::Quit);
         if let Some(t) = self.thread.take() {
             while !t.is_finished() {
                 while self.events.try_recv().is_ok() {}
@@ -289,13 +386,13 @@ impl Drop for DeviceEvents {
     }
 }
 fn worker(
-    jobs: Receiver<Job>,
-    results: Sender<Completed>,
+    jobs: Receiver<WorkerJob>,
+    results: Sender<WorkerCompleted>,
     hid: Arc<WindowsHid>,
     cancel: Arc<AtomicBool>,
     winrt: bool,
     commands: Sender<Command>,
-    gates: Arc<BTreeMap<u16, Mutex<()>>>,
+    access: Arc<WorkerAccess>,
 ) -> JoinHandle<()> {
     thread::Builder::new()
         .name(if winrt { "winrt" } else { "hid" }.into())
@@ -334,18 +431,37 @@ fn worker(
                 // individual opens (Logitech opens both long and short channels).
                 let vendors = hb_providers::catalog::DEVICES
                     .iter()
-                    .filter(|d| d.provider == job.provider.id())
+                    .filter(|d| {
+                        d.provider
+                            == match &job {
+                                WorkerJob::Battery(job) => job.provider.id(),
+                                WorkerJob::Polling(request, _, _) => &request.target.reading.source,
+                            }
+                    })
                     .map(|d| d.vid)
                     .collect::<BTreeSet<_>>();
                 let _guards = vendors
                     .iter()
-                    .filter_map(|v| gates.get(v))
+                    .filter_map(|v| access.gates.get(v))
                     .map(|m| m.lock().unwrap_or_else(|p| p.into_inner()))
                     .collect::<Vec<_>>();
-                if results
-                    .send(execute_job(job, &*hid, &clock, &cancel))
-                    .is_err()
-                {
+                let completed = match job {
+                    WorkerJob::Battery(job) => {
+                        WorkerCompleted::Battery(execute_job(job, &*hid, &clock, &cancel))
+                    }
+                    WorkerJob::Polling(request, request_cancel, epoch) => {
+                        WorkerCompleted::Polling(Box::new(execute_control(
+                            &request,
+                            &*hid,
+                            &clock,
+                            &cancel,
+                            &request_cancel,
+                            hb_windows::system::polling_apply_blocked(),
+                            Some((access.permission.clone(), epoch)),
+                        )))
+                    }
+                };
+                if results.send(completed).is_err() {
                     break;
                 }
             }
@@ -387,6 +503,187 @@ fn execute_job(
         result,
     }
 }
+// Cancellation is checked before every native HID exchange, including jobs that
+// were already queued when settings, suspend or shutdown revoked permission.
+struct ControlTransport<'a> {
+    hid: &'a dyn HidTransport,
+    shutdown: Arc<AtomicBool>,
+    cancelled: Arc<AtomicBool>,
+    permission: Option<(Arc<ControlPermission>, u64)>,
+    block_while_gaming: bool,
+}
+struct ControlSession {
+    inner: Box<dyn HidSession>,
+    shutdown: Arc<AtomicBool>,
+    cancelled: Arc<AtomicBool>,
+    permission: Option<(Arc<ControlPermission>, u64)>,
+    block_while_gaming: bool,
+    notification_state: fn() -> bool,
+}
+impl ControlSession {
+    fn active(&self) -> Result<(), ProviderError> {
+        if self.shutdown.load(Ordering::Relaxed) || self.cancelled.load(Ordering::Relaxed) {
+            Err(ProviderError::new("configuration cancelled"))
+        } else if self.permission.as_ref().is_some_and(|(p, epoch)| {
+            !p.enabled.load(Ordering::Acquire)
+                || p.suspended.load(Ordering::Acquire)
+                || !p.desired_enabled.load(Ordering::Acquire)
+                || p.acknowledged.load(Ordering::Acquire) != *epoch
+                || p.epoch.load(Ordering::Acquire) != *epoch
+        }) {
+            Err(ProviderError::new("configuration permission revoked"))
+        } else if self.block_while_gaming && (self.notification_state)() {
+            Err(ProviderError::new(
+                "Close the game or presentation and verify the Windows notification state before changing the rate",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+impl HidSession for ControlSession {
+    fn write(&mut self, data: &[u8]) -> Result<(), ProviderError> {
+        self.active()?;
+        self.inner.write(data)
+    }
+    fn read(&mut self, length: usize, timeout: Duration) -> Result<Vec<u8>, ProviderError> {
+        self.active()?;
+        self.inner.read(length, timeout)
+    }
+    fn send_feature(&mut self, data: &[u8]) -> Result<(), ProviderError> {
+        self.active()?;
+        self.inner.send_feature(data)
+    }
+    fn feature(&mut self, id: u8, length: usize) -> Result<Vec<u8>, ProviderError> {
+        self.active()?;
+        self.inner.feature(id, length)
+    }
+}
+impl HidTransport for ControlTransport<'_> {
+    fn generation(&self) -> u64 {
+        self.hid.generation()
+    }
+    fn enumerate(&self, vendor: u16) -> Result<Vec<HidInfo>, ProviderError> {
+        if self.shutdown.load(Ordering::Relaxed) || self.cancelled.load(Ordering::Relaxed) {
+            return Err(ProviderError::new("configuration cancelled"));
+        }
+        self.hid.enumerate(vendor)
+    }
+    fn open(&self, info: &HidInfo) -> Result<Box<dyn HidSession>, ProviderError> {
+        if self.shutdown.load(Ordering::Relaxed) || self.cancelled.load(Ordering::Relaxed) {
+            return Err(ProviderError::new("configuration cancelled"));
+        }
+        Ok(Box::new(ControlSession {
+            inner: self.hid.open(info)?,
+            shutdown: self.shutdown.clone(),
+            cancelled: self.cancelled.clone(),
+            permission: self.permission.clone(),
+            block_while_gaming: self.block_while_gaming,
+            notification_state: hb_windows::system::polling_apply_blocked,
+        }))
+    }
+}
+pub(crate) fn execute_control(
+    request: &ControlRequest,
+    hid: &dyn HidTransport,
+    clock: &dyn Clock,
+    shutdown: &Arc<AtomicBool>,
+    cancelled: &Arc<AtomicBool>,
+    gaming: bool,
+    permission: Option<(Arc<ControlPermission>, u64)>,
+) -> ControlOutcome {
+    if shutdown.load(Ordering::Relaxed) || cancelled.load(Ordering::Relaxed) {
+        return ControlOutcome::failed(request, "Configuration cancelled");
+    }
+    // Uses Shell's public notification state only; no game-process inspection.
+    if gaming && matches!(request.action, ControlAction::Apply(_)) {
+        return ControlOutcome::failed(
+            request,
+            "Close the game or presentation and verify the Windows notification state before changing the rate",
+        );
+    }
+    let context = PollContext {
+        clock,
+        cancelled,
+        deadline: clock.monotonic() + Duration::from_secs(12),
+        playstation_full_mode: false,
+    };
+    let transport = ControlTransport {
+        hid,
+        shutdown: shutdown.clone(),
+        cancelled: cancelled.clone(),
+        permission,
+        block_while_gaming: matches!(request.action, ControlAction::Apply(_)),
+    };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        hb_providers::controls::HidDeviceController.execute(request, &transport, &context)
+    }))
+    .unwrap_or_else(|_| {
+        ControlOutcome::failed(
+            request,
+            "Configuration worker failed; device state is unknown. Refresh before retrying",
+        )
+    })
+}
+fn simulate_control(
+    request: &ControlRequest,
+    current: &mut PollingRate,
+    generation: u64,
+    timestamp: i64,
+) -> ControlOutcome {
+    if matches!(request.action, ControlAction::Apply(_)) && request.target.generation != generation
+    {
+        return ControlOutcome::failed(request, "Connection changed; refresh before applying");
+    }
+    let previous = *current;
+    if let ControlAction::Apply(rate) = request.action {
+        if ![125, 500, 1000, 2000, 4000, 8000].contains(&rate.hz()) {
+            return ControlOutcome::failed(request, "Unsupported rate for simulated mouse");
+        }
+        *current = rate;
+    }
+    let mut target = request.target.clone();
+    target.generation = generation;
+    ControlOutcome {
+        request: request.request,
+        key: target.reading.key.clone(),
+        observation: Some(PollingObservation {
+            target,
+            supported: [125, 500, 1000, 2000, 4000, 8000]
+                .into_iter()
+                .map(|r| PollingRate::try_from(r).unwrap())
+                .collect(),
+            rate: Some(*current),
+            timestamp,
+            evidence: "Simulation; no hardware accessed".into(),
+        }),
+        previous: Some(previous),
+        may_have_changed: previous != *current,
+        failure: None,
+    }
+}
+/// A healthy refresh can confirm a change after a previous partial SET.
+fn changed_configuration(
+    outcome: &ControlOutcome,
+    observed: &mut BTreeMap<String, PollingRate>,
+) -> bool {
+    if observed.len() >= 512 && !observed.contains_key(&outcome.key) {
+        observed.pop_first();
+    }
+    if let Some(previous) = outcome.previous {
+        observed.entry(outcome.key.clone()).or_insert(previous);
+    }
+    if outcome.failure.is_some() {
+        return false;
+    }
+    let Some(rate) = outcome.observation.as_ref().and_then(|o| o.rate) else {
+        return false;
+    };
+    let changed = observed
+        .insert(outcome.key.clone(), rate)
+        .is_some_and(|before| before != rate);
+    changed || outcome.confirmed_change()
+}
 struct Apartment(bool);
 impl Apartment {
     fn new(enabled: bool) -> Self {
@@ -407,10 +704,11 @@ fn run(
     settings: Settings,
     simulate: bool,
     hid: Arc<WindowsHid>,
-    cancel: Arc<AtomicBool>,
+    lifecycle: Lifecycle,
     commands: Receiver<Command>,
     events: Events,
 ) {
+    let Lifecycle { cancel, permission } = lifecycle;
     let (storage, store_rx) = bounded(32);
     let (boot, boot_rx) = bounded(1);
     let store_events = events.clone();
@@ -430,15 +728,16 @@ fn run(
     let (results, result_rx) = bounded(4);
     let (event_tx, event_rx) = bounded(8);
     let mut workers = Vec::new();
-    let gates = Arc::new(
-        hb_providers::catalog::DEVICES
+    let gates = Arc::new(WorkerAccess {
+        permission: permission.clone(),
+        gates: hb_providers::catalog::DEVICES
             .iter()
             .map(|d| d.vid)
             .collect::<BTreeSet<_>>()
             .into_iter()
             .map(|v| (v, Mutex::new(())))
             .collect::<BTreeMap<_, _>>(),
-    );
+    });
     for _ in 0..2 {
         workers.push(worker(
             job_rx.clone(),
@@ -471,12 +770,62 @@ fn run(
         providers.keys().map(|id| (*id, Instant::now())).collect();
     let mut invalidated = BTreeSet::new();
     let mut diagnostics = BTreeMap::new();
+    let mut control_cancel = Arc::new(AtomicBool::new(!engine.settings.polling_controls));
+    let mut simulated_rate = PollingRate::try_from(1000).unwrap();
+    let mut observed_rates = BTreeMap::new();
+    let _ = events.send(Event::PollingInvalidated(hid.generation()));
     let mut stop = false;
     let mut suspended = false;
     let mut was_quiet = false;
     let mut failed_delivery: BTreeMap<(String, NotificationKind), (Instant, Notification)> =
         BTreeMap::new();
     loop {
+        if cancel.load(Ordering::Relaxed) {
+            stop = true;
+            control_cancel.store(true, Ordering::Relaxed);
+        }
+        let latest_settings = permission
+            .pending_settings
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take();
+        if let Some((s, epoch)) = latest_settings {
+            let remove = engine.settings.status_file && !s.status_file;
+            control_cancel.store(true, Ordering::Relaxed);
+            control_cancel = Arc::new(AtomicBool::new(!s.polling_controls));
+            engine.update_settings(s.clone());
+            let _ = storage.send(Storage::Save(s));
+            if remove {
+                let _ = storage.send(Storage::RemoveStatus);
+            }
+            for id in providers.keys() {
+                due.insert(id, Instant::now());
+            }
+            permission.enabled.store(
+                engine.settings.polling_controls
+                    && permission.desired_enabled.load(Ordering::Acquire)
+                    && !permission.suspended.load(Ordering::Acquire),
+                Ordering::Release,
+            );
+            // A stale acknowledgment cannot authorize work with a newer epoch.
+            permission.acknowledged.store(epoch, Ordering::Release);
+        }
+        let requested_suspend = permission.suspended.load(Ordering::Acquire);
+        if requested_suspend != suspended {
+            suspended = requested_suspend;
+            control_cancel.store(true, Ordering::Relaxed);
+            hid.invalidate();
+            let _ = events.send(Event::PollingInvalidated(hid.generation()));
+            if suspended {
+                engine.suspend();
+            } else {
+                engine.resume();
+                control_cancel = Arc::new(AtomicBool::new(!engine.settings.polling_controls));
+                for id in providers.keys() {
+                    due.insert(id, Instant::now());
+                }
+            }
+        }
         let quiet = engine.settings.quiet_fullscreen && hb_windows::system::gaming();
         leave_quiet_mode(
             was_quiet,
@@ -532,14 +881,15 @@ fn run(
                     provider.invalidate();
                 }
                 let job = Job::new(provider, &engine.settings);
-                match target.try_send(job) {
+                match target.try_send(WorkerJob::Battery(job)) {
                     Ok(()) => {
                         inflight += 1;
                         due.remove(id);
                     }
                     Err(e) => {
-                        let j = e.into_inner();
-                        providers.insert(id, j.provider);
+                        if let WorkerJob::Battery(j) = e.into_inner() {
+                            providers.insert(id, j.provider);
+                        }
                     }
                 }
             }
@@ -561,16 +911,33 @@ fn run(
         match work {
             Work::Command(Ok(Command::Quit)) | Work::Command(Err(_)) => {
                 stop = true;
+                control_cancel.store(true, Ordering::Relaxed);
                 cancel.store(true, Ordering::Relaxed);
             }
-            Work::Command(Ok(Command::Suspend)) => {
+            Work::Command(Ok(Command::EpochSuspend(epoch)))
+                if epoch == permission.epoch.load(Ordering::Acquire) =>
+            {
                 suspended = true;
+                control_cancel.store(true, Ordering::Relaxed);
+                hid.invalidate();
+                let _ = events.send(Event::PollingInvalidated(hid.generation()));
                 engine.suspend();
             }
-            Work::Command(Ok(Command::Resume)) => {
+            Work::Command(Ok(Command::EpochResume(epoch)))
+                if epoch == permission.epoch.load(Ordering::Acquire) =>
+            {
                 suspended = false;
+                control_cancel = Arc::new(AtomicBool::new(!engine.settings.polling_controls));
                 engine.resume();
+                permission.enabled.store(
+                    engine.settings.polling_controls
+                        && permission.desired_enabled.load(Ordering::Acquire)
+                        && !permission.suspended.load(Ordering::Acquire),
+                    Ordering::Release,
+                );
+                permission.acknowledged.store(epoch, Ordering::Release);
                 hid.invalidate();
+                let _ = events.send(Event::PollingInvalidated(hid.generation()));
                 for id in hb_providers::provider::FAMILIES
                     .iter()
                     .map(|p| p.0)
@@ -590,23 +957,13 @@ fn run(
             }
             Work::Command(Ok(Command::Refresh)) => {
                 hid.invalidate();
+                let _ = events.send(Event::PollingInvalidated(hid.generation()));
                 for id in hb_providers::provider::FAMILIES
                     .iter()
                     .map(|p| p.0)
                     .chain(["bluetooth", "xinput"])
                 {
                     invalidated.insert(id);
-                    due.insert(id, Instant::now());
-                }
-            }
-            Work::Command(Ok(Command::Settings(s))) => {
-                let remove = engine.settings.status_file && !s.status_file;
-                engine.update_settings(s.clone());
-                let _ = storage.send(Storage::Save(s));
-                if remove {
-                    let _ = storage.send(Storage::RemoveStatus);
-                }
-                for id in providers.keys() {
                     due.insert(id, Instant::now());
                 }
             }
@@ -621,12 +978,13 @@ fn run(
             }
             Work::ConnectionEvent => {
                 hid.invalidate();
+                let _ = events.send(Event::PollingInvalidated(hid.generation()));
                 for id in ["bluetooth", "xinput"] {
                     invalidated.insert(id);
                     due.insert(id, Instant::now() + Duration::from_secs(2));
                 }
             }
-            Work::Completed(Ok(r)) => {
+            Work::Completed(Ok(WorkerCompleted::Battery(r))) => {
                 inflight = inflight.saturating_sub(1);
                 let id = r.provider.id();
                 diagnostics.insert(id.to_string(), r.provider.diagnostics());
@@ -642,6 +1000,92 @@ fn run(
                 providers.insert(id, r.provider);
                 let _ = storage.send(Storage::Sample(engine.readings()));
             }
+            Work::Command(Ok(Command::Polling(request, epoch))) => {
+                let allowed = epoch == permission.epoch.load(Ordering::Acquire)
+                    && permission.enabled.load(Ordering::Acquire)
+                    && permission.desired_enabled.load(Ordering::Acquire)
+                    && permission.acknowledged.load(Ordering::Acquire) == epoch
+                    && engine.settings.polling_controls
+                    && !suspended
+                    && !stop
+                    && engine.settings.enabled(&request.target.reading.source)
+                    && engine.readings().iter().any(|r| {
+                        r.key == request.target.reading.key
+                            && r.source == request.target.reading.source
+                            && r.online()
+                            && r.serial == request.target.reading.serial
+                            && r.container == request.target.reading.container
+                    });
+                if !allowed {
+                    let _ = events.send(Event::Polling(Box::new(ControlOutcome::failed(
+                        &request,
+                        "Enable polling controls and select an online device before configuring it",
+                    ))));
+                } else if simulate {
+                    let outcome = simulate_control(
+                        &request,
+                        &mut simulated_rate,
+                        hid.generation(),
+                        clock.unix(),
+                    );
+                    if changed_configuration(&outcome, &mut observed_rates) {
+                        engine.reset_estimate(&outcome.key);
+                        let _ = storage.send(Storage::State(engine.estimator.clone()));
+                    }
+                    let _ = events.send(Event::Polling(Box::new(outcome)));
+                } else {
+                    match jobs.try_send(WorkerJob::Polling(
+                        Box::new(request.clone()),
+                        control_cancel.clone(),
+                        epoch,
+                    )) {
+                        Ok(()) => inflight += 1,
+                        Err(_) => {
+                            let _ = events.send(Event::Polling(Box::new(ControlOutcome::failed(
+                                &request,
+                                "Device workers are busy; retry Refresh or Apply",
+                            ))));
+                        }
+                    }
+                }
+            }
+            Work::Completed(Ok(WorkerCompleted::Polling(mut outcome))) => {
+                inflight = inflight.saturating_sub(1);
+                if outcome
+                    .observation
+                    .as_ref()
+                    .is_some_and(|o| o.target.generation != hid.generation())
+                {
+                    outcome.observation = None;
+                    outcome.failure = Some(
+                        "Connection changed during configuration; refresh before retrying".into(),
+                    );
+                }
+                if changed_configuration(&outcome, &mut observed_rates) {
+                    engine.reset_estimate(&outcome.key);
+                    let _ = storage.send(Storage::State(engine.estimator.clone()));
+                }
+                diagnostics.insert(
+                    "polling_controls".into(),
+                    vec![format!(
+                        "request {}: {}",
+                        outcome.request,
+                        outcome
+                            .failure
+                            .as_deref()
+                            .unwrap_or("hardware readback verified")
+                    )],
+                );
+                let _ = events.send(Event::Polling(outcome));
+            }
+            Work::Command(Ok(
+                Command::SettingsChanged
+                | Command::EpochSuspend(_)
+                | Command::EpochResume(_)
+                | Command::Settings(_)
+                | Command::Suspend
+                | Command::Resume,
+            )) => {}
             Work::Completed(Err(_)) | Work::Idle => {}
         }
         let snapshot = engine.snapshot(clock.unix());
@@ -748,7 +1192,7 @@ mod tests {
             "razer",
             Some(now + Duration::from_secs(1)),
             now,
-            false
+            false,
         ));
         s.bluetooth = false;
         s.disabled_providers.insert("razer".into());
@@ -796,6 +1240,317 @@ mod tests {
         let job = Job::new(Box::new(Provider(observed.clone())), &s);
         assert!(execute_job(job, &NoHid, &clock, &cancel).result.is_err());
         assert_eq!(*observed.lock().unwrap(), [false, true]);
+    }
+    fn control_request(action: ControlAction, generation: u64) -> ControlRequest {
+        let mut reading = Reading::new("simulated:mouse", "Mouse", "simulation", 10);
+        reading.kind = "mouse".into();
+        ControlRequest {
+            request: 1,
+            target: ControlTarget {
+                reading,
+                generation,
+            },
+            action,
+        }
+    }
+    #[test]
+    fn explicit_simulation_read_apply_restore_and_stale_epoch() {
+        let mut current = PollingRate::try_from(1000).unwrap();
+        let read = simulate_control(
+            &control_request(ControlAction::Read, 0),
+            &mut current,
+            2,
+            10,
+        );
+        assert_eq!(read.observation.unwrap().rate.unwrap().hz(), 1000);
+        assert!(!read.may_have_changed);
+        let target = control_request(
+            ControlAction::Apply(PollingRate::try_from(8000).unwrap()),
+            2,
+        );
+        let applied = simulate_control(&target, &mut current, 2, 11);
+        assert!(applied.confirmed_change());
+        assert_eq!(applied.previous.unwrap().hz(), 1000);
+        assert_eq!(current.hz(), 8000);
+        assert!(
+            simulate_control(&target, &mut current, 3, 12)
+                .failure
+                .is_some()
+        );
+        let restored = simulate_control(
+            &control_request(ControlAction::Apply(applied.previous.unwrap()), 2),
+            &mut current,
+            2,
+            13,
+        );
+        assert!(restored.confirmed_change());
+        assert_eq!(current.hz(), 1000);
+    }
+    #[test]
+    fn gaming_or_cancelled_controls_never_open_hid() {
+        struct NeverHid;
+        impl HidTransport for NeverHid {
+            fn enumerate(&self, _: u16) -> Result<Vec<HidInfo>, ProviderError> {
+                panic!("unexpected access")
+            }
+            fn open(&self, _: &HidInfo) -> Result<Box<dyn HidSession>, ProviderError> {
+                panic!("unexpected access")
+            }
+        }
+        let clock = SystemClock::default();
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let request = control_request(
+            ControlAction::Apply(PollingRate::try_from(8000).unwrap()),
+            0,
+        );
+        assert!(
+            execute_control(
+                &request, &NeverHid, &clock, &shutdown, &cancelled, true, None
+            )
+            .failure
+            .unwrap()
+            .contains("Close the game")
+        );
+        cancelled.store(true, Ordering::Relaxed);
+        assert!(
+            execute_control(
+                &request, &NeverHid, &clock, &shutdown, &cancelled, false, None
+            )
+            .failure
+            .is_some()
+        );
+        cancelled.store(false, Ordering::Relaxed);
+        shutdown.store(true, Ordering::Relaxed);
+        assert!(
+            execute_control(
+                &request, &NeverHid, &clock, &shutdown, &cancelled, false, None
+            )
+            .failure
+            .is_some()
+        );
+    }
+    #[test]
+    fn full_command_queue_reports_rejection_without_silent_drop() {
+        let (commands, _rx) = bounded(1);
+        commands.send(Command::Refresh).unwrap();
+        let (event_tx, events) = bounded(1);
+        let runtime = Runtime {
+            commands,
+            events,
+            thread: None,
+            permission: Arc::new(ControlPermission::new(true)),
+            sink: Events {
+                tx: event_tx,
+                window: Arc::new(AtomicUsize::new(0)),
+            },
+            cancel: Arc::new(AtomicBool::new(false)),
+            window: Arc::new(AtomicUsize::new(0)),
+        };
+        assert!(
+            runtime
+                .submit_control(control_request(ControlAction::Read, 0))
+                .is_err()
+        );
+    }
+    #[test]
+    fn full_queue_cannot_lose_configuration_revocation_or_revive_old_jobs() {
+        let (commands, _rx) = bounded(1);
+        commands.send(Command::Refresh).unwrap();
+        let (event_tx, events) = bounded(4);
+        let permission = Arc::new(ControlPermission::new(true));
+        let runtime = Runtime {
+            commands,
+            events,
+            thread: None,
+            permission: permission.clone(),
+            sink: Events {
+                tx: event_tx,
+                window: Arc::new(AtomicUsize::new(0)),
+            },
+            cancel: Arc::new(AtomicBool::new(false)),
+            window: Arc::new(AtomicUsize::new(0)),
+        };
+        runtime.send(Command::Settings(Settings::default()));
+        assert!(!permission.enabled.load(Ordering::Acquire));
+        assert_eq!(permission.epoch.load(Ordering::Acquire), 1);
+        assert!(
+            runtime
+                .submit_control(control_request(ControlAction::Read, 0))
+                .is_err()
+        );
+        assert!(matches!(runtime.events.try_recv(), Ok(Event::Error(_))));
+        runtime.send(Command::Suspend);
+        assert!(permission.suspended.load(Ordering::Acquire));
+        assert_eq!(permission.epoch.load(Ordering::Acquire), 2);
+        // Even a later enabling acknowledgment cannot authorize a job with epoch0.
+        permission.enabled.store(true, Ordering::Release);
+        struct NeverSession;
+        impl HidSession for NeverSession {
+            fn write(&mut self, _: &[u8]) -> Result<(), ProviderError> {
+                panic!("native write")
+            }
+            fn read(&mut self, _: usize, _: Duration) -> Result<Vec<u8>, ProviderError> {
+                panic!("native read")
+            }
+            fn send_feature(&mut self, _: &[u8]) -> Result<(), ProviderError> {
+                panic!("native feature")
+            }
+            fn feature(&mut self, _: u8, _: usize) -> Result<Vec<u8>, ProviderError> {
+                panic!("native feature")
+            }
+        }
+        let mut session = ControlSession {
+            inner: Box::new(NeverSession),
+            shutdown: Arc::new(AtomicBool::new(false)),
+            cancelled: Arc::new(AtomicBool::new(false)),
+            permission: Some((permission.clone(), 0)),
+            block_while_gaming: false,
+            notification_state: || false,
+        };
+        assert!(session.send_feature(&[0]).is_err());
+        permission.suspended.store(false, Ordering::Release);
+        assert!(session.write(&[0]).is_err());
+        permission.desired_enabled.store(true, Ordering::Release);
+        permission.acknowledged.store(2, Ordering::Release);
+        session.permission = Some((permission, 2));
+        session.block_while_gaming = true;
+        session.notification_state = || true;
+        assert!(
+            session
+                .send_feature(&[0])
+                .unwrap_err()
+                .message
+                .contains("Close the game")
+        );
+    }
+    #[test]
+    fn verified_refresh_after_partial_change_resets_estimate_without_claiming_partial_success() {
+        let mut current = PollingRate::try_from(1000).unwrap();
+        let mut observed = BTreeMap::new();
+        let read = simulate_control(
+            &control_request(ControlAction::Read, 0),
+            &mut current,
+            0,
+            10,
+        );
+        assert!(!changed_configuration(&read, &mut observed));
+        let mut partial = simulate_control(
+            &control_request(
+                ControlAction::Apply(PollingRate::try_from(8000).unwrap()),
+                0,
+            ),
+            &mut current,
+            0,
+            11,
+        );
+        partial.failure = Some("second SET acknowledgment failed".into());
+        assert!(!changed_configuration(&partial, &mut observed));
+        assert_eq!(observed["simulated:mouse"].hz(), 1000);
+        let confirmed = simulate_control(
+            &control_request(ControlAction::Read, 0),
+            &mut current,
+            0,
+            12,
+        );
+        assert!(changed_configuration(&confirmed, &mut observed));
+        assert!(!changed_configuration(&confirmed, &mut observed));
+    }
+    #[test]
+    fn settings_survive_suspend_resume_and_full_mailboxes_shutdown() {
+        let d = tempfile::tempdir().unwrap();
+        let mut runtime = Runtime::start(
+            d.path().to_owned(),
+            Settings {
+                polling_controls: true,
+                ..Default::default()
+            },
+            true,
+        )
+        .unwrap();
+        runtime.send(Command::Settings(Settings {
+            polling_controls: false,
+            low: 17,
+            ..Default::default()
+        }));
+        runtime.send(Command::Suspend);
+        runtime.send(Command::Resume);
+        let until = Instant::now() + Duration::from_secs(5);
+        loop {
+            while runtime.events.try_recv().is_ok() {}
+            if d.path().join("config.json").exists() {
+                let s = hb_storage::load_settings(&d.path().join("config.json"));
+                if s.low == 17 && !s.polling_controls {
+                    break;
+                }
+            }
+            assert!(Instant::now() < until);
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            runtime
+                .submit_control(control_request(ControlAction::Read, 0))
+                .is_err()
+        );
+        // Artificially fill both queues. Stop must drain events before waiting
+        // for a Quit slot; its shared cancellation mailbox ends the owner loop.
+        while runtime.sink.try_send(Event::Error(String::new())).is_ok() {}
+        while runtime.commands.try_send(Command::Refresh).is_ok() {}
+        let started = Instant::now();
+        runtime.stop();
+        assert!(started.elapsed() < Duration::from_secs(5));
+    }
+    #[test]
+    fn simulation_rejects_unadvertised_rate_without_changing_current() {
+        let mut current = PollingRate::try_from(1000).unwrap();
+        let result = simulate_control(
+            &control_request(ControlAction::Apply(PollingRate::try_from(250).unwrap()), 0),
+            &mut current,
+            0,
+            10,
+        );
+        assert!(result.failure.is_some());
+        assert!(!result.may_have_changed);
+        assert_eq!(current.hz(), 1000);
+    }
+    #[test]
+    fn background_simulation_does_not_read_or_apply_saved_polling_selection() {
+        let d = tempfile::tempdir().unwrap();
+        let mut settings = Settings {
+            polling_controls: true,
+            ..Default::default()
+        };
+        settings
+            .devices
+            .entry("simulated:mouse".into())
+            .or_default()
+            .requested_polling_rate = PollingRate::try_from(8000).ok();
+        let mut runtime = Runtime::start(d.path().to_owned(), settings, true).unwrap();
+        loop {
+            match runtime
+                .events
+                .recv_timeout(Duration::from_secs(10))
+                .unwrap()
+            {
+                Event::Polling(_) => panic!("unsolicited configuration request"),
+                Event::Snapshot(s) if !s.devices.is_empty() => break,
+                _ => {}
+            }
+        }
+        runtime
+            .submit_control(control_request(ControlAction::Read, 0))
+            .unwrap();
+        loop {
+            if let Event::Polling(outcome) = runtime
+                .events
+                .recv_timeout(Duration::from_secs(10))
+                .unwrap()
+            {
+                assert_eq!(outcome.observation.unwrap().rate.unwrap().hz(), 1000);
+                break;
+            }
+        }
+        runtime.stop();
     }
     #[test]
     fn status_stays_absent_when_disabled_and_shutdown_drains_queues() {

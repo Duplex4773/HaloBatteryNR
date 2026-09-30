@@ -325,6 +325,7 @@ mod tests {
                 hidden: true,
                 low: Some(12),
                 icon: Some("mouse".into()),
+                ..Default::default()
             },
         );
         save_settings(&p, &settings).unwrap();

@@ -164,6 +164,17 @@ fn gaming_notification_state(state: QUERY_USER_NOTIFICATION_STATE) -> bool {
 pub fn gaming() -> bool {
     unsafe { SHQueryUserNotificationState() }.is_ok_and(gaming_notification_state)
 }
+
+fn polling_notification_state_blocked(state: Option<QUERY_USER_NOTIFICATION_STATE>) -> bool {
+    !matches!(
+        state,
+        Some(QUNS_NOT_PRESENT | QUNS_ACCEPTS_NOTIFICATIONS | QUNS_QUIET_TIME)
+    )
+}
+/// Configuration requires a known non-gaming Shell state. Failure is not permission.
+pub fn polling_apply_blocked() -> bool {
+    polling_notification_state_blocked(unsafe { SHQueryUserNotificationState() }.ok())
+}
 pub const APP_USER_MODEL_ID: &str = "HaloBatteryNext.Desktop";
 pub const APP_DISPLAY_NAME: &str = "Halo Battery Next";
 
@@ -388,6 +399,28 @@ mod tests {
             windows::Win32::System::Com::CoTaskMemFree(Some(id.0.cast()));
             assert_eq!(value, APP_USER_MODEL_ID);
         }
+    }
+    #[test]
+    fn polling_apply_requires_known_non_gaming_notification_state() {
+        for state in [
+            QUNS_NOT_PRESENT,
+            QUNS_ACCEPTS_NOTIFICATIONS,
+            QUNS_QUIET_TIME,
+        ] {
+            assert!(!polling_notification_state_blocked(Some(state)));
+        }
+        for state in [
+            QUNS_APP,
+            QUNS_BUSY,
+            QUNS_RUNNING_D3D_FULL_SCREEN,
+            QUNS_PRESENTATION_MODE,
+            QUERY_USER_NOTIFICATION_STATE(0),
+            QUERY_USER_NOTIFICATION_STATE(99),
+        ] {
+            assert!(polling_notification_state_blocked(Some(state)));
+        }
+        // A failed native query has no state and must never grant Apply permission.
+        assert!(polling_notification_state_blocked(None));
     }
     #[test]
     fn gaming_notification_states_and_native_query() {

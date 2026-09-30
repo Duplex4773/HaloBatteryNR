@@ -39,6 +39,20 @@ History retains 30 days, batches writes once per minute and flushes on normal ex
 
 PlayStation Bluetooth full mode is opt-in. 8BitDo mode switching is disabled. Unknown devices are excluded from command allowlists. Update checking remains disabled pending an independently configured release repository.
 
+Optional hardware polling-rate controls default off. Enable them in Settings,
+select a supported mouse on Devices, then use Refresh rate, Apply rate or Restore
+previous. DeathAdder V4 Pro supports the six advertised rates up to 8000 Hz;
+DeathAdder V3 Pro has conservative legacy support. Superlight 2/DEX use advertised
+HID++ rates, with software control mode required and direct USB limited to 1000 Hz.
+Saved selections are never applied automatically. Readback verifies configuration,
+not independently measured effective frequency. See `docs/polling-controls.md`.
+
+Configuration uses ordinary user-mode HID APIs, with no game-process memory
+access, injection, input hooks, input automation or custom drivers. Apply is
+blocked when Windows reports gaming/fullscreen/presentation activity. These
+restrictions reduce risk but do not establish approval by every anti-cheat
+vendor; see `docs/anti-cheat.md`.
+
 ## Validation and support
 
 See `docs/provider-parity.md` for provider/test coverage and limitations, and `docs/validation-next.md` for measured size, memory, CPU and native lifecycle checks. Original verified/unverified support labels remain in the upstream README and protocol documentation. Simulated tests do not establish hardware verification. The connected DeathAdder V4 Pro is the initial hardware validation device.
@@ -72,3 +86,6 @@ workspace. New products in existing protocol families refresh the command
 allowlists, and regression fixtures reveal changed packet interpretation. New
 protocols or altered polling behavior still require a reviewed Rust implementation
 and transaction tests before release; recompiling alone cannot establish support.
+Hardware configuration allowlists also require separate protocol evidence and
+review before accepting new models; catalog generation never extends rate-write
+permissions automatically.

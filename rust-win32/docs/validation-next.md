@@ -4,10 +4,63 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
-## Local regression checkpoint
+## Polling-control checkpoint, 1 October 2026
 
-Formatting, strict workspace Clippy, the optimized release build and **261 Rust
-tests** pass locally. The upstream coverage gate classifies all **459 IDs**:
+Formatting, strict workspace Clippy, the optimized release build and **325 Rust
+tests** pass locally. The original 459-ID coverage audit remains complete. The
+new regressions cover explicit control requests, exact packets, paired-unit and
+collection ambiguity, stale/late responses, partial writes, onboard mode,
+connection changes, full queues, disable/suspend/resume races and shutdown.
+Polling writes also fail closed for unknown or unavailable Windows Shell state;
+this restriction leaves the battery notification suppression policy unchanged.
+
+The executable is **2,614,784 bytes (2.49 MiB)**, SHA256
+`3BD2FA8B4B8A2392EA1B11FF404F1E260C51198C5DD513C69EAFF08DB867A7EA`.
+The production API/import gate
+passes: no process-memory access, injection, input hooks, synthetic input or
+service installation imports; the manifest remains `asInvoker`. Privacy scans
+find no local account or profile path in source or release strings.
+
+Native interaction validation on the final executable passed opt-in, read1000,
+Apply8000, Refresh, Restore1000, preference-preserving rename, restart with a
+saved8000 selection while the simulated device remains1000, and disable. All
+rate-changing native automation uses the isolated simulation. Keyboard/theme
+checks and 40 open/close cycles passed; warm USER/GDI handles stayed **44/102**.
+Private memory across complete warm cycles was 14.69 MiB at cycle 1 and 16.12 MiB
+at cycle 40, remaining below the 30 MiB target during dashboard interaction.
+
+The current physical DeathAdder receiver is discoverable, but its battery query
+returned a device timeout. No physical polling SET was attempted. Razer polling,
+Superlight2/DEX polling and effective USB frequency remain **unverified locally**;
+reference hardware captures and synthetic tests do not change those labels.
+No protected game or anti-cheat session was used to claim compatibility.
+
+### Five-minute polling-control measurements
+
+One simulated device, polling controls enabled, dashboard closed after 40
+open/close cycles. CPU percentages describe one logical core.
+
+| Workload | Duration | Average private memory | Peak private memory | Average CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Animation off | 300.72 s | 6.20 MiB | 6.46 MiB | 0.109% |
+| Animation on | 300.64 s | 6.48 MiB | 6.65 MiB | 0.187% |
+
+Warm USER/GDI handles changed from 14/15 to 13/15 without animation, and from
+44/102 to 43/102 with animation. Both runs exited gracefully and flushed status.
+All proposed resource targets pass for these workloads. The measured executable
+SHA256 was `D123F99629E3B286BAC239BBED74D2A9F1C3746F0FFCF4F7C25064E0DE7D0E1C`.
+These sustained runs precede the final conservative Shell-state restriction,
+which only changes permission checks on explicitly requested configuration.
+They do not measure physical polling writes or effective USB frequency.
+The final release then passed a 15.04-second animated smoke run with polling
+controls enabled: 6.25 MiB private memory and 0.104% of one logical core, stable
+native handles and graceful shutdown. This short check is not a five-minute
+resource measurement.
+
+## Previous battery-port regression checkpoint
+
+Before polling controls, formatting, strict workspace Clippy, the optimized
+release build and **261 Rust tests** passed locally. The upstream coverage gate classifies all **459 IDs**:
 **367 mapped**, **35 tested intentional differences**, and **57 retired Python
 implementation details**, with no partial, manual or unmapped IDs. This is an
 explicit coverage audit, not a claim that 459 separate Rust tests passed.
@@ -17,7 +70,7 @@ inspection shows system DLLs only. Build-profile paths and the local account nam
 have zero occurrences in its embedded strings; source scans also pass. The
 release script remaps build paths, and packaging retains required notices.
 
-## Latest five-minute measurements, 30 September 2026
+## Earlier five-minute measurements, 30 September 2026
 
 Both runs used one device with the dashboard closed after 40 complete open/close
 cycles. CPU percentages describe one logical core.
@@ -86,6 +139,9 @@ python tools/merge-coverage.py --check
 ./tools/validate-native.ps1 -Seconds 300 -Hardware
 ./tools/validate-native.ps1 -Seconds 300 -Animation -Cycles 40
 ./tools/validate-ui.ps1
+./tools/validate-configuration.ps1
+./tools/validate-native.ps1 -Seconds 300 -PollingControls -Cycles 40
+./tools/validate-native.ps1 -Seconds 300 -PollingControls -Animation -Cycles 40
 ./tools/package-rust.ps1
 ```
 

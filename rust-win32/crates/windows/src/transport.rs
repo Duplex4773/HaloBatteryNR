@@ -261,6 +261,9 @@ fn metadata(info: &mut HidInfo) {
     }
 }
 impl HidTransport for WindowsHid {
+    fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Relaxed)
+    }
     fn enumerate(&self, vendor: u16) -> Result<Vec<HidInfo>, ProviderError> {
         let generation = self.generation.load(Ordering::Relaxed);
         let mut cache = self.cache.lock().unwrap_or_else(|p| p.into_inner());

@@ -5,10 +5,14 @@ mod runtime;
 mod storage_worker;
 mod ui;
 use hb_core::*;
-use std::{path::PathBuf, sync::atomic::AtomicBool, time::Duration};
+use std::{
+    path::PathBuf,
+    sync::{Arc, atomic::AtomicBool},
+    time::Duration,
+};
 fn main() {
     if let Err(e) = entry() {
-        if std::env::args().any(|a| a == "--probe") {
+        if std::env::args().any(|a| a == "--probe" || a == "--polling-probe") {
             eprintln!("Halo Battery Next: {e}");
             std::process::exit(1);
         }
@@ -35,6 +39,90 @@ fn entry() -> Result<(), ProviderError> {
     let dir = option("--data-dir")
         .map(PathBuf::from)
         .unwrap_or_else(hb_storage::data_dir);
+    if args.iter().any(|a| a == "--polling-probe") {
+        // Diagnostic access is exclusive with the running app. Writes always
+        // require an explicit rate and exact stable key; no default mouse SET.
+        let _instance = hb_windows::system::Instance::acquire()?;
+        let selected_provider = option("--provider").unwrap_or_else(|| "razer".into());
+        if !["razer", "logitech"].contains(&selected_provider.as_str()) {
+            return Err(ProviderError::new(
+                "Polling controls support Razer and Logitech only",
+            ));
+        }
+        let action = match option("--polling-hz") {
+            Some(hz) => {
+                if option("--device-key").is_none() {
+                    return Err(ProviderError::new(
+                        "An explicit --device-key is required for a rate change",
+                    ));
+                }
+                let hz = hz
+                    .parse::<u32>()
+                    .map_err(|_| ProviderError::new("Invalid polling rate"))?;
+                ControlAction::Apply(PollingRate::try_from(hz).map_err(ProviderError::new)?)
+            }
+            None => ControlAction::Read,
+        };
+        if matches!(action, ControlAction::Apply(_)) && hb_windows::system::polling_apply_blocked()
+        {
+            return Err(ProviderError::new(
+                "Close the game or presentation and verify the Windows notification state before changing the rate",
+            ));
+        }
+        let hid = hb_windows::WindowsHid::new()?;
+        let clock = SystemClock::default();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let context = PollContext {
+            clock: &clock,
+            cancelled: &cancel,
+            deadline: clock.monotonic() + Duration::from_secs(25),
+            playstation_full_mode: false,
+        };
+        let mut provider = hb_providers::providers()
+            .into_iter()
+            .find(|p| p.id() == selected_provider)
+            .unwrap();
+        let devices = provider.poll(&hid, &context)?;
+        let mut output = Vec::new();
+        for reading in devices
+            .into_iter()
+            .filter(|r| option("--device-key").is_none_or(|key| key == r.key))
+        {
+            let request = ControlRequest {
+                request: 1,
+                target: ControlTarget {
+                    reading,
+                    generation: hid.generation(),
+                },
+                action,
+            };
+            let result = runtime::execute_control(
+                &request,
+                &hid,
+                &clock,
+                &cancel,
+                &cancel,
+                hb_windows::system::polling_apply_blocked(),
+                None,
+            );
+            output.push(serde_json::json!({ "key": result.key,
+                "name": request.target.reading.name,
+                "previous_hz": result.previous.map(PollingRate::hz),
+                "observed_hz": result.observation.as_ref().and_then(|o| o.rate).map(PollingRate::hz),
+                "supported_hz": result.observation.as_ref().map(|o| o.supported.iter().map(|r| r.hz()).collect::<Vec<_>>()),
+                "timestamp": result.observation.as_ref().map(|o| o.timestamp),
+                "may_have_changed": result.may_have_changed,
+                "failure": result.failure }));
+        }
+        if output.is_empty() {
+            return Err(ProviderError::new("No matching online device"));
+        }
+        let path = option("--output")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| dir.join("polling-probe.json"));
+        hb_storage::atomic_write(&path, &serde_json::to_vec_pretty(&output).unwrap())?;
+        return Ok(());
+    }
     if args.iter().any(|a| a == "--probe") {
         let hid = hb_windows::WindowsHid::new()?;
         let clock = SystemClock::default();

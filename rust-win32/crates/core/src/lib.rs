@@ -1,5 +1,7 @@
 //! Platform-independent contracts and state transitions for Halo Battery Next.
+pub mod controls;
 pub mod engine;
+pub use controls::*;
 pub mod history;
 pub mod settings;
 
@@ -125,6 +127,11 @@ pub trait HidSession: Send {
     }
 }
 pub trait HidTransport: Send + Sync {
+    /// Changes whenever enumeration is invalidated. Configuration writes must
+    /// revalidate their observed target after obtaining the receiver lock.
+    fn generation(&self) -> u64 {
+        0
+    }
     fn enumerate(&self, vendor: u16) -> Result<Vec<HidInfo>, ProviderError>;
     fn open(&self, info: &HidInfo) -> Result<Box<dyn HidSession>, ProviderError>;
 }

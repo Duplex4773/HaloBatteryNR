@@ -21,6 +21,7 @@ public static class HaloShot {
  [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr w,string text);
  [DllImport("user32.dll",CharSet=CharSet.Unicode,EntryPoint="SendMessageW")] public static extern IntPtr SendText(IntPtr w,uint m,UIntPtr p,string text);
  [DllImport("user32.dll")] public static extern IntPtr GetFocus();
+ [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr w);
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr w);
  [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr w,int i);
  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr w,uint m,UIntPtr p,IntPtr l);
@@ -99,6 +100,58 @@ foreach($threshold in '30','0',''){
 Write-Output 'Per-device low threshold30,0disable and blank/default persisted without losing rename.'
 [HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,12),241,[UIntPtr]1,[IntPtr]::Zero)|Out-Null;[HaloShot]::PostMessage($dashboard,273,[UIntPtr]15,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 300;$config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json;if(!$config.devices.'simulated:mouse'.hidden){throw 'Hide setting save failed'}
 [HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,12),241,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;[HaloShot]::PostMessage($dashboard,273,[UIntPtr]15,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 300;Write-Output 'Full charge toggle,8iconchoices,rename,pictogram override/automatic and hide/unhide persisted.'
+# Polling-rate automation is exclusively the runtime simulation, never a hardware device.
+function Wait-Rate([int]$hz){
+ $deadline=[DateTime]::UtcNow.AddSeconds(5)
+ do {Start-Sleep -Milliseconds 100;$text=[HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,44));$ready=[HaloShot]::IsWindowEnabled([HaloShot]::GetDlgItem($dashboard,41))}while((!$ready-or$text-ne"Device-reported configured rate: $hz Hz")-and[DateTime]::UtcNow-lt$deadline)
+ if(!$ready-or$text-ne"Device-reported configured rate: $hz Hz"){throw "Simulation rate not verified: wanted $hz, saw $text"}
+}
+function Set-SimRate([int]$index,[int]$hz){
+ [HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,43),334,[UIntPtr]$index,[IntPtr]::Zero)|Out-Null
+ [HaloShot]::PostMessage($dashboard,273,[UIntPtr]40,[IntPtr]::Zero)|Out-Null
+ Wait-Rate $hz
+ $config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json
+ if($config.devices.'simulated:mouse'.requested_polling_rate-ne$hz){throw 'Explicit polling intent did not persist'}
+}
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]3,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 200
+if([HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,112),240,[UIntPtr]::Zero,[IntPtr]::Zero).ToInt32()-ne0){throw 'Polling controls must default off'}
+[HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,112),241,[UIntPtr]1,[IntPtr]::Zero)|Out-Null
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]210,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 200
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]1,[IntPtr]::Zero)|Out-Null
+Wait-Rate 1000
+if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,45))-notlike'*UTC*Simulation*'){throw 'Hardware read time/evidence missing'}
+Set-SimRate 5 8000
+# Saving ordinary device preferences must preserve intent without changing hardware.
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]15,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
+$config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json
+if($config.devices.'simulated:mouse'.requested_polling_rate-ne8000-or$config.devices.'simulated:mouse'.name-ne'Renamed simulation'){throw 'Saving device preferences lost polling intent'}
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]41,[IntPtr]::Zero)|Out-Null;Wait-Rate 8000
+if(![HaloShot]::IsWindowEnabled([HaloShot]::GetDlgItem($dashboard,42))){throw 'Restore previous should be available after a verified change'}
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]42,[IntPtr]::Zero)|Out-Null;Wait-Rate 1000
+Set-SimRate 5 8000
+[HaloShot]::Save($dashboard,(Join-Path $folder 'polling.png'))
+# Restart with saved 8000-Hz intent. Simulation resets to1000; the UI must only Read.
+[HaloShot]::PostMessage($monitor,32778,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
+if(!$p.WaitForExit(10000)){throw 'Polling restart quit timeout'}
+$p=Start-Process $exe -ArgumentList @('--background','--simulate','--data-dir',"`"$folder`"") -PassThru -WindowStyle Hidden
+[HaloShot]::TargetPid=$p.Id
+$deadline=[DateTime]::UtcNow.AddSeconds(10)
+do{Start-Sleep -Milliseconds 200;$monitor=[HaloShot]::FindWindow($null,'Halo Battery Next monitor')}while($monitor-eq[IntPtr]::Zero-and[DateTime]::UtcNow-lt$deadline)
+if($monitor-eq[IntPtr]::Zero){throw 'Missing restarted simulation monitor'}
+Start-Sleep -Seconds 1
+$p.Refresh();$cold=@{user=[HaloShot]::GetGuiResources($p.Handle,1);gdi=[HaloShot]::GetGuiResources($p.Handle,0)}
+[HaloShot]::PostMessage($monitor,32776,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 400
+$dashboard=[HaloShot]::FindWindow($null,'Halo Battery Next')
+Wait-Rate 1000
+if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,46))-notlike'*8000 Hz*'){throw 'Restart lost the last requested intent'}
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]3,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
+[HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,112),241,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]210,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]1,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
+if([HaloShot]::GetDlgItem($dashboard,40)-ne[IntPtr]::Zero){throw 'Disabled polling controls still expose Apply'}
+$config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json
+if($config.polling_controls-or$config.devices.'simulated:mouse'.requested_polling_rate-ne8000-or$config.devices.'simulated:mouse'.name-ne'Renamed simulation'){throw 'Disabling polling lost preferences or failed to persist'}
+Write-Output 'Simulated polling opt-in, Read1000, Apply8000, Refresh, explicit Restore1000, saved intent/no automatic Apply on restart and disable passed.'
 [HaloShot]::PostMessage($monitor,32777,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 200
 if([HaloShot]::FindWindow($null,'Halo Battery Next')-ne[IntPtr]::Zero){throw 'Dashboard did not close'}
 if([HaloShot]::FindWindow($null,'Halo Battery Next monitor')-eq[IntPtr]::Zero){throw 'Monitor lost on dashboard close'}

@@ -12,7 +12,7 @@ use windows::{
         Foundation::*,
         Graphics::Gdi::*,
         System::LibraryLoader::GetModuleHandleW,
-        UI::{HiDpi::*, Shell::*, WindowsAndMessaging::*},
+        UI::{HiDpi::*, Input::KeyboardAndMouse::EnableWindow, Shell::*, WindowsAndMessaging::*},
     },
     core::{GUID, PCWSTR, w},
 };
@@ -57,6 +57,186 @@ impl Drop for Tray {
         }
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PollingIntent {
+    Read,
+    Apply { rate: PollingRate, restore: bool },
+}
+#[derive(Clone, Debug)]
+struct PendingPolling {
+    request: u64,
+    key: String,
+    intent: PollingIntent,
+}
+#[derive(Default)]
+struct PollingUi {
+    sequence: u64,
+    generation: u64,
+    pending: Option<PendingPolling>,
+    observations: BTreeMap<String, PollingObservation>,
+    previous: BTreeMap<String, PollingRate>,
+    status: BTreeMap<String, String>,
+}
+impl PollingUi {
+    fn abandon(&mut self) {
+        self.pending = None;
+    }
+    fn invalidate(&mut self, generation: u64) {
+        if generation < self.generation {
+            return;
+        }
+        self.generation = generation;
+        self.observations.clear();
+        self.previous.clear();
+        self.status.clear();
+        self.pending = None;
+    }
+    fn retain_devices(&mut self, devices: &[DeviceView]) {
+        let keys = devices
+            .iter()
+            .take(512)
+            .map(|d| d.reading.key.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        self.observations
+            .retain(|key, _| keys.contains(key.as_str()));
+        self.previous.retain(|key, _| keys.contains(key.as_str()));
+        self.status.retain(|key, _| keys.contains(key.as_str()));
+    }
+    fn begin(
+        &mut self,
+        reading: Reading,
+        intent: PollingIntent,
+    ) -> Result<ControlRequest, &'static str> {
+        if self.pending.is_some() {
+            return Err("A device request is already pending");
+        }
+        let (target, action) = match intent {
+            PollingIntent::Read => (
+                ControlTarget {
+                    reading,
+                    generation: 0,
+                },
+                ControlAction::Read,
+            ),
+            PollingIntent::Apply { rate, .. } => {
+                let observation = self
+                    .observations
+                    .get(&reading.key)
+                    .ok_or("Refresh the hardware rate before applying")?;
+                if observation.target.generation != self.generation
+                    || observation.rate.is_none()
+                    || !observation.supported.contains(&rate)
+                {
+                    return Err("Refresh the hardware rate and select a supported value");
+                }
+                (observation.target.clone(), ControlAction::Apply(rate))
+            }
+        };
+        self.sequence = self.sequence.wrapping_add(1).max(1);
+        self.pending = Some(PendingPolling {
+            request: self.sequence,
+            key: target.reading.key.clone(),
+            intent,
+        });
+        self.status.insert(
+            target.reading.key.clone(),
+            match intent {
+                PollingIntent::Read => "Reading hardware configuration…".into(),
+                PollingIntent::Apply { restore: true, .. } => {
+                    "Restoring the previous hardware rate…".into()
+                }
+                _ => "Applying and verifying the hardware rate…".into(),
+            },
+        );
+        Ok(ControlRequest {
+            request: self.sequence,
+            target,
+            action,
+        })
+    }
+    fn accept(&mut self, outcome: &ControlOutcome, selected: Option<&str>) -> bool {
+        let Some(pending) = self.pending.as_ref() else {
+            return false;
+        };
+        if pending.request != outcome.request
+            || pending.key != outcome.key
+            || selected != Some(outcome.key.as_str())
+        {
+            return false;
+        }
+        let pending = self.pending.take().unwrap();
+        if let Some(observation) = &outcome.observation {
+            if observation.target.reading.key != outcome.key
+                || observation.target.generation < self.generation
+            {
+                self.observations.remove(&outcome.key);
+                self.status.insert(
+                    outcome.key.clone(),
+                    "Device configuration changed; Refresh before applying".into(),
+                );
+                return true;
+            }
+            self.generation = observation.target.generation;
+            self.observations
+                .insert(outcome.key.clone(), observation.clone());
+        } else {
+            self.observations.remove(&outcome.key);
+        }
+        if let PollingIntent::Apply { restore: false, .. } = pending.intent
+            && let Some(previous) = outcome.previous
+        {
+            // Keep the verified before-value for this explicit operation. A no-op
+            // must not discard the recovery value from an earlier change.
+            if let PollingIntent::Apply { rate, .. } = pending.intent
+                && (rate != previous || outcome.failure.is_some())
+            {
+                self.previous.insert(outcome.key.clone(), previous);
+            }
+        }
+        let observed = outcome.observation.as_ref().and_then(|o| o.rate);
+        let message = if let Some(failure) = &outcome.failure {
+            if outcome.may_have_changed {
+                format!("Hardware may have changed. {failure} Refresh to verify.")
+            } else {
+                failure.clone()
+            }
+        } else {
+            match pending.intent {
+                PollingIntent::Read if observed.is_some() => {
+                    "Hardware rate read. Changes require Apply.".into()
+                }
+                PollingIntent::Read => "Hardware did not report a polling rate.".into(),
+                PollingIntent::Apply { rate, .. } if observed == Some(rate) => {
+                    format!("Confirmed configured rate: {} Hz", rate.hz())
+                }
+                _ => "Change was not verified. Refresh the hardware rate before continuing.".into(),
+            }
+        };
+        self.status.insert(outcome.key.clone(), message);
+        true
+    }
+}
+// UTC is stable between updates and does not imply a continuously refreshed age.
+fn polling_timestamp(timestamp: i64) -> String {
+    let days = timestamp.div_euclid(86_400);
+    let seconds = timestamp.rem_euclid(86_400);
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let mut year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = mp + if mp < 10 { 3 } else { -9 };
+    year += i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02} {:02}:{:02}:{:02} UTC",
+        seconds / 3600,
+        seconds / 60 % 60,
+        seconds % 60
+    )
+}
 struct State {
     context: *const RefCell<State>,
     runtime: Runtime,
@@ -81,6 +261,8 @@ struct State {
     animating: bool,
     error: String,
     font: HFONT,
+    polling: PollingUi,
+    polling_intents: BTreeMap<String, (u64, PollingRate)>,
 }
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
@@ -156,6 +338,8 @@ pub fn run(
             animating: false,
             error: initial_error.unwrap_or_default(),
             font,
+            polling: PollingUi::default(),
+            polling_intents: BTreeMap::new(),
         }));
         let ptr = &*context as *const RefCell<State>;
         let mut state = context.borrow_mut();
@@ -343,6 +527,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             WM_CLOSE => {
                 if Some(hwnd) == s.dashboard {
                     s.chart = None;
+                    s.polling.abandon();
                     s.controls.clear();
                     s.dashboard = None;
                     let _ = DeleteObject(s.font.into());
@@ -563,7 +748,9 @@ impl State {
             ) {
                 Ok(h) => {
                     self.dashboard = Some(h);
+                    self.polling.abandon();
                     self.build();
+                    self.read_polling();
                     let _ = ShowWindow(h, SW_SHOW);
                     let _ = SetForegroundWindow(h);
                 }
@@ -671,8 +858,9 @@ impl State {
                         740,
                     );
                 }
-                self.label(95, &self.error.clone(), 20, 420, 750);
-                self.button(5, "Export &diagnostics", 20, 470, 200);
+                self.polling_controls();
+                self.label(95, &self.error.clone(), 20, 680, 750);
+                self.button(5, "Export &diagnostics", 20, 725, 200);
             }
             2 => {
                 self.combo(10, &names, self.selected, 20, 65, 530);
@@ -719,15 +907,23 @@ impl State {
                         );
                     }
                 }
-                self.label(200, "Poll seconds (5–3600)", 20, 270, 230);
-                self.edit(201, &self.settings.interval.to_string(), 260, 266, 100);
-                self.label(202, "Default low alert %", 410, 270, 210);
-                self.edit(203, &self.settings.low.to_string(), 660, 266, 80);
+                self.check(
+                    112,
+                    "Enable polling-rate controls",
+                    self.settings.polling_controls,
+                    20,
+                    258,
+                    740,
+                );
+                self.label(200, "Battery refresh interval", 20, 302, 230);
+                self.edit(201, &self.settings.interval.to_string(), 260, 298, 100);
+                self.label(202, "Default low alert %", 410, 302, 210);
+                self.edit(203, &self.settings.low.to_string(), 660, 298, 80);
                 let themes: Vec<_> = ["auto", "white", "black", "windows", "topbar"]
                     .iter()
                     .map(|s| s.to_string())
                     .collect();
-                self.label(204, "Icon theme", 20, 310, 150);
+                self.label(204, "Icon theme", 20, 342, 150);
                 self.combo(
                     205,
                     &themes,
@@ -736,7 +932,7 @@ impl State {
                         .position(|s| s == &self.settings.icon_theme)
                         .unwrap_or(0),
                     180,
-                    306,
+                    338,
                     180,
                 );
                 self.check(
@@ -744,21 +940,21 @@ impl State {
                     "Launch at sign in",
                     hb_windows::system::is_startup(),
                     410,
-                    306,
+                    338,
                     360,
                 );
-                self.label(207, "Provider switches", 20, 350, 740);
+                self.label(207, "Provider switches", 20, 382, 740);
                 for (i, p) in providers().iter().enumerate() {
                     self.check(
                         300 + i as u16,
                         provider_label(p),
                         self.settings.enabled(p),
                         20 + (i as i32 % 4) * 190,
-                        380 + (i as i32 / 4) * 30,
+                        412 + (i as i32 / 4) * 30,
                         180,
                     );
                 }
-                self.label(208, "Release repository (owner/name)", 20, 604, 300);
+                self.label(208, "Release repository (owner/name)", 20, 636, 300);
                 self.edit(
                     209,
                     self.settings
@@ -767,12 +963,12 @@ impl State {
                         .as_deref()
                         .unwrap_or(""),
                     330,
-                    600,
+                    632,
                     410,
                 );
-                self.button(210, "&Save settings", 20, 650, 180);
-                self.button(5, "Export &diagnostics", 220, 650, 200);
-                self.label(95, &self.error.clone(), 20, 700, 750);
+                self.button(210, "&Save settings", 20, 682, 180);
+                self.button(5, "Export &diagnostics", 220, 682, 200);
+                self.label(95, &self.error.clone(), 20, 732, 750);
             }
             _ => {}
         }
@@ -787,8 +983,10 @@ impl State {
     fn command(&mut self, id: u16, notification: u16) {
         match id {
             1..=3 => {
+                self.polling.abandon();
                 self.page = id;
-                self.build()
+                self.build();
+                self.read_polling()
             }
             4 => {
                 self.runtime.send(Command::Refresh);
@@ -809,9 +1007,14 @@ impl State {
                 self.build()
             }
             10 if notification == CBN_SELCHANGE as u16 => {
+                self.polling.abandon();
                 self.selected = self.choice(10);
-                self.build()
+                self.build();
+                self.read_polling()
             }
+            40 => self.apply_polling(false),
+            41 => self.read_polling(),
+            42 => self.apply_polling(true),
             20 if notification == CBN_SELCHANGE as u16 => {
                 self.days = [1, 7, 30][self.choice(20).min(2)];
                 self.query()
@@ -847,12 +1050,17 @@ impl State {
                         )
                     };
                     self.settings.devices.insert(
-                        key,
+                        key.clone(),
                         DevicePreferences {
                             name: (!name.trim().is_empty()).then_some(name),
                             hidden,
                             icon,
                             low,
+                            requested_polling_rate: self
+                                .settings
+                                .devices
+                                .get(&key)
+                                .and_then(|p| p.requested_polling_rate),
                         },
                     );
                     self.save();
@@ -876,10 +1084,13 @@ impl State {
                     .filter(|n| (5..=3600).contains(n));
                 let low = self.text(203).parse::<u8>().ok().filter(|n| *n <= 100);
                 if interval.is_none() || low.is_none() {
-                    self.error = "Poll seconds must be 5–3600; alert must be 0–100".into();
+                    self.error =
+                        "Battery refresh interval must be 5–3600 seconds; alert must be 0–100"
+                            .into();
                     self.build();
                     return;
                 }
+                value["polling_controls"] = self.checked(112).into();
                 value["interval"] = interval.unwrap().into();
                 value["low"] = low.unwrap().into();
                 value["icon_theme"] =
@@ -907,6 +1118,10 @@ impl State {
                     Err(e) => e.to_string(),
                 };
                 self.save();
+                self.polling.abandon();
+                if !self.settings.polling_controls {
+                    self.polling.observations.clear();
+                }
                 self.build()
             }
             503 => {
@@ -941,6 +1156,222 @@ impl State {
             _ => {}
         }
     }
+    fn visible_polling_device(&self) -> Option<Reading> {
+        (self.dashboard.is_some() && self.page == 1 && self.settings.polling_controls)
+            .then(|| {
+                self.snapshot
+                    .devices
+                    .get(self.selected)
+                    .map(|d| d.reading.clone())
+            })
+            .flatten()
+    }
+    fn enable_control(&self, id: u16, enabled: bool) {
+        if let Some(h) = self.controls.get(&id) {
+            unsafe {
+                let _ = EnableWindow(*h, enabled);
+            }
+        }
+    }
+    fn polling_controls(&mut self) {
+        if self.dashboard.is_none() || self.page != 1 {
+            return;
+        }
+        // Update only this group: an asynchronous hardware reply must not discard unsaved device edits.
+        for id in (40..=47).chain([98, 99]) {
+            if let Some(h) = self.controls.remove(&id) {
+                unsafe {
+                    let _ = DestroyWindow(h);
+                }
+            }
+        }
+        self.label(98, "Device polling rate", 20, 420, 750);
+        self.label(
+            99,
+            "Hardware configuration only. Apply before starting a game.",
+            20,
+            448,
+            750,
+        );
+        if !self.settings.polling_controls {
+            self.label(
+                44,
+                "Enable polling-rate controls in Settings to read supported devices.",
+                20,
+                484,
+                750,
+            );
+            return;
+        }
+        let Some(reading) = self.visible_polling_device() else {
+            self.label(
+                44,
+                "Select a connected device to read its hardware rate.",
+                20,
+                484,
+                750,
+            );
+            return;
+        };
+        let key = reading.key;
+        let observation = self.polling.observations.get(&key).cloned();
+        let current = observation.as_ref().and_then(|o| o.rate);
+        self.label(
+            44,
+            &format!(
+                "Device-reported configured rate: {}",
+                current.map_or_else(|| "unavailable".into(), |r| format!("{} Hz", r.hz()))
+            ),
+            20,
+            484,
+            750,
+        );
+        let evidence = observation.as_ref().map_or_else(
+            || "Use Refresh rate to read this device.".into(),
+            |o| {
+                format!(
+                    "Last read: {} · {}",
+                    polling_timestamp(o.timestamp),
+                    o.evidence
+                )
+            },
+        );
+        self.control(
+            45,
+            w!("STATIC"),
+            &evidence,
+            WINDOW_STYLE::default(),
+            20,
+            516,
+            750,
+            48,
+        );
+        let requested = self
+            .settings
+            .devices
+            .get(&key)
+            .and_then(|p| p.requested_polling_rate);
+        self.label(
+            46,
+            &format!(
+                "Last requested: {} · Choose a supported rate",
+                requested.map_or_else(|| "none".into(), |r| format!("{} Hz", r.hz()))
+            ),
+            20,
+            568,
+            750,
+        );
+        let supported = observation
+            .as_ref()
+            .map_or_else(Vec::new, |o| o.supported.clone());
+        let chosen = requested
+            .or(current)
+            .and_then(|r| supported.iter().position(|v| *v == r))
+            .unwrap_or(0);
+        let options = supported
+            .iter()
+            .map(|r| format!("{} Hz", r.hz()))
+            .collect::<Vec<_>>();
+        self.combo(43, &options, chosen, 20, 600, 240);
+        self.button(40, "&Apply rate", 280, 600, 120);
+        self.button(41, "Refresh rate", 410, 600, 140);
+        self.button(42, "Restore previous", 560, 600, 190);
+        let pending = self.polling.pending.is_some();
+        let verified = observation
+            .as_ref()
+            .is_some_and(|o| o.target.generation == self.polling.generation && o.rate.is_some());
+        self.enable_control(43, !pending && verified && !supported.is_empty());
+        self.enable_control(40, !pending && verified && !supported.is_empty());
+        self.enable_control(41, !pending);
+        let restore = self
+            .polling
+            .previous
+            .get(&key)
+            .is_some_and(|r| supported.contains(r) && current != Some(*r));
+        self.enable_control(42, !pending && verified && restore);
+        let status = self
+            .polling
+            .status
+            .get(&key)
+            .cloned()
+            .unwrap_or_else(|| "Hardware rate has not been read in this session.".into());
+        self.control(
+            47,
+            w!("STATIC"),
+            &status,
+            WINDOW_STYLE::default(),
+            20,
+            638,
+            750,
+            38,
+        );
+    }
+    fn read_polling(&mut self) {
+        if let Some(reading) = self.visible_polling_device() {
+            self.request_polling(reading, PollingIntent::Read);
+        }
+    }
+    fn apply_polling(&mut self, restore: bool) {
+        let Some(reading) = self.visible_polling_device() else {
+            return;
+        };
+        let rate = if restore {
+            self.polling.previous.get(&reading.key).copied()
+        } else {
+            self.polling
+                .observations
+                .get(&reading.key)
+                .and_then(|o| o.supported.get(self.choice(43)))
+                .copied()
+        };
+        let Some(rate) = rate else {
+            self.polling.status.insert(
+                reading.key,
+                "Refresh the hardware rate and select a supported value.".into(),
+            );
+            self.polling_controls();
+            return;
+        };
+        self.request_polling(reading, PollingIntent::Apply { rate, restore });
+    }
+    fn request_polling(&mut self, reading: Reading, intent: PollingIntent) {
+        let key = reading.key.clone();
+        match self.polling.begin(reading, intent) {
+            Ok(request) => match self.runtime.submit_control(request.clone()) {
+                Ok(()) => {
+                    if let PollingIntent::Apply { rate, .. } = intent {
+                        self.polling_intents.insert(key, (request.request, rate));
+                    }
+                }
+                Err(error) => {
+                    self.polling.abandon();
+                    self.polling.status.insert(key, error.to_string());
+                }
+            },
+            Err(error) => {
+                self.polling.status.insert(key, error.into());
+            }
+        }
+        self.polling_controls();
+    }
+    fn polling_outcome(&mut self, outcome: ControlOutcome) {
+        // Preserve explicit intent even when the user has left the page; never use an observation as a setting.
+        if let Some(&(request, rate)) = self.polling_intents.get(&outcome.key)
+            && request == outcome.request
+        {
+            self.polling_intents.remove(&outcome.key);
+            self.settings
+                .devices
+                .entry(outcome.key.clone())
+                .or_default()
+                .requested_polling_rate = Some(rate);
+            self.save();
+        }
+        let key = self.visible_polling_device().map(|r| r.key);
+        if self.polling.accept(&outcome, key.as_deref()) {
+            self.polling_controls();
+        }
+    }
     fn query(&mut self) {
         let Some(d) = self.snapshot.devices.get(self.selected) else {
             return;
@@ -964,9 +1395,16 @@ impl State {
     }
     fn drain(&mut self) {
         let mut latest = None;
+        let mut polling_invalidated = false;
+        let mut polling_selection_changed = false;
         while let Ok(e) = self.runtime.events.try_recv() {
             match e {
                 Event::Snapshot(s) => latest = Some(s),
+                Event::Polling(outcome) => self.polling_outcome(*outcome),
+                Event::PollingInvalidated(generation) => {
+                    self.polling.invalidate(generation);
+                    polling_invalidated = true;
+                }
                 Event::Diagnostics(d) => self.diagnostics = d,
                 Event::Error(e) => self.error = e,
                 Event::Alert(n) => {
@@ -1001,7 +1439,34 @@ impl State {
                 .map(|d| d.reading.key.clone())
                 .collect();
             let next: Vec<_> = s.devices.iter().map(|d| d.reading.key.clone()).collect();
+            let previous_key = self
+                .snapshot
+                .devices
+                .get(self.selected)
+                .map(|d| d.reading.key.clone());
             self.snapshot = s;
+            self.polling.retain_devices(&self.snapshot.devices);
+            self.selected = previous_key
+                .as_ref()
+                .and_then(|key| {
+                    self.snapshot
+                        .devices
+                        .iter()
+                        .position(|d| &d.reading.key == key)
+                })
+                .unwrap_or_else(|| {
+                    self.selected
+                        .min(self.snapshot.devices.len().saturating_sub(1))
+                });
+            let selected_key = self
+                .snapshot
+                .devices
+                .get(self.selected)
+                .map(|d| &d.reading.key);
+            if previous_key.as_ref() != selected_key {
+                self.polling.abandon();
+                polling_selection_changed = true;
+            }
             if self.page == 1
                 && let Some(d) = self.snapshot.devices.get(self.selected)
                 && let Some(h) = self.controls.get(&91)
@@ -1031,6 +1496,10 @@ impl State {
                     send(*h, CB_SETCURSEL, WPARAM(self.selected), LPARAM(0));
                 }
             }
+        }
+        if polling_invalidated || polling_selection_changed {
+            self.polling_controls();
+            self.read_polling();
         }
     }
     fn sync_trays(&mut self, force: bool) {
@@ -1540,5 +2009,171 @@ mod popup_tests {
             }
             assert!(GetMenuItemCount(Some(menu.0)) >= 3);
         }
+    }
+}
+
+#[cfg(test)]
+mod polling_tests {
+    use super::*;
+    fn rate(hz: u32) -> PollingRate {
+        PollingRate::try_from(hz).unwrap()
+    }
+    fn reading() -> Reading {
+        Reading::new("mouse", "Mouse", "simulation", 0)
+    }
+    fn outcome(request: u64, generation: u64, hz: Option<u32>) -> ControlOutcome {
+        ControlOutcome {
+            request,
+            key: "mouse".into(),
+            observation: Some(PollingObservation {
+                target: ControlTarget {
+                    reading: reading(),
+                    generation,
+                },
+                supported: vec![rate(1000), rate(4000), rate(8000)],
+                rate: hz.map(rate),
+                timestamp: 0,
+                evidence: "verified simulation".into(),
+            }),
+            previous: None,
+            may_have_changed: false,
+            failure: None,
+        }
+    }
+    fn read(ui: &mut PollingUi, generation: u64, hz: u32) {
+        let request = ui.begin(reading(), PollingIntent::Read).unwrap();
+        assert_eq!(request.action, ControlAction::Read);
+        assert_eq!(request.target.generation, 0);
+        assert!(ui.accept(
+            &outcome(request.request, generation, Some(hz)),
+            Some("mouse")
+        ));
+    }
+    #[test]
+    fn polling_requires_verified_read_and_supported_rate() {
+        assert!(!Settings::default().polling_controls);
+        let mut ui = PollingUi::default();
+        let intent = PollingIntent::Apply {
+            rate: rate(8000),
+            restore: false,
+        };
+        assert!(ui.begin(reading(), intent).is_err());
+        read(&mut ui, 7, 1000);
+        assert!(ui.pending.is_none()); // A read never schedules an Apply.
+        assert!(
+            ui.begin(
+                reading(),
+                PollingIntent::Apply {
+                    rate: rate(125),
+                    restore: false
+                }
+            )
+            .is_err()
+        );
+        let request = ui.begin(reading(), intent).unwrap();
+        assert_eq!(request.target.generation, 7);
+        assert_eq!(request.action, ControlAction::Apply(rate(8000)));
+        assert!(ui.begin(reading(), PollingIntent::Read).is_err());
+    }
+    #[test]
+    fn unknown_rate_and_stale_replies_cannot_enable_apply() {
+        let mut ui = PollingUi::default();
+        let request = ui.begin(reading(), PollingIntent::Read).unwrap();
+        assert!(!ui.accept(&outcome(request.request + 1, 3, Some(1000)), Some("mouse")));
+        assert!(!ui.accept(&outcome(request.request, 3, Some(1000)), Some("other")));
+        assert!(ui.accept(&outcome(request.request, 3, None), Some("mouse")));
+        assert!(
+            ui.begin(
+                reading(),
+                PollingIntent::Apply {
+                    rate: rate(8000),
+                    restore: false
+                }
+            )
+            .is_err()
+        );
+        ui.invalidate(4);
+        assert!(!ui.accept(&outcome(request.request, 3, Some(1000)), Some("mouse")));
+        let request = ui.begin(reading(), PollingIntent::Read).unwrap();
+        assert!(ui.accept(&outcome(request.request, 3, Some(1000)), Some("mouse")));
+        assert!(ui.observations.is_empty());
+    }
+    #[test]
+    fn restore_uses_latest_verified_before_value_and_survives_partial_failure() {
+        let mut ui = PollingUi::default();
+        read(&mut ui, 2, 1000);
+        for (before, after) in [(1000, 8000), (8000, 4000)] {
+            let req = ui
+                .begin(
+                    reading(),
+                    PollingIntent::Apply {
+                        rate: rate(after),
+                        restore: false,
+                    },
+                )
+                .unwrap();
+            let mut result = outcome(req.request, 2, Some(after));
+            result.previous = Some(rate(before));
+            assert!(ui.accept(&result, Some("mouse")));
+            assert_eq!(ui.previous["mouse"], rate(before));
+        }
+        let req = ui
+            .begin(
+                reading(),
+                PollingIntent::Apply {
+                    rate: rate(8000),
+                    restore: false,
+                },
+            )
+            .unwrap();
+        let mut result = outcome(req.request, 2, None);
+        result.previous = Some(rate(4000));
+        result.failure = Some("Readback failed".into());
+        result.may_have_changed = true;
+        assert!(ui.accept(&result, Some("mouse")));
+        assert_eq!(ui.previous["mouse"], rate(4000));
+        assert!(ui.status["mouse"].contains("Hardware may have changed"));
+        assert!(!ui.status["mouse"].contains("Confirmed"));
+        read(&mut ui, 2, 8000);
+        let req = ui
+            .begin(
+                reading(),
+                PollingIntent::Apply {
+                    rate: ui.previous["mouse"],
+                    restore: true,
+                },
+            )
+            .unwrap();
+        assert_eq!(req.action, ControlAction::Apply(rate(4000)));
+        let mut result = outcome(req.request, 2, Some(4000));
+        result.previous = Some(rate(8000));
+        ui.accept(&result, Some("mouse"));
+        assert_eq!(ui.previous["mouse"], rate(4000));
+        ui.invalidate(3);
+        assert!(
+            ui.previous.is_empty()
+                && ui.status.is_empty()
+                && ui.observations.is_empty()
+                && ui.pending.is_none()
+        );
+        ui.invalidate(2);
+        assert_eq!(ui.generation, 3);
+    }
+    #[test]
+    fn closed_page_ignores_completion_and_removed_devices_release_observations() {
+        let mut ui = PollingUi::default();
+        read(&mut ui, 1, 1000);
+        let req = ui.begin(reading(), PollingIntent::Read).unwrap();
+        ui.abandon();
+        assert!(!ui.accept(&outcome(req.request, 1, Some(8000)), Some("mouse")));
+        assert_eq!(ui.observations["mouse"].rate, Some(rate(1000)));
+        ui.retain_devices(&[]);
+        assert!(ui.observations.is_empty() && ui.status.is_empty());
+    }
+    #[test]
+    fn absolute_read_timestamp_handles_epoch_and_leap_day() {
+        assert_eq!(polling_timestamp(0), "1970-01-01 00:00:00 UTC");
+        assert_eq!(polling_timestamp(-1), "1969-12-31 23:59:59 UTC");
+        assert_eq!(polling_timestamp(1709210096), "2024-02-29 12:34:56 UTC");
     }
 }

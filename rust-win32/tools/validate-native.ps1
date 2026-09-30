@@ -2,6 +2,7 @@ param(
   [int]$Seconds = 300,
   [switch]$Animation,
   [switch]$Hardware,
+  [switch]$PollingControls,
   [int]$Cycles = 20
 )
 $ErrorActionPreference = 'Stop'
@@ -10,7 +11,7 @@ $exe = Join-Path $repo 'target/x86_64-pc-windows-msvc/release/HaloBatteryNext.ex
 if (!(Test-Path -LiteralPath $exe)) { throw 'Release build required.' }
 $data = Join-Path $repo "validation-local/$([guid]::NewGuid())"
 [IO.Directory]::CreateDirectory($data) | Out-Null
-@{ animation = [bool]$Animation; status_file = $true } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $data 'config.json')
+@{ animation = [bool]$Animation; status_file = $true; polling_controls = [bool]$PollingControls } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $data 'config.json')
 if (!("HaloNativeTest" -as [type])) {
   Add-Type -TypeDefinition @'
 using System;
@@ -84,7 +85,7 @@ try {
   }
   $process.Refresh()
   $result = @{
-    mode = $(if($Hardware){'hardware'}else{'simulated'}); animation = [bool]$Animation;
+    mode = $(if($Hardware){'hardware'}else{'simulated'}); animation = [bool]$Animation; polling_controls = [bool]$PollingControls;
     duration_seconds = $clock.Elapsed.TotalSeconds;
     one_core_cpu_percent = ($process.TotalProcessorTime.TotalSeconds-$cpu)/$clock.Elapsed.TotalSeconds*100;
     private_bytes_average = ($samples | Measure-Object -Average).Average;

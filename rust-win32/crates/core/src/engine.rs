@@ -67,6 +67,33 @@ impl Engine {
             r.connection = Connection::Sleeping;
         }
     }
+    /// Hardware rate changes invalidate the learned discharge slope, never history.
+    /// Clear aliases only when a trustworthy unit serial proves identity.
+    pub fn reset_estimate(&mut self, key: &str) {
+        let serial = self
+            .by_provider
+            .values()
+            .flatten()
+            .find(|r| r.key == key)
+            .and_then(|r| r.serial.as_deref())
+            .and_then(trusted_identity);
+        let keys = self
+            .by_provider
+            .values()
+            .flatten()
+            .filter(|r| {
+                r.key == key
+                    || serial.as_ref().is_some_and(|s| {
+                        r.serial.as_deref().and_then(trusted_identity).as_ref() == Some(s)
+                    })
+            })
+            .map(|r| r.key.clone())
+            .collect::<Vec<_>>();
+        self.estimator.devices.remove(key);
+        for key in keys {
+            self.estimator.devices.remove(&key);
+        }
+    }
     pub fn resume(&mut self) {
         self.suspended = false;
         self.estimator.pause_all();

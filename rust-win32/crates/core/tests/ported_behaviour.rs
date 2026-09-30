@@ -364,6 +364,7 @@ fn unhide_restores_name_icon_and_alert_without_hidden_time() {
             hidden: true,
             icon: Some("keyboard".into()),
             low: Some(30),
+            ..Default::default()
         },
     );
     apply(&mut e, Some(29), Some(false), false);

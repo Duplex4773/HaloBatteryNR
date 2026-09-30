@@ -8,6 +8,7 @@ pub struct DevicePreferences {
     pub hidden: bool,
     pub icon: Option<String>,
     pub low: Option<u8>,
+    pub requested_polling_rate: Option<crate::PollingRate>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -27,6 +28,7 @@ pub struct Settings {
     pub quiet_fullscreen: bool,
     pub status_file: bool,
     pub playstation_full_mode: bool,
+    pub polling_controls: bool,
     pub disabled_providers: BTreeSet<String>,
     pub devices: BTreeMap<String, DevicePreferences>,
     pub update_check: bool,
@@ -49,6 +51,7 @@ impl Default for Settings {
             quiet_fullscreen: true,
             status_file: false,
             playstation_full_mode: false,
+            polling_controls: false,
             disabled_providers: BTreeSet::new(),
             devices: BTreeMap::new(),
             update_check: false,
@@ -110,6 +113,11 @@ impl Settings {
                                         .and_then(|v| v.as_u64())
                                         .filter(|n| *n <= 100)
                                         .map(|n| n as u8),
+                                    requested_polling_rate: fields
+                                        .get("requested_polling_rate")
+                                        .and_then(|v| v.as_u64())
+                                        .and_then(|n| u32::try_from(n).ok())
+                                        .and_then(|n| crate::PollingRate::try_from(n).ok()),
                                 },
                             ))
                         })

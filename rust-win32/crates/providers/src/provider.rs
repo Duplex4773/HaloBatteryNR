@@ -1527,7 +1527,7 @@ pub fn receiver_key(info: &HidInfo) -> String {
             }
         })
 }
-fn trusted_identity(info: &HidInfo) -> String {
+pub(crate) fn trusted_identity(info: &HidInfo) -> String {
     valid_identity_value(&info.serial).unwrap_or_else(|| receiver_key(info))
 }
 fn valid_identity_value(value: &str) -> Option<String> {
