@@ -1,0 +1,161 @@
+[
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_bluetooth_basic_mode_does_not_start_the_fast_recheck",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::playstation_basic_bluetooth_is_passive_immediate_and_explained_for_both_models",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_bluetooth_dualshock4_is_not_switched_either",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::playstation_basic_bluetooth_is_passive_immediate_and_explained_for_both_models",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_diagnostics_say_why",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::playstation_basic_bluetooth_is_passive_immediate_and_explained_for_both_models",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_bluetooth_already_full_is_read_without_switching",
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::playstation_already_full_bluetooth_never_gets_feature_switch",
+    "notes": "Bluetooth remains passive and full reports yield the reference level/charging. Native coarse gauge is explicitly labelled about70% instead of Python claiming an exact percentage; this follows the requested coarse-percentage policy."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_full_mode_setting_switches_and_reads",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::playstation_full_mode_feature_is_opt_in_and_usb_uses_harmless_feature",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_cable_reading_wins_over_basic_bluetooth",
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::playstation_trusted_usb_source_wins_basic_bluetooth_without_merging_other_pad",
+    "notes": "Matching trusted serial/container associates Bluetooth/cable sources; a separate second controller remains distinct. The former model-based association of an anonymous cable is deliberately rejected to avoid merging unrelated devices."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_bluetooth_and_two_usb_controllers_keep_every_controller",
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::playstation_trusted_usb_source_wins_basic_bluetooth_without_merging_other_pad",
+    "notes": "Matching trusted serial/container associates Bluetooth/cable sources; a separate second controller remains distinct. The former model-based association of an anonymous cable is deliberately rejected to avoid merging unrelated devices."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_two_usb_controller_keys_stay_the_same_between_polls",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::playstation_two_usb_keys_are_distinct_and_stable_when_enumeration_reverses",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_two_usb_controllers_get_two_icons",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::playstation_two_usb_keys_are_distinct_and_stable_when_enumeration_reverses",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_one_usb_controller_keeps_its_old_key",
+    "status": "intentional_difference",
+    "notes": "Native stable keys always include a trusted serial/container/normalized instance identity; the ambiguous legacy blank-serial key is deliberately retired. Separate anonymous USB controllers keep distinct stable keys.",
+    "rust_tests": [
+      "crates/providers/tests/provider_controller_io.rs::playstation_normalized_usb_collections_preserve_identity_without_blank_serial_key",
+      "crates/providers/tests/provider_controller_io.rs::playstation_two_usb_keys_are_distinct_and_stable_when_enumeration_reverses"
+    ]
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_collections_of_one_usb_controller_stay_one_icon",
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::playstation_normalized_usb_collections_preserve_identity_without_blank_serial_key",
+    "notes": "Both collection paths normalize to one controller identity and one icon; native keys retain that identity instead of the ambiguous legacy blank-serial key."
+  },
+  {
+    "upstream_test": "test_nintendo.ParseTest.test_subcommand_packet",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::nintendo_simple_mode_exact_49byte_device_info_query_and_coarse_label",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_nintendo.PathTest.test_bluetooth_and_usb_paths",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::nintendo_counter_wraps_after_16_requests_and_usb_unknown_devices_never_open",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_full_mode_writes_nothing",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::nintendo_already_full_is_read_without_writes_and_undefined_level_rejected",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_undefined_level_is_refused",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::nintendo_already_full_is_read_without_writes_and_undefined_level_rejected",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_packet_counter_counts_up_and_wraps",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::nintendo_counter_wraps_after_16_requests_and_usb_unknown_devices_never_open",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_usb_is_not_opened",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::nintendo_counter_wraps_after_16_requests_and_usb_unknown_devices_never_open",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_second_try",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::nintendo_retry_second_request_and_silence_have_bounded_timing",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_silent_after_a_reading_keeps_the_last_value_greyed_for_a_while",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::nintendo_sleeping_cache_drops_charging_marks_last_known_and_expires",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_simple_mode_issue_63",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::nintendo_simple_mode_exact_49byte_device_info_query_and_coarse_label",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_two_joycons_are_two_icons",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::nintendo_two_joycons_keep_separate_ids_names_and_levels",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_eightbitdo.ProviderTest.test_enhanced_bluetooth_report_is_read",
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::eightbitdo_passive_enhanced_bluetooth_and_usb_report_ids",
+    "notes": "Only read operations are allowed by the strict transcript. Level/charging/name/gamepad/connection are preserved; canonical Rust source identifier eightbitdo replaces Python8bitdo to match provider/settings dispatch, and USB connection is explicitly labelled usb."
+  },
+  {
+    "upstream_test": "test_eightbitdo.ProviderTest.test_idle_ordinary_mode_shows_no_level",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::eightbitdo_idle_unknown_mode_is_bounded_passive_and_explained",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_eightbitdo.ProviderTest.test_other_report_ids_are_ignored",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::eightbitdo_zero_padding_and_wrong_report_id_cannot_trigger_low_alerts",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_eightbitdo.ProviderTest.test_zero_padded_ordinary_report_is_not_zero_percent",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::eightbitdo_zero_padding_and_wrong_report_id_cannot_trigger_low_alerts",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  },
+  {
+    "upstream_test": "test_eightbitdo.ProviderTest.test_unopenable_controller_still_shows_without_level",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_controller_io.rs::eightbitdo_unopenable_still_shows_unknown_and_unknown_pid_does_not_open",
+    "notes": "Strict fake-HID transcript asserts the original transaction, state and bounded timing; no physical hardware verification is claimed."
+  }
+]

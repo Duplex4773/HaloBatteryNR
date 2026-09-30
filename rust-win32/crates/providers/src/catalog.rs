@@ -317,7 +317,7 @@ pub const DEVICES: &[Device] = &[
         provider: "barracuda",
         vid: 0x1532,
         pid: 0x053a,
-        name: "Razer Barracuda Pro",
+        name: "Razer Barracuda Pro (2.4 GHz)",
         variant: "",
         parameter: 0,
     },

@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 use windows::{
-    Devices::Enumeration::{DeviceInformation, DeviceInformationUpdate},
+    Devices::Enumeration::{DeviceInformation, DeviceInformationUpdate, DeviceWatcher},
     Foundation::{EventHandler, TypedEventHandler},
     Gaming::Input::RawGameController,
     Win32::System::Com::*,
@@ -53,6 +53,14 @@ struct Job {
     provider: Box<dyn BatteryProvider>,
     full_mode: bool,
 }
+impl Job {
+    fn new(provider: Box<dyn BatteryProvider>, settings: &Settings) -> Self {
+        Self {
+            provider,
+            full_mode: settings.playstation_full_mode,
+        }
+    }
+}
 struct Completed {
     provider: Box<dyn BatteryProvider>,
     result: PollResult,
@@ -65,6 +73,15 @@ enum Work {
 }
 fn effective_interval(interval: u64, quiet: bool) -> Duration {
     Duration::from_secs(if quiet { interval.max(300) } else { interval })
+}
+fn provider_delay(interval: u64, quiet: bool, pending: Option<Duration>) -> Duration {
+    if quiet {
+        effective_interval(interval, true)
+    } else {
+        pending
+            .unwrap_or(effective_interval(interval, false))
+            .max(Duration::from_secs(1))
+    }
 }
 fn poll_is_due(
     settings: &Settings,
@@ -189,6 +206,88 @@ impl Drop for Runtime {
         self.stop()
     }
 }
+fn relevant_device_event(id: &str) -> bool {
+    let id = id.to_ascii_uppercase();
+    id.contains("BTH") || id.contains("HID#") || id.contains("BLUETOOTH")
+}
+struct DeviceEvents {
+    watcher: DeviceWatcher,
+    added: Option<i64>,
+    updated: Option<i64>,
+    removed: Option<i64>,
+}
+impl DeviceEvents {
+    fn new(commands: &Sender<Command>) -> Option<Self> {
+        let watcher = DeviceInformation::CreateWatcher().ok()?;
+        let tx = commands.clone();
+        let added = watcher
+            .Added(&TypedEventHandler::<_, DeviceInformation>::new(
+                move |_, args| {
+                    if args
+                        .as_ref()
+                        .and_then(|a| a.Id().ok())
+                        .is_some_and(|id| relevant_device_event(&id.to_string()))
+                    {
+                        let _ = tx.try_send(Command::Refresh);
+                    }
+                    Ok(())
+                },
+            ))
+            .ok();
+        let tx = commands.clone();
+        let updated = watcher
+            .Updated(&TypedEventHandler::<_, DeviceInformationUpdate>::new(
+                move |_, args| {
+                    if args
+                        .as_ref()
+                        .and_then(|a| a.Id().ok())
+                        .is_some_and(|id| relevant_device_event(&id.to_string()))
+                    {
+                        let _ = tx.try_send(Command::Refresh);
+                    }
+                    Ok(())
+                },
+            ))
+            .ok();
+        let tx = commands.clone();
+        let removed = watcher
+            .Removed(&TypedEventHandler::<_, DeviceInformationUpdate>::new(
+                move |_, args| {
+                    if args
+                        .as_ref()
+                        .and_then(|a| a.Id().ok())
+                        .is_some_and(|id| relevant_device_event(&id.to_string()))
+                    {
+                        let _ = tx.try_send(Command::Refresh);
+                    }
+                    Ok(())
+                },
+            ))
+            .ok();
+        let events = Self {
+            watcher,
+            added,
+            updated,
+            removed,
+        };
+        events.watcher.Start().ok()?;
+        Some(events)
+    }
+}
+impl Drop for DeviceEvents {
+    fn drop(&mut self) {
+        let _ = self.watcher.Stop();
+        if let Some(token) = self.added.take() {
+            let _ = self.watcher.RemoveAdded(token);
+        }
+        if let Some(token) = self.updated.take() {
+            let _ = self.watcher.RemoveUpdated(token);
+        }
+        if let Some(token) = self.removed.take() {
+            let _ = self.watcher.RemoveRemoved(token);
+        }
+    }
+}
 fn worker(
     jobs: Receiver<Job>,
     results: Sender<Completed>,
@@ -203,26 +302,11 @@ fn worker(
         .stack_size(512 * 1024)
         .spawn(move || {
             let _apartment = Apartment::new(winrt);
-            let watcher = if winrt {
-                DeviceInformation::CreateWatcher().ok()
+            let _device_events = if winrt {
+                DeviceEvents::new(&commands)
             } else {
                 None
             };
-            if let Some(w) = &watcher {
-                let tx = commands.clone();
-                let _ = w.Updated(&TypedEventHandler::<_, DeviceInformationUpdate>::new(
-                    move |_, args| {
-                        if args.as_ref().and_then(|a| a.Id().ok()).is_some_and(|id| {
-                            let s = id.to_string();
-                            s.contains("BTH") || s.contains("HID#")
-                        }) {
-                            let _ = tx.try_send(Command::Refresh);
-                        }
-                        Ok(())
-                    },
-                ));
-                let _ = w.Start();
-            }
             let controller_token = if winrt {
                 let tx = commands.clone();
                 RawGameController::RawGameControllerAdded(&EventHandler::new(move |_, _| {
@@ -243,7 +327,7 @@ fn worker(
                 None
             };
             let clock = SystemClock::default();
-            while let Ok(mut job) = jobs.recv() {
+            while let Ok(job) = jobs.recv() {
                 // A vendor gate conservatively covers every physical receiver
                 // used by a protocol family, including multi-collection sessions.
                 // It prevents interleaving shared-vendor protocols without locking
@@ -258,36 +342,12 @@ fn worker(
                     .filter_map(|v| gates.get(v))
                     .map(|m| m.lock().unwrap_or_else(|p| p.into_inner()))
                     .collect::<Vec<_>>();
-                let context = PollContext {
-                    clock: &clock,
-                    cancelled: &cancel,
-                    deadline: clock.monotonic() + Duration::from_secs(25),
-                    playstation_full_mode: job.full_mode,
-                };
-                let result = if cancel.load(Ordering::Relaxed) {
-                    Err(ProviderError::new("cancelled"))
-                } else {
-                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        job.provider.poll(&*hid, &context)
-                    }))
-                    .unwrap_or_else(|_| {
-                        Err(ProviderError::new(
-                            "provider panicked; next refresh will retry",
-                        ))
-                    })
-                };
                 if results
-                    .send(Completed {
-                        provider: job.provider,
-                        result,
-                    })
+                    .send(execute_job(job, &*hid, &clock, &cancel))
                     .is_err()
                 {
                     break;
                 }
-            }
-            if let Some(w) = watcher {
-                let _ = w.Stop();
             }
             if let Some(t) = controller_token {
                 let _ = RawGameController::RemoveRawGameControllerAdded(t);
@@ -297,6 +357,35 @@ fn worker(
             }
         })
         .expect("create I/O worker")
+}
+fn execute_job(
+    mut job: Job,
+    hid: &dyn HidTransport,
+    clock: &dyn Clock,
+    cancel: &AtomicBool,
+) -> Completed {
+    let context = PollContext {
+        clock,
+        cancelled: cancel,
+        deadline: clock.monotonic() + Duration::from_secs(25),
+        playstation_full_mode: job.full_mode,
+    };
+    let result = if cancel.load(Ordering::Relaxed) {
+        Err(ProviderError::new("cancelled"))
+    } else {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            job.provider.poll(hid, &context)
+        }))
+        .unwrap_or_else(|_| {
+            Err(ProviderError::new(
+                "provider panicked; next refresh will retry",
+            ))
+        })
+    };
+    Completed {
+        provider: job.provider,
+        result,
+    }
 }
 struct Apartment(bool);
 impl Apartment {
@@ -442,10 +531,7 @@ fn run(
                 if invalidated.remove(id) {
                     provider.invalidate();
                 }
-                let job = Job {
-                    provider,
-                    full_mode: engine.settings.playstation_full_mode,
-                };
+                let job = Job::new(provider, &engine.settings);
                 match target.try_send(job) {
                     Ok(()) => {
                         inflight += 1;
@@ -547,11 +633,11 @@ fn run(
                 for n in engine.apply(id, r.result, clock.monotonic().as_secs_f64(), quiet) {
                     let _ = events.send(Event::Alert(n));
                 }
-                let delay = r
-                    .provider
-                    .next_poll_delay()
-                    .unwrap_or(effective_interval(engine.settings.interval, quiet))
-                    .max(Duration::from_secs(1));
+                let delay = provider_delay(
+                    engine.settings.interval,
+                    quiet,
+                    r.provider.next_poll_delay(),
+                );
                 due.entry(id).or_insert_with(|| Instant::now() + delay);
                 providers.insert(id, r.provider);
                 let _ = storage.send(Storage::Sample(engine.readings()));
@@ -597,10 +683,36 @@ fn run(
 mod tests {
     use super::*;
     #[test]
+    fn connection_events_cover_hid_bluetooth_and_le_case_insensitively() {
+        for id in [
+            "\\\\?\\hid#vid_1532&pid_00bf",
+            "BTHENUM\\DEV_0123456789AB",
+            "bthledevice#battery",
+            "Bluetooth#battery",
+        ] {
+            assert!(relevant_device_event(id), "{id}");
+        }
+        for id in ["", "USB#printer", "SWD#audioendpoint"] {
+            assert!(!relevant_device_event(id));
+        }
+    }
+    #[test]
     fn gaming_cadence_never_speeds_up_a_slow_setting() {
         assert_eq!(effective_interval(60, false), Duration::from_secs(60));
         assert_eq!(effective_interval(60, true), Duration::from_secs(300));
         assert_eq!(effective_interval(600, true), Duration::from_secs(600));
+        assert_eq!(
+            provider_delay(60, true, Some(Duration::from_secs(3))),
+            Duration::from_secs(300)
+        );
+        assert_eq!(
+            provider_delay(600, true, Some(Duration::from_secs(3))),
+            Duration::from_secs(600)
+        );
+        assert_eq!(
+            provider_delay(60, false, Some(Duration::from_secs(3))),
+            Duration::from_secs(3)
+        );
     }
     #[test]
     fn leaving_gaming_mode_refreshes_immediately_but_entering_does_not() {
@@ -643,6 +755,47 @@ mod tests {
         assert!(!poll_is_due(&s, "razer", Some(now), now, false));
         assert!(!poll_is_due(&s, "bluetooth", Some(now), now, false));
         assert!(poll_is_due(&s, "xinput", Some(now), now, false));
+        s.playstation_full_mode = true;
+        s.disabled_providers.insert("playstation".into());
+        assert!(!poll_is_due(&s, "playstation", Some(now), now, false));
+    }
+    #[test]
+    fn full_mode_setting_reaches_provider_context_and_cancelled_jobs_do_not_poll() {
+        struct Provider(Arc<Mutex<Vec<bool>>>);
+        impl BatteryProvider for Provider {
+            fn diagnostics(&self) -> Vec<String> {
+                vec![]
+            }
+            fn id(&self) -> &'static str {
+                "playstation"
+            }
+            fn poll(&mut self, _: &dyn HidTransport, c: &PollContext<'_>) -> PollResult {
+                self.0.lock().unwrap().push(c.playstation_full_mode);
+                Ok(vec![])
+            }
+        }
+        struct NoHid;
+        impl HidTransport for NoHid {
+            fn enumerate(&self, _: u16) -> Result<Vec<HidInfo>, ProviderError> {
+                panic!("unexpected HID")
+            }
+            fn open(&self, _: &HidInfo) -> Result<Box<dyn HidSession>, ProviderError> {
+                panic!("unexpected HID")
+            }
+        }
+        let observed = Arc::new(Mutex::new(vec![]));
+        let mut s = Settings::default();
+        let cancel = AtomicBool::new(false);
+        let clock = SystemClock::default();
+        for full in [false, true] {
+            s.playstation_full_mode = full;
+            let job = Job::new(Box::new(Provider(observed.clone())), &s);
+            assert!(execute_job(job, &NoHid, &clock, &cancel).result.is_ok());
+        }
+        cancel.store(true, Ordering::Relaxed);
+        let job = Job::new(Box::new(Provider(observed.clone())), &s);
+        assert!(execute_job(job, &NoHid, &clock, &cancel).result.is_err());
+        assert_eq!(*observed.lock().unwrap(), [false, true]);
     }
     #[test]
     fn status_stays_absent_when_disabled_and_shutdown_drains_queues() {

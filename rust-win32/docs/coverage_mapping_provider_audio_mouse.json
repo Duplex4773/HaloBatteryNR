@@ -1,0 +1,104 @@
+[
+  {
+    "upstream_test": "test_lofree.PollTest.test_level_out_of_range_is_refused",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::lofree_offline_noise_range_and_only_trusted_cable_suppression",
+    "notes": "Exact32byte start/query/end exchanges assert offline online-query only, reject200battery, ignore key reports and foreign offsets before accepting40. All scripted operations consumed."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_offline_keyboard_gives_no_icon_and_no_battery_request",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::lofree_offline_noise_range_and_only_trusted_cable_suppression",
+    "notes": "Exact32byte start/query/end exchanges assert offline online-query only, reject200battery, ignore key reports and foreign offsets before accepting40. All scripted operations consumed."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_other_reports_are_skipped",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::lofree_offline_noise_range_and_only_trusted_cable_suppression",
+    "notes": "Exact32byte start/query/end exchanges assert offline online-query only, reject200battery, ignore key reports and foreign offsets before accepting40. All scripted operations consumed."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_on_the_cable_the_dongle_is_not_read",
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_io.rs::lofree_offline_noise_range_and_only_trusted_cable_suppression",
+    "notes": "Same trusted serial wired0024 suppresses0025dongle before open/write; unrelated serial wired0024 does not hide a second keyboard. Original any-cable PID suppression intentionally replaced with safe physical identity association."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_only_the_ff1c_collection_is_opened",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_audio_mouse_io.rs::lofree_issue82_seven_collections_select_only_vendor_and_cable_never_written",
+    "notes": "Full captured7collection shape opens onlyff1c:92 path and consumes exact32byte transactions; all wired0024 collections yield no opens or writes."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_the_cable_pid_itself_is_not_read",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_audio_mouse_io.rs::lofree_issue82_seven_collections_select_only_vendor_and_cable_never_written",
+    "notes": "Full captured7collection shape opens onlyff1c:92 path and consumes exact32byte transactions; all wired0024 collections yield no opens or writes."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_silent_keyboard_times_out",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_audio_mouse_io.rs::lofree_start_silence_never_sends_online_or_battery_command",
+    "notes": "Start followed30empty100ms reads exhausts3second deadline; no online/battery/end commands sent without start acknowledgment."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_wrong_offset_is_not_a_level",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_audio_mouse_io.rs::lofree_wrong_battery_offset_is_refused_and_transaction_closes",
+    "notes": "Online transaction completes, battery offset3 report rejected,3second timeout returns no icon and sends transaction end; exact operations consumed."
+  },
+  {
+    "upstream_test": "test_barracuda.ReadBatteryTest.test_failed_query_write_stops_that_query",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::barracuda_offline_costs_one_query_and_cleanup_even_after_failed_query_write",
+    "notes": "Offline path scripts4battery attempts each1drain+6reads plus remote drains; no charging query. Failed firstquerywrite stops query immediately; both paths disable remote and log no battery reply."
+  },
+  {
+    "upstream_test": "test_barracuda.ReadBatteryTest.test_headset_off_costs_one_query_of_reads",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::barracuda_offline_costs_one_query_and_cleanup_even_after_failed_query_write",
+    "notes": "Offline path scripts4battery attempts each1drain+6reads plus remote drains; no charging query. Failed firstquerywrite stops query immediately; both paths disable remote and log no battery reply."
+  },
+  {
+    "upstream_test": "test_barracuda.ReadBatteryTest.test_headset_off_skips_the_charging_query",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::barracuda_offline_costs_one_query_and_cleanup_even_after_failed_query_write",
+    "notes": "Offline path scripts4battery attempts each1drain+6reads plus remote drains; no charging query. Failed firstquerywrite stops query immediately; both paths disable remote and log no battery reply."
+  },
+  {
+    "upstream_test": "test_barracuda.ReadBatteryTest.test_failed_write_is_retried_for_remote_mode",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_audio_mouse_io.rs::barracuda_failed_wake_retries_after_150ms_then_queries_and_cleans_up",
+    "notes": "Failed remoteon write retried once after150ms, two exact queries yield50/notcharging, remoteoff cleanup mandatory, total fake elapsed200ms including50ms warmup; write diagnostic asserted."
+  },
+  {
+    "upstream_test": "test_barracuda.ReadBatteryTest.test_receiver_that_rejects_every_write_sends_no_queries",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_audio_mouse_io.rs::barracuda_rejected_remote_mode_sends_no_queries_or_disable_frame",
+    "notes": "Three rejected remoteon writes consume150/300/450ms boundedbackoff; no battery/charge/disable frames; offline snapshot and receiver-does-not-accept diagnostic asserted."
+  },
+  {
+    "upstream_test": "test_barracuda.PollTest.test_headset_off_shows_the_offline_icon",
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_audio_mouse_io.rs::barracuda_offline_snapshot_keeps_explicit_kind_source_and_stable_identity",
+    "notes": "Entire snapshot tuple key/name/nullable level/charging/offline/provider/kind asserted after exact4attempt noanswer transaction. Stable key now includes trusted receiver identity rather than PID-only; avoids merging independent Barracuda receivers."
+  },
+  {
+    "upstream_test": "test_audeze_stuck.StuckDongleTests.test_echo_only",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_audio_mouse_io.rs::audeze_empty_echo_requires_five_frames_and_rejects_real_battery",
+    "notes": "Production echo-only predicate extracted and used by actual provider; exact original fiveecho/mixedheader/fourecho/mixedvalidbattery/empty edge cases asserted with62byte frames."
+  },
+  {
+    "upstream_test": "test_blackshark_pa.ReadBatteryTest.test_a_path_that_cannot_be_opened_is_fail",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_audio_mouse_io.rs::blackshark_unopenable_control_path_returns_failure_without_writes",
+    "notes": "Initial control path open denied returns provider failure, attempts only thatpath once, and sends no hardware writes."
+  },
+  {
+    "upstream_test": "test_hyperx_alpha2.ReplyParsing.test_request_shape",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_controller_usage_drain_cap_and_flood_noise_matching",
+    "notes": "Strict session expects complete64byte request [50,02]+62zeros from actual controller polling; expected Write fails on any header,length,padding mismatch. Positive matchedbattery response and queue selection asserted."
+  }
+]

@@ -155,15 +155,102 @@ pub fn dark_theme() -> bool {
     }
     data == 0
 }
+fn gaming_notification_state(state: QUERY_USER_NOTIFICATION_STATE) -> bool {
+    matches!(
+        state,
+        QUNS_RUNNING_D3D_FULL_SCREEN | QUNS_PRESENTATION_MODE | QUNS_BUSY
+    )
+}
 pub fn gaming() -> bool {
-    unsafe { SHQueryUserNotificationState() }.is_ok_and(|s| {
-        s == QUNS_RUNNING_D3D_FULL_SCREEN || s == QUNS_PRESENTATION_MODE || s == QUNS_BUSY
+    unsafe { SHQueryUserNotificationState() }.is_ok_and(gaming_notification_state)
+}
+pub const APP_USER_MODEL_ID: &str = "HaloBatteryNext.Desktop";
+pub const APP_DISPLAY_NAME: &str = "Halo Battery Next";
+
+struct RegistryKey(HKEY);
+impl Drop for RegistryKey {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = RegCloseKey(self.0);
+        }
+    }
+}
+fn registry_result(result: WIN32_ERROR) -> Result<(), ProviderError> {
+    if result == ERROR_SUCCESS {
+        Ok(())
+    } else {
+        Err(ProviderError::new(format!(
+            "Application identity registry error {}",
+            result.0
+        )))
+    }
+}
+fn register_application_identity(subkey: &str, icon_uri: &str) -> Result<(), ProviderError> {
+    let subkey = wide(subkey);
+    let mut handle = HKEY::default();
+    registry_result(unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            windows::core::PCWSTR(subkey.as_ptr()),
+            None,
+            None,
+            REG_OPTION_NON_VOLATILE,
+            KEY_SET_VALUE,
+            None,
+            &mut handle,
+            None,
+        )
+    })?;
+    let key = RegistryKey(handle);
+    for (name, value) in [("DisplayName", APP_DISPLAY_NAME), ("IconUri", icon_uri)] {
+        let name = wide(name);
+        let value = wide(value);
+        registry_result(unsafe {
+            RegSetKeyValueW(
+                key.0,
+                None,
+                windows::core::PCWSTR(name.as_ptr()),
+                REG_SZ.0,
+                Some(value.as_ptr().cast()),
+                (value.len() * 2) as u32,
+            )
+        })?;
+    }
+    Ok(())
+}
+/// Register a real notification image path and display name in HKCU.
+/// IconUri is a file path, not an executable resource reference (exe,0).
+pub fn identify_registered_with_icon(icon: &std::path::Path) -> Result<(), ProviderError> {
+    set_process_identity()?;
+    let icon = notification_icon_path(icon)?;
+    register_application_identity(
+        &format!("Software\\Classes\\AppUserModelId\\{APP_USER_MODEL_ID}"),
+        &icon,
+    )
+}
+fn notification_icon_path(icon: &std::path::Path) -> Result<String, ProviderError> {
+    let supported = icon
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("png") || e.eq_ignore_ascii_case("ico"));
+    if !supported || !icon.is_file() {
+        return Err(ProviderError::new(
+            "Notification icon must be an existing PNG or ICO image file",
+        ));
+    }
+    let value = icon.canonicalize()?.to_string_lossy().into_owned();
+    Ok(if let Some(unc) = value.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{unc}")
+    } else {
+        value.strip_prefix(r"\\?\").unwrap_or(&value).to_owned()
     })
 }
+fn set_process_identity() -> Result<(), ProviderError> {
+    unsafe { SetCurrentProcessExplicitAppUserModelID(w!("HaloBatteryNext.Desktop")) }
+        .map_err(|e| ProviderError::new(e.to_string()))
+}
 pub fn identify() {
-    unsafe {
-        let _ = SetCurrentProcessExplicitAppUserModelID(w!("HaloBatteryNext.Desktop"));
-    }
+    let _ = set_process_identity();
 }
 
 /// Native process enumeration, cached for ten seconds like the original tray.
@@ -229,6 +316,146 @@ fn is_mydockfinder(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn application_identity_registry_roundtrip() {
+        use windows::core::PCWSTR;
+        // Production registration and the test use the same native writer. This
+        // unique key is removed even if an assertion unwinds.
+        struct TestKey(Vec<u16>);
+        impl Drop for TestKey {
+            fn drop(&mut self) {
+                unsafe {
+                    let _ = RegDeleteTreeW(HKEY_CURRENT_USER, PCWSTR(self.0.as_ptr()));
+                }
+            }
+        }
+        let name = format!(
+            "Software\\Classes\\AppUserModelId\\HaloBatteryNext.Test.{}.{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let cleanup = TestKey(wide(&name));
+        let icon = notification_icon_path(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../app/app.ico"
+        )))
+        .unwrap();
+        register_application_identity(&name, &icon).unwrap();
+        let read = |name: &str| {
+            let name = wide(name);
+            let mut value = [0u16; 512];
+            let mut size = std::mem::size_of_val(&value) as u32;
+            let mut kind = REG_VALUE_TYPE::default();
+            assert_eq!(
+                unsafe {
+                    RegGetValueW(
+                        HKEY_CURRENT_USER,
+                        PCWSTR(cleanup.0.as_ptr()),
+                        PCWSTR(name.as_ptr()),
+                        RRF_RT_REG_SZ,
+                        Some(&mut kind),
+                        Some(value.as_mut_ptr().cast()),
+                        Some(&mut size),
+                    )
+                },
+                ERROR_SUCCESS
+            );
+            assert_eq!(kind, REG_SZ);
+            assert_eq!(value[size as usize / 2 - 1], 0);
+            String::from_utf16(&value[..size as usize / 2 - 1]).unwrap()
+        };
+        assert_eq!(read("DisplayName"), "Halo Battery Next");
+        assert_eq!(read("IconUri"), icon);
+        assert!(notification_icon_path(std::path::Path::new("HaloBatteryNext.exe,0")).is_err());
+        assert!(notification_icon_path(std::path::Path::new("missing.png")).is_err());
+        assert!(std::path::Path::new(&icon).is_file());
+        // Re-registration preserves a valid canonical image path.
+        let moved_icon = icon.replace('\\', "/");
+        assert_ne!(icon, moved_icon);
+        assert!(std::path::Path::new(&moved_icon).is_file());
+        register_application_identity(&name, &moved_icon).unwrap();
+        assert_eq!(read("IconUri"), moved_icon);
+    }
+    #[test]
+    fn native_process_application_identity_is_set() {
+        unsafe {
+            SetCurrentProcessExplicitAppUserModelID(w!("HaloBatteryNext.Desktop")).unwrap();
+            let id = GetCurrentProcessExplicitAppUserModelID().unwrap();
+            let value = id.to_string().unwrap();
+            windows::Win32::System::Com::CoTaskMemFree(Some(id.0.cast()));
+            assert_eq!(value, APP_USER_MODEL_ID);
+        }
+    }
+    #[test]
+    fn gaming_notification_states_and_native_query() {
+        for state in [
+            QUNS_RUNNING_D3D_FULL_SCREEN,
+            QUNS_PRESENTATION_MODE,
+            QUNS_BUSY,
+        ] {
+            assert!(gaming_notification_state(state));
+        }
+        for state in [
+            QUNS_NOT_PRESENT,
+            QUNS_ACCEPTS_NOTIFICATIONS,
+            QUNS_QUIET_TIME,
+            QUNS_APP,
+        ] {
+            assert!(!gaming_notification_state(state));
+        }
+        // Native invocation must yield a bool even where Shell is unavailable;
+        // classification above covers all documented values deterministically.
+        let _: bool = gaming();
+    }
+    #[test]
+    fn bundled_application_icon_is_native_and_has_expected_dimensions() {
+        use windows::Win32::{Graphics::Gdi::*, UI::WindowsAndMessaging::*};
+        let path = wide(concat!(env!("CARGO_MANIFEST_DIR"), "/../app/app.ico"));
+        unsafe {
+            let handle = LoadImageW(
+                None,
+                windows::core::PCWSTR(path.as_ptr()),
+                IMAGE_ICON,
+                64,
+                64,
+                LR_LOADFROMFILE,
+            )
+            .unwrap();
+            let icon = HICON(handle.0);
+            let mut info = ICONINFO::default();
+            let result = GetIconInfo(icon, &mut info);
+            let _ = DestroyIcon(icon);
+            result.unwrap();
+            let mut bitmap = BITMAP::default();
+            let size = GetObjectW(
+                info.hbmColor.into(),
+                std::mem::size_of::<BITMAP>() as i32,
+                Some((&mut bitmap as *mut BITMAP).cast()),
+            );
+            let _ = DeleteObject(info.hbmColor.into());
+            let _ = DeleteObject(info.hbmMask.into());
+            assert_eq!(size as usize, std::mem::size_of::<BITMAP>());
+            assert_eq!((bitmap.bmWidth, bitmap.bmHeight), (64, 64));
+        }
+        let bytes = include_bytes!("../../app/app.ico");
+        assert!(
+            bytes[62..62 + 64 * 64 * 4]
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|p| p[3] > 0)
+        );
+        assert!(
+            bytes[62..62 + 64 * 64 * 4]
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|p| p[3] == 0)
+        );
+    }
     #[test]
     fn shell_process_names() {
         assert!(is_mydockfinder("Dock_64.EXE"));

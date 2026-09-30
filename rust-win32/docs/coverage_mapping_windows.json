@@ -148,5 +148,23 @@
     "status": "intentional_difference",
     "rust_test": "crates/windows/src/platform.rs::controller_tests::all_xinput_slots_keep_distinct_keys_and_unknown_reports",
     "notes": "Keep every XInput slot identity; never infer cable charging from slot battery type or use count equality to pair unrelated WGI reports."
+  },
+  {
+    "upstream_test": "test_notifications.AppIdTests.test_registers_the_name_and_sets_the_id",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/system.rs::tests::application_identity_registry_roundtrip; crates/windows/src/system.rs::tests::native_process_application_identity_is_set",
+    "notes": "Native HKCU AppUserModelId DisplayName/IconUri REG_SZ registration roundtrips through Windows registry in isolated automatically removed key; re-registration updates an existing image file path; nonexistent paths and executable resource strings are rejected. Actual process AUMID is read back. Native application identity is HaloBatteryNext.Desktop and DisplayName Halo Battery Next."
+  },
+  {
+    "upstream_test": "test_notifications.AppIdTests.test_icon_png_is_drawn",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/system.rs::tests::bundled_application_icon_is_native_and_has_expected_dimensions",
+    "notes": "Native equivalent bundles a generated ring-and-battery ICO as executable icon resource 1; root app writes the notification PNG image for IconUri. Windows LoadImage/GetIconInfo validates 64x64 icon, pixel data contains opaque geometry and transparent background; resource compilation checked with cargo check app."
+  },
+  {
+    "upstream_test": "test_more_features.QuietTests.test_detection_runs_on_this_machine",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/system.rs::tests::gaming_notification_states_and_native_query",
+    "notes": "Runs actual SHQueryUserNotificationState on this machine with fallible bool wrapper and exhaustively tests documented notification states: busy/fullscreen/presentation true; not-present/accepts/quiet-time/app false. Native equivalent retains original bool smoke assertion."
   }
 ]

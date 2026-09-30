@@ -271,9 +271,13 @@
   },
   {
     "upstream_test": "test_corsair.NxpPollTest.test_the_dongle_is_shown_as_a_gauge",
-    "status": "mapped",
+    "status": "intentional_difference",
     "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge",
-    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified."
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified. Keys include a trusted serial/container/physical path instead of a PID-only or placeholder identity. Ambiguous equal-model devices remain separate; protocol/value assertions are covered by the linked transcript.",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge",
+      "crates/providers/tests/provider_io.rs::placeholder_serials_and_containers_do_not_merge_identical_headsets"
+    ]
   },
   {
     "upstream_test": "test_corsair.NxpPollTest.test_the_packet_goes_on_the_wire_unchanged",
@@ -343,9 +347,12 @@
   },
   {
     "upstream_test": "test_lamzu.PollTest.test_cable_is_asked_first_and_wins",
-    "status": "mapped",
-    "rust_test": "crates/providers/tests/provider_family_io.rs::lamzu_cable_charging_source_wins_without_poking_dongle",
-    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified."
+    "status": "intentional_difference",
+    "notes": "Charging cable sources take priority only when trustworthy serial/container associates them. Separate ambiguous receivers remain distinct; strict associated-source and independent-identity tests assert this requested safety policy.",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::lamzu_cable_charging_source_wins_without_poking_dongle",
+      "crates/providers/tests/provider_family_io.rs::independent_family_identities_do_not_share_charging_or_sleeping_readings"
+    ]
   },
   {
     "upstream_test": "test_lamzu.PollTest.test_sleeping_mouse_keeps_its_last_value_greyed",
@@ -379,9 +386,12 @@
   },
   {
     "upstream_test": "test_gwolves.PollTest.test_mouse_on_the_cable_names_the_model_and_wins",
-    "status": "mapped",
-    "rust_test": "crates/providers/tests/provider_family_io.rs::gwolves_trusted_cable_identity_names_model_and_wins_before_receiver_query",
-    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified."
+    "status": "intentional_difference",
+    "notes": "Charging cable sources take priority only when trustworthy serial/container associates them. Separate ambiguous receivers remain distinct; strict associated-source and independent-identity tests assert this requested safety policy.",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::gwolves_trusted_cable_identity_names_model_and_wins_before_receiver_query",
+      "crates/providers/tests/provider_family_io.rs::independent_family_identities_do_not_share_charging_or_sleeping_readings"
+    ]
   },
   {
     "upstream_test": "test_gwolves.TableTest.test_warg_is_known",
@@ -457,9 +467,12 @@
   },
   {
     "upstream_test": "test_am_infinity.PollTest.test_zero_charge_is_unknown_not_0",
-    "status": "partial",
-    "rust_test": "crates/providers/tests/provider_family_io.rs::infinity_junk_zero_and_alternative_length_retry",
-    "notes": "No reading and alternate-length retry asserted; original specific no-charge diagnostic not yet asserted."
+    "status": "mapped",
+    "notes": "Strict fake-HID exchange and accepted/retry/error/no-charge diagnostics are explicitly asserted; physical hardware remains unverified.",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::infinity_junk_zero_and_alternative_length_retry",
+      "crates/providers/tests/provider_family_io.rs::family_failed_and_accepted_feature_reports_have_actionable_diagnostics"
+    ]
   },
   {
     "upstream_test": "test_hyperx_cloud3.WritePath.test_write_accepted",
@@ -475,9 +488,12 @@
   },
   {
     "upstream_test": "test_hyperx_cloud3.WritePath.test_write_minus_one_then_feature_report_accepted",
-    "status": "partial",
-    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx3_incorrect_function_fallback_is_same_feature_packet_for_both_commands",
-    "notes": "Exact same feature packet and both commands asserted; original retry/accepted diagnostic strings remain unaudited."
+    "status": "mapped",
+    "notes": "Strict fake-HID exchange and accepted/retry/error/no-charge diagnostics are explicitly asserted; physical hardware remains unverified.",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::hyperx3_incorrect_function_fallback_is_same_feature_packet_for_both_commands",
+      "crates/providers/tests/provider_family_io.rs::family_failed_and_accepted_feature_reports_have_actionable_diagnostics"
+    ]
   },
   {
     "upstream_test": "test_hyperx_cloud3.WritePath.test_write_raises_other_error_no_fallback",
@@ -487,15 +503,21 @@
   },
   {
     "upstream_test": "test_hyperx_cloud3.WritePath.test_write_minus_one_other_error_no_fallback",
-    "status": "partial",
-    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx3_unrelated_output_errors_do_not_fallback_and_feature_failure_is_reported",
-    "notes": "Exact no-fallback/failure sequence asserted; original detailed diagnostic assertions remain unaudited."
+    "status": "mapped",
+    "notes": "Strict fake-HID exchange and accepted/retry/error/no-charge diagnostics are explicitly asserted; physical hardware remains unverified.",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::hyperx3_unrelated_output_errors_do_not_fallback_and_feature_failure_is_reported",
+      "crates/providers/tests/provider_family_io.rs::family_failed_and_accepted_feature_reports_have_actionable_diagnostics"
+    ]
   },
   {
     "upstream_test": "test_hyperx_cloud3.WritePath.test_write_minus_one_and_feature_minus_one",
-    "status": "partial",
-    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx3_unrelated_output_errors_do_not_fallback_and_feature_failure_is_reported",
-    "notes": "Exact no-fallback/failure sequence asserted; original detailed diagnostic assertions remain unaudited."
+    "status": "mapped",
+    "notes": "Strict fake-HID exchange and accepted/retry/error/no-charge diagnostics are explicitly asserted; physical hardware remains unverified.",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::hyperx3_unrelated_output_errors_do_not_fallback_and_feature_failure_is_reported",
+      "crates/providers/tests/provider_family_io.rs::family_failed_and_accepted_feature_reports_have_actionable_diagnostics"
+    ]
   },
   {
     "upstream_test": "test_hyperx_alpha2.Polling.test_survives_a_flooded_queue",
@@ -511,9 +533,13 @@
   },
   {
     "upstream_test": "test_hyperx_alpha2.Polling.test_reads_the_level_from_the_controller_collection",
-    "status": "mapped",
+    "status": "intentional_difference",
     "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_controller_usage_drain_cap_and_flood_noise_matching",
-    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified."
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified. Keys include a trusted serial/container/physical path instead of a PID-only or placeholder identity. Ambiguous equal-model devices remain separate; protocol/value assertions are covered by the linked transcript.",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_controller_usage_drain_cap_and_flood_noise_matching",
+      "crates/providers/tests/provider_io.rs::placeholder_serials_and_containers_do_not_merge_identical_headsets"
+    ]
   },
   {
     "upstream_test": "test_hyperx_alpha2.Polling.test_only_keepalives_ends_in_no_reading",
@@ -544,5 +570,27 @@
     "status": "mapped",
     "rust_test": "crates/providers/tests/provider_family_io.rs::gwolves_receiver_issue82_exact_name_level_and_packet",
     "notes": "Strict fake-HID exchange reproduces captured reference reply, exact request and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_corsair.NxpPollTest.test_the_headset_family_is_untouched",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_headset_catalog_remains_separate_from_nxp_mouse",
+    "notes": "Exact original headset PID/name table remains separate from the NXP mouse."
+  },
+  {
+    "upstream_test": "test_gwolves.PollTest.test_reply_without_a1_is_not_a_level",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::gwolves_feature_without_a1_or_a2_marker_never_becomes_a_level",
+    "notes": "Strict feature exchange rejects every marker-free status reply after bounded15 attempts; no hardware verification claimed."
+  },
+  {
+    "upstream_test": "test_gwolves.PollTest.test_the_collection_is_remembered",
+    "status": "intentional_difference",
+    "rust_test": "crates/windows/src/transport.rs::cache_tests::cached_collection_preserves_capabilities_without_reprobing",
+    "rust_tests": [
+      "crates/windows/src/transport.rs::cache_tests::cached_collection_preserves_capabilities_without_reprobing",
+      "crates/providers/tests/provider_family_io.rs::gwolves_selects_actual_feature_length_at_any_collection_not_usage_guesses"
+    ],
+    "notes": "Native capability cache preserves report-length collection selection without reprobes, with30-second revalidation rather than indefinite Python cache. Scripted provider selection verifies the report-capability policy."
   }
 ]

@@ -4,7 +4,47 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
-## Measurements recorded on 30 September 2026
+## Local regression checkpoint
+
+Formatting, strict workspace Clippy, the optimized release build and **261 Rust
+tests** pass locally. The upstream coverage gate classifies all **459 IDs**:
+**367 mapped**, **35 tested intentional differences**, and **57 retired Python
+implementation details**, with no partial, manual or unmapped IDs. This is an
+explicit coverage audit, not a claim that 459 separate Rust tests passed.
+
+The portable executable is **2,478,080 bytes (2.36 MiB)**. Windows dependency
+inspection shows system DLLs only. Build-profile paths and the local account name
+have zero occurrences in its embedded strings; source scans also pass. The
+release script remaps build paths, and packaging retains required notices.
+
+## Latest five-minute measurements, 30 September 2026
+
+Both runs used one device with the dashboard closed after 40 complete open/close
+cycles. CPU percentages describe one logical core.
+
+| Workload | Duration | Average private memory | Peak private memory | Average CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Razer hardware, animation off | 300.67 s | 6.90 MiB | 7.16 MiB | 0.073% |
+| Simulated charging device, animation on | 300.75 s | 6.19 MiB | 6.99 MiB | 0.171% |
+
+Warm USER/GDI handles were 15/15 before and 14/15 after the hardware cycles;
+44/102 before and 43/102 after the animated cycles. Both runs exited gracefully,
+flushed history and cleared the exported status device list.
+
+These sustained measurements preceded the final history change that records
+precision, charging evidence and model metadata changes immediately. After that
+change, both 15-second resource smoke checks passed on the final build, followed
+by the complete native interaction script. Its 40-cycle run kept USER/GDI handles
+at **44/102** at cycles 1, 20 and 40. Private memory before/after those cycles was
+15.34/15.65 MiB. Quiet mode, PlayStation opt-in, provider switches, threshold
+inheritance, rename/hide/icon controls, theme notification handling and keyboard
+navigation passed; quit returned zero.
+
+The fresh hardware probe reported the DeathAdder V4 Pro online with an exact
+31% reading and not charging. Simulated animation does not verify physical
+charging behavior or other vendor hardware.
+
+## Earlier measurements
 
 The initial optimized executable was **2,384,384 bytes (2.27 MiB)**. `dumpbin
 /dependents` showed Windows system DLLs only: HIDAPI, SQLite and the MSVC CRT are
@@ -41,7 +81,7 @@ the Razer device and resource use with multiple devices are not yet measured.
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
-cargo build --release --locked
+./tools/build-rust.ps1
 python tools/merge-coverage.py --check
 ./tools/validate-native.ps1 -Seconds 300 -Hardware
 ./tools/validate-native.ps1 -Seconds 300 -Animation -Cycles 40

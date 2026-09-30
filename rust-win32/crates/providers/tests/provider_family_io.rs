@@ -16,6 +16,7 @@ fn device(family: &str, pid: u16, page: u16, usage: u16, iface: i32, path: &str)
     i.usage = usage;
     i.interface = iface;
     i.path = path.into();
+    i.container = Some(format!("fixture-{family}-{pid:04x}"));
     i
 }
 fn poll(family: &'static str, hid: &FakeHid) -> Vec<Reading> {
@@ -364,7 +365,12 @@ fn corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge() {
         let r = poll("corsair", &h);
         assert_eq!(
             (&*r[0].key, r[0].level, r[0].charging, &*r[0].kind),
-            ("corsair:1b7f", Some(level), Some(false), "mouse")
+            (
+                "corsair:1b7f:FIXTURE-CORSAIR-1B7F",
+                Some(level),
+                Some(false),
+                "mouse"
+            )
         );
         assert_eq!(r[0].precision, Precision::Coarse);
         assert_eq!(r[0].approx, Some(format!("about {level}%")));
@@ -478,7 +484,13 @@ fn lamzu_only_interface2_vendor_collection_receives_feature_packet() {
             r[0].charging,
             &*r[0].kind
         ),
-        ("lamzu", "LAMZU Maya X", Some(81), Some(false), "mouse")
+        (
+            "lamzu:FIXTURE-LAMZU-001E",
+            "LAMZU Maya X",
+            Some(81),
+            Some(false),
+            "mouse"
+        )
     );
     assert_eq!(*h.opened.lock().unwrap(), vec!["collection-6"]);
     h.done();
@@ -490,8 +502,16 @@ fn lamzu_only_interface2_vendor_collection_receives_feature_packet() {
 fn lamzu_cable_charging_source_wins_without_poking_dongle() {
     let h = FakeHid::new(
         vec![
-            device("lamzu", 0x1e, 0xffff, 0, 2, "dongle"),
-            device("lamzu", 0x1c, 0xffff, 0, 2, "cable"),
+            {
+                let mut i = device("lamzu", 0x1e, 0xffff, 0, 2, "dongle");
+                i.serial = "same-maya".into();
+                i
+            },
+            {
+                let mut i = device("lamzu", 0x1c, 0xffff, 0, 2, "cable");
+                i.serial = "same-maya".into();
+                i
+            },
         ],
         feature_steps(1, 71),
     );
@@ -525,6 +545,7 @@ fn lamzu_and_gwolves_retry_feature_reads_and_keep_sleeping_cache_under_five_minu
         let sleepy = p.poll(&h, &context(&clock, &cancel)).unwrap();
         assert_eq!(sleepy[0].connection, Connection::Sleeping);
         assert_eq!(sleepy[0].timestamp, live[0].timestamp);
+        assert_eq!(sleepy[0].key, live[0].key);
         clock.0.store(300000, Ordering::Relaxed);
         assert!(p.poll(&h, &context(&clock, &cancel)).unwrap().is_empty());
         h.done();
@@ -626,7 +647,7 @@ fn infinity_report_id_tolerance_clamp_and_exact_zero_payload_request() {
                 &*r[0].kind
             ),
             (
-                "am_infinity",
+                "am_infinity:FIXTURE-AM_INFINITY-5007",
                 "AM Infinity 8K Mouse",
                 Some(100),
                 Some(false),
@@ -849,7 +870,7 @@ fn hyperx_alpha2_controller_usage_drain_cap_and_flood_noise_matching() {
         assert_eq!(
             (&*r[0].key, &*r[0].name, r[0].level, r[0].charging),
             (
-                "hyperx:08be",
+                "hyperx:08be:FIXTURE-HYPERX_ALPHA2-08BE",
                 "HyperX Cloud Alpha 2",
                 Some(level),
                 Some(charging)
@@ -1016,5 +1037,126 @@ fn gwolves_receiver_issue82_exact_name_level_and_packet() {
             &Connection::Online
         )
     );
+    h.done();
+}
+
+#[test]
+fn family_failed_and_accepted_feature_reports_have_actionable_diagnostics() {
+    let clock = FakeClock::default();
+    let cancel = AtomicBool::new(false);
+    let packet = padded(&[0x66, 0x89], 62);
+    let h = FakeHid::new(
+        vec![device("hyperx_cloud3", 0x05b7, 0xff13, 1, 3, "cloud3")],
+        vec![
+            Step::WriteError(packet.clone(), "incorrect function"),
+            Step::SendError(packet, "feature report refused"),
+        ],
+    );
+    let mut p = HidProvider::new("hyperx_cloud3");
+    assert!(p.poll(&h, &context(&clock, &cancel)).is_err());
+    let diag = p.diagnostics().join("\n");
+    assert!(diag.contains("retrying as a feature report"));
+    assert!(diag.contains("feature report ->"));
+    assert!(diag.contains("feature report refused"));
+    assert!(!diag.contains("feature report accepted"));
+    h.done();
+    let mut steps = vec![];
+    for (cmd, reply) in [
+        (0x89, vec![0x66, 0x89, 1, 0, 80]),
+        (0x8a, vec![0x66, 0x8a, 1]),
+    ] {
+        let packet = padded(&[0x66, cmd], 62);
+        steps.extend([
+            Step::WriteError(packet.clone(), "incorrect function"),
+            Step::Send(packet),
+            rd(&reply),
+        ]);
+    }
+    let h = FakeHid::new(
+        vec![device("hyperx_cloud3", 0x05b7, 0xff13, 1, 3, "cloud3")],
+        steps,
+    );
+    let r = p.poll(&h, &context(&clock, &cancel)).unwrap();
+    assert_eq!(r[0].level, Some(80));
+    let diag = p.diagnostics().join("\n");
+    assert_eq!(diag.matches("retrying as a feature report").count(), 2);
+    assert_eq!(diag.matches("feature report accepted").count(), 2);
+    h.done();
+    let h = FakeHid::new(
+        vec![device("hyperx_cloud3", 0x05b7, 0xff13, 1, 3, "cloud3")],
+        vec![Step::WriteError(
+            padded(&[0x66, 0x89], 62),
+            "WriteFile: device not functioning",
+        )],
+    );
+    assert!(p.poll(&h, &context(&clock, &cancel)).is_err());
+    let diag = p.diagnostics().join("\n");
+    assert!(diag.contains("not functioning"));
+    assert!(!diag.contains("retrying as a feature report"));
+    h.done();
+    let h = FakeHid::new(
+        vec![infinity()],
+        infinity_steps(vec![0; 65], Some(vec![0; 65])),
+    );
+    let mut p = HidProvider::new("am_infinity");
+    assert!(p.poll(&h, &context(&clock, &cancel)).unwrap().is_empty());
+    let diag = p.diagnostics().join("\n");
+    assert!(diag.contains("no charge in the status report"));
+    assert!(diag.contains("mouse off or asleep"));
+    h.done();
+}
+#[test]
+fn independent_family_identities_do_not_share_charging_or_sleeping_readings() {
+    for (family, pid) in [("lamzu", 0x1e), ("gwolves", 0x3854)] {
+        let mut a = device(family, pid, 0xffff, 0, 2, "a-control");
+        let mut b = a.clone();
+        b.path = "b-control".into();
+        a.feature_length = Some(65);
+        b.feature_length = Some(65);
+        a.serial = "mouse-A".into();
+        b.serial = "mouse-B".into();
+        let mut s = feature_steps(1, 81);
+        s.extend(feature_steps(0, 32));
+        let h = FakeHid::new(vec![b, a], s);
+        let r = poll(family, &h);
+        assert_eq!(r.len(), 2);
+        assert_ne!(r[0].key, r[1].key);
+        assert_eq!(
+            r.iter().find(|r| r.key.ends_with("MOUSE-A")).unwrap().level,
+            Some(81)
+        );
+        assert_eq!(
+            r.iter().find(|r| r.key.ends_with("MOUSE-B")).unwrap().level,
+            Some(32)
+        );
+        h.done();
+    }
+}
+
+#[test]
+fn corsair_headset_catalog_remains_separate_from_nxp_mouse() {
+    let got: std::collections::BTreeMap<_, _> = DEVICES
+        .iter()
+        .filter(|d| d.provider == "corsair" && d.variant != "nxp")
+        .map(|d| (d.pid, d.name))
+        .collect();
+    assert_eq!(
+        got,
+        std::collections::BTreeMap::from([
+            (0x2a08, "Corsair Void v2 Wireless"),
+            (0x2a02, "Corsair Virtuoso Max Wireless"),
+            (0x0a97, "Corsair HS80 Max Wireless")
+        ])
+    );
+    assert!(!got.contains_key(&0x1b7f));
+}
+#[test]
+fn gwolves_feature_without_a1_or_a2_marker_never_becomes_a_level() {
+    let mut i = device("gwolves", 0x3854, 0xff02, 2, 1, "control");
+    i.feature_length = Some(65);
+    let mut s = vec![Step::Send(padded(&[0, 0, 0, 2, 2, 0, 0x83], 65))];
+    s.extend((0..15).map(|_| ft(&[0, 0, 0, 2, 2, 0, 0x83, 0, 50])));
+    let h = FakeHid::new(vec![i], s);
+    assert!(poll("gwolves", &h).is_empty());
     h.done();
 }

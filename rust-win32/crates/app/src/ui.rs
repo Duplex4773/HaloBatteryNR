@@ -99,6 +99,7 @@ pub fn run(
     settings: Settings,
     dir: PathBuf,
     background: bool,
+    initial_error: Option<String>,
 ) -> Result<(), ProviderError> {
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -153,7 +154,7 @@ pub fn run(
             taskbar: RegisterWindowMessageW(w!("TaskbarCreated")),
             notify: None,
             animating: false,
-            error: String::new(),
+            error: initial_error.unwrap_or_default(),
             font,
         }));
         let ptr = &*context as *const RefCell<State>;
@@ -628,8 +629,15 @@ impl State {
                     self.label(92, "&Name", 20, 184, 120);
                     self.edit(11, &d.name, 150, 180, 360);
                     self.check(12, "&Hide tray icon", d.hidden, 20, 222, 350);
-                    self.label(93, "Low alert % (0 disables)", 20, 270, 230);
-                    self.edit(13, &d.low_alert_at.to_string(), 260, 266, 80);
+                    self.label(93, "Low alert % (blank = default)", 20, 270, 230);
+                    let low = self
+                        .settings
+                        .devices
+                        .get(&d.reading.key)
+                        .and_then(|p| p.low)
+                        .map(|v| v.to_string())
+                        .unwrap_or_default();
+                    self.edit(13, &low, 260, 266, 80);
                     self.label(94, "Tray &icon", 20, 310, 120);
                     let kinds: Vec<_> = [
                         "automatic",
@@ -743,7 +751,7 @@ impl State {
                 for (i, p) in providers().iter().enumerate() {
                     self.check(
                         300 + i as u16,
-                        p,
+                        provider_label(p),
                         self.settings.enabled(p),
                         20 + (i as i32 % 4) * 190,
                         380 + (i as i32 / 4) * 30,
@@ -790,7 +798,7 @@ impl State {
             }
             5 => {
                 let path = self.dir.join("diagnostics.json");
-                let value = serde_json::json!({"snapshot":self.snapshot,"providers":self.diagnostics,"settings":self.settings});
+                let value = serde_json::json!({"snapshot":self.snapshot,"providers":self.diagnostics,"settings":self.settings,"application_error":self.error});
                 self.error = match hb_storage::atomic_write(
                     &path,
                     &serde_json::to_vec_pretty(&value).unwrap(),
@@ -813,12 +821,14 @@ impl State {
                     let key = d.reading.key.clone();
                     let name = self.text(11);
                     let hidden = self.checked(12);
-                    let low = self.text(13).parse::<u8>().ok().filter(|v| *v <= 100);
-                    if low.is_none() {
-                        self.error = "Enter a low alert value between 0 and 100".into();
-                        self.build();
-                        return;
-                    }
+                    let low = match device_threshold(&self.text(13)) {
+                        Ok(low) => low,
+                        Err(e) => {
+                            self.error = e.into();
+                            self.build();
+                            return;
+                        }
+                    };
                     let choice = self.choice(14);
                     let icon = if choice == 0 {
                         None
@@ -1041,21 +1051,7 @@ impl State {
                     .get(&d.reading.key)
                     .is_some_and(|p| p.hidden)
         }) {
-            let signature = format!(
-                "{:?}{:?}{:?}{}{}{}{:?}{:?}",
-                d.reading.level,
-                d.reading.charging,
-                d.reading.connection,
-                d.icon,
-                d.low_alert_at,
-                dark,
-                self.settings.icon_theme,
-                (
-                    self.settings.animation,
-                    self.settings.percent_in_icon,
-                    self.settings.badges
-                )
-            );
+            let signature = icon_signature(d, settings, dark);
             let tip = d.text.clone();
             let existing = self.trays.get_mut(&d.reading.key);
             if let Some(t) = existing {
@@ -1160,6 +1156,24 @@ unsafe fn send(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     unsafe { SendMessageW(h, m, Some(w), Some(l)) }
 }
 
+fn icon_signature(d: &DeviceView, settings: &Settings, dark: bool) -> String {
+    format!(
+        "{:?}{:?}{:?}{:?}{}{}{}{:?}{:?}",
+        d.reading.level,
+        d.reading.precision,
+        d.reading.charging,
+        d.reading.connection,
+        d.icon,
+        d.low_alert_at,
+        dark,
+        settings.icon_theme,
+        (
+            settings.animation,
+            settings.percent_in_icon,
+            settings.badges
+        )
+    )
+}
 fn tray_dark(settings: &Settings) -> bool {
     let fallback = hb_windows::system::dark_theme();
     if !["auto", "topbar"].contains(&settings.icon_theme.as_str())
@@ -1269,6 +1283,17 @@ fn provider_label(id: &str) -> &str {
         other => other,
     }
 }
+fn device_threshold(text: &str) -> Result<Option<u8>, &'static str> {
+    if text.trim().is_empty() {
+        return Ok(None);
+    }
+    text.trim()
+        .parse::<u8>()
+        .ok()
+        .filter(|v| *v <= 100)
+        .map(Some)
+        .ok_or("Enter 0–100, or leave blank for the default alert threshold")
+}
 
 fn tray_devices(snapshot: &Snapshot, settings: &Settings) -> Vec<DeviceView> {
     let mut devices: Vec<_> = snapshot
@@ -1300,6 +1325,17 @@ fn tray_devices(snapshot: &Snapshot, settings: &Settings) -> Vec<DeviceView> {
 #[cfg(test)]
 mod behaviour_tests {
     use super::*;
+    #[test]
+    fn icon_changes_on_precision_transition_but_not_timestamp_refresh() {
+        let settings = Settings::default();
+        let mut d = tray_devices(&Snapshot::default(), &settings).remove(0);
+        d.reading.level = Some(50);
+        let exact = icon_signature(&d, &settings, false);
+        d.reading.timestamp += 60;
+        assert_eq!(exact, icon_signature(&d, &settings, false));
+        d.reading.precision = Precision::Coarse;
+        assert_ne!(exact, icon_signature(&d, &settings, false));
+    }
     #[test]
     fn placeholder_exists_only_without_visible_devices() {
         let mut settings = Settings::default();
@@ -1334,6 +1370,44 @@ mod behaviour_tests {
         assert_eq!(
             tray_devices(&snapshot, &settings)[0].reading.key,
             "application"
+        );
+    }
+    #[test]
+    fn every_provider_has_a_unique_readable_settings_label() {
+        let ids = providers();
+        assert_eq!(ids.len(), 25);
+        let labels = ids
+            .iter()
+            .map(|id| provider_label(id))
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(labels.len(), 25);
+        assert_eq!(provider_label("razer"), "Razer");
+        assert_eq!(provider_label("playstation"), "PlayStation");
+        assert!(ids.iter().all(|id| !provider_label(id).contains('_')));
+    }
+    #[test]
+    fn clearing_device_threshold_restores_default_without_losing_other_preferences() {
+        assert_eq!(device_threshold(" "), Ok(None));
+        assert_eq!(device_threshold("30"), Ok(Some(30)));
+        assert_eq!(device_threshold("0"), Ok(Some(0)));
+        assert!(device_threshold("101").is_err());
+        assert!(device_threshold("-1").is_err());
+        assert!(device_threshold("bad").is_err());
+        let mut settings = Settings::default();
+        let mut preference = DevicePreferences {
+            name: Some("Custom mouse".into()),
+            low: device_threshold("30").unwrap(),
+            ..Default::default()
+        };
+        settings.devices.insert("mouse".into(), preference.clone());
+        assert_eq!(settings.low_for("mouse"), 30);
+        preference.low = device_threshold("").unwrap();
+        settings.devices.insert("mouse".into(), preference);
+        settings.low = 15;
+        assert_eq!(settings.low_for("mouse"), 15);
+        assert_eq!(
+            settings.devices["mouse"].name.as_deref(),
+            Some("Custom mouse")
         );
     }
     #[test]
@@ -1405,7 +1479,7 @@ fn popup_menu(
         }
         let _ = AppendMenuW(menu.0, MF_STRING, 500, w!("Open &dashboard"));
         let _ = AppendMenuW(menu.0, MF_STRING, 501, w!("&Refresh"));
-        let _ = AppendMenuW(menu.0, MF_STRING, 502, w!("E&xit Halo Battery"));
+        let _ = AppendMenuW(menu.0, MF_STRING, 502, w!("E&xit Halo Battery Next"));
 
         Ok(menu)
     }

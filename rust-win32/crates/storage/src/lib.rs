@@ -155,7 +155,16 @@ impl HistoryStore for Store {
         let changed = self.last.get(&reading.key).is_none_or(|r| {
             r.level != reading.level
                 || r.charging != reading.charging
+                || r.charging_inferred != reading.charging_inferred
                 || r.connection != reading.connection
+                || r.precision != reading.precision
+                || r.approx != reading.approx
+                || r.name != reading.name
+                || r.kind != reading.kind
+                || r.source != reading.source
+                || r.via != reading.via
+                || r.serial != reading.serial
+                || r.container != reading.container
                 || reading.timestamp < r.timestamp
                 || reading.timestamp - r.timestamp >= 60
         });
@@ -351,6 +360,33 @@ mod tests {
         }
         s.flush().unwrap();
         assert_eq!(s.query("one", 0, 120, 100).unwrap().len(), 2);
+    }
+    #[test]
+    fn precision_and_charging_evidence_changes_are_recorded_without_waiting_a_minute() {
+        let d = tempfile::tempdir().unwrap();
+        let mut s = Store::open(&d.path().join("history.db")).unwrap();
+        let mut r = Reading::new("one", "Mouse", "razer", 100);
+        r.level = Some(50);
+        r.charging = Some(true);
+        s.record(&r).unwrap();
+        r.timestamp += 1;
+        r.precision = hb_core::Precision::Coarse;
+        r.approx = Some("about half".into());
+        s.record(&r).unwrap();
+        r.timestamp += 1;
+        r.charging_inferred = true;
+        s.record(&r).unwrap();
+        r.timestamp += 1;
+        r.name = "Updated device model".into();
+        s.record(&r).unwrap();
+        s.flush().unwrap();
+        let rows = s.query("one", 100, 103, 20).unwrap();
+        assert_eq!(rows.len(), 4);
+        assert_eq!(rows[0].precision, hb_core::Precision::Exact);
+        assert_eq!(rows[1].approx.as_deref(), Some("about half"));
+        assert!(!rows[1].charging_inferred);
+        assert!(rows[2].charging_inferred);
+        assert_eq!(rows[3].name, "Updated device model");
     }
     #[test]
     fn null_gaps_do_not_truncate_the_requested_interval() {

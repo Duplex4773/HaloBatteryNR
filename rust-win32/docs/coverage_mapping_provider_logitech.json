@@ -1,0 +1,230 @@
+[
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_mouse_in_slot_1",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::receiver_pid_without_receiver_name_and_short_long_grouping",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario receiver pid without receiver name and short long grouping."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_receiver_known_by_product_id",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::receiver_pid_without_receiver_name_and_short_long_grouping",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario receiver pid without receiver name and short long grouping."
+  },
+  {
+    "upstream_test": "test_logitech.TwoReceiverTests.test_short_and_long_collection_are_one_receiver",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::receiver_pid_without_receiver_name_and_short_long_grouping",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario receiver pid without receiver name and short long grouping."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_error_reply_for_another_app_is_ignored",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::foreign_errors_and_late_swid_replies_never_replace_matching_battery",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario foreign errors and late swid replies never replace matching battery."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_late_reply_to_an_earlier_request_is_ignored",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::foreign_errors_and_late_swid_replies_never_replace_matching_battery",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario foreign errors and late swid replies never replace matching battery."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_failed_identity_read_is_not_cached",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::identity_failure_retries_and_replaces_fallback_key_on_next_poll",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario identity failure retries and replaces fallback key on next poll."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_empty_slot_forgets_old_name",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::empty_slot_invalidates_old_identity_before_replacement",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario empty slot invalidates old identity before replacement."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_silent_device_is_asleep",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::sleeping_ping_uses_shorter_retry_and_expires_after_five_minutes",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario sleeping ping uses shorter retry and expires after five minutes."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_unified_battery_without_percentage",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::unified_coarse_good_is_explicit_and_not_exact_percentage",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario unified coarse good is explicit and not exact percentage."
+  },
+  {
+    "upstream_test": "test_logitech.TwoReceiverTests.test_two_identical_receivers_get_two_icons",
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::identical_receivers_keep_separate_units_and_collection_failures_are_local; crates/providers/tests/provider_logitech_io.rs::logitech_keys_are_stable_when_unrelated_receivers_arrive_and_leave; crates/providers/tests/provider_logitech_io.rs::logitech_receiver_and_direct_device_unit_deduplicate_preferring_charging",
+    "notes": "Two identical receiver PIDs with distinct actual hardware unitIDs keep two icons; same real unit via wired+receiver deduplicates preferring charging. Valid unit key stays global and no-unit key always receiver scoped, both stable across1\u21922\u21921 receiver arrivals. Original duplicates same fake globally uniqueunit by receiver-count prefix; deliberately replaced to avoid identity churn."
+  },
+  {
+    "upstream_test": "test_logitech.HeadsetTests.test_g935_charging",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::headset_adc_charging_off_consumer_and_inactive_error",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario headset adc charging off consumer and inactive error."
+  },
+  {
+    "upstream_test": "test_logitech.HeadsetTests.test_headset_off",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::headset_adc_charging_off_consumer_and_inactive_error",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario headset adc charging off consumer and inactive error."
+  },
+  {
+    "upstream_test": "test_logitech.HeadsetTests.test_headset_inactive_error",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::headset_adc_charging_off_consumer_and_inactive_error",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario headset adc charging off consumer and inactive error."
+  },
+  {
+    "upstream_test": "test_logitech.HeadsetTests.test_g535_uses_consumer_collection",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::headset_adc_charging_off_consumer_and_inactive_error",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario headset adc charging off consumer and inactive error."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_hidpp10_device_is_noted",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::hidpp10_and_switched_off_diagnostics_and_sleeping_cache",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario hidpp10 and switched off diagnostics and sleeping cache."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_switched_off_keeps_grey_icon",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::hidpp10_and_switched_off_diagnostics_and_sleeping_cache",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario hidpp10 and switched off diagnostics and sleeping cache."
+  },
+  {
+    "upstream_test": "test_logitech.SafetyTests.test_ff00_wins_over_ff43_in_any_order",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::vendor_collection_wins_over_headset_and_foreign_consumers_in_any_order",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario vendor collection wins over headset and foreign consumers in any order."
+  },
+  {
+    "upstream_test": "test_logitech.SafetyTests.test_no_write_to_other_consumer_collections",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::vendor_collection_wins_over_headset_and_foreign_consumers_in_any_order",
+    "notes": "Strict scripted HID++ exchange asserts exact slot, SWID token, function, params, read size64 and nonblocking timeout, all expected operations consumed. Scenario vendor collection wins over headset and foreign consumers in any order."
+  },
+  {
+    "upstream_test": "test_logitech.SafetyTests.test_ff43_is_used_only_for_known_headsets",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::logitech_unrelated_consumer_and_unknown_headset_never_opened",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario logitech unrelated consumer and unknown headset never opened."
+  },
+  {
+    "upstream_test": "test_razer_foreign.ForeignRepliesTest.test_a_normal_mouse_is_asked_once",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_normal_request_repeated_reply_and_busy_cache_expiry",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer normal request repeated reply and busy cache expiry."
+  },
+  {
+    "upstream_test": "test_razer_foreign.ForeignRepliesTest.test_an_answer_to_a_repeated_request_is_read",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_normal_request_repeated_reply_and_busy_cache_expiry",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer normal request repeated reply and busy cache expiry."
+  },
+  {
+    "upstream_test": "test_razer_foreign.ForeignRepliesTest.test_last_level_stays_greyed_while_another_app_holds_the_mouse",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_normal_request_repeated_reply_and_busy_cache_expiry",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer normal request repeated reply and busy cache expiry."
+  },
+  {
+    "upstream_test": "test_razer.PollRazerTest.test_basilisk_x_hyperspeed_asks_with_ff_first",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_model_preferred_ids_and_keyboard_nonvendor_collection",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer model preferred ids and keyboard nonvendor collection."
+  },
+  {
+    "upstream_test": "test_razer.PollRazerTest.test_naga_v2_pro_is_polled",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_model_preferred_ids_and_keyboard_nonvendor_collection",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer model preferred ids and keyboard nonvendor collection."
+  },
+  {
+    "upstream_test": "test_razer.PollRazerTest.test_pro_click_v2_vertical_is_not_skipped",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_model_preferred_ids_and_keyboard_nonvendor_collection",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer model preferred ids and keyboard nonvendor collection."
+  },
+  {
+    "upstream_test": "test_razer.PollRazerTest.test_pro_click_v2_vertical_issue_58",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_model_preferred_ids_and_keyboard_nonvendor_collection",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer model preferred ids and keyboard nonvendor collection."
+  },
+  {
+    "upstream_test": "test_razer.PollRazerTest.test_the_blackwidow_answers_through_its_own_collection",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_model_preferred_ids_and_keyboard_nonvendor_collection",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer model preferred ids and keyboard nonvendor collection."
+  },
+  {
+    "upstream_test": "test_razer.PollTest.test_the_blackwidow_answers_through_its_own_collection",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_model_preferred_ids_and_keyboard_nonvendor_collection",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer model preferred ids and keyboard nonvendor collection."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_the_blackwidow_answers_through_its_own_collection",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_model_preferred_ids_and_keyboard_nonvendor_collection",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer model preferred ids and keyboard nonvendor collection."
+  },
+  {
+    "upstream_test": "test_razer.TableTest.test_wired_viper_is_not_in_the_table",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_model_preferred_ids_and_keyboard_nonvendor_collection",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer model preferred ids and keyboard nonvendor collection."
+  },
+  {
+    "upstream_test": "test_razer.TableTest.test_the_wireless_blackwidow_is_in_the_table",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_model_preferred_ids_and_keyboard_nonvendor_collection",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer model preferred ids and keyboard nonvendor collection."
+  },
+  {
+    "upstream_test": "test_razer.TableTest.test_every_preferred_tid_is_also_tried_as_a_fallback",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_every_catalog_preferred_id_is_reached_after_wrong_first_transaction",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer every catalog preferred id is reached after wrong first transaction."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_receiver_alone_still_keeps_its_greyed_icon",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_receiver_alone_two_live_receivers_and_two_sleeping_devices_keep_icons",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer receiver alone two live receivers and two sleeping devices keep icons."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_two_live_mice_of_one_model_keep_two_icons",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_receiver_alone_two_live_receivers_and_two_sleeping_devices_keep_icons",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer receiver alone two live receivers and two sleeping devices keep icons."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_greyed_icons_alone_are_not_merged",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_receiver_alone_two_live_receivers_and_two_sleeping_devices_keep_icons",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer receiver alone two live receivers and two sleeping devices keep icons."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_second_receiver_of_one_model_keeps_its_greyed_icon",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_second_receiver_and_unrelated_model_never_hidden_by_live_cable",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer second receiver and unrelated model never hidden by live cable."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_another_model_keeps_its_greyed_icon",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_second_receiver_and_unrelated_model_never_hidden_by_live_cable",
+    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer second receiver and unrelated model never hidden by live cable."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_cable_hides_the_greyed_receiver_icon",
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_cable_suppresses_only_trusted_same_hardware_receiver",
+    "notes": "Known model cable suppresses sleeping receiver only with same valid hardware serial or container. Regression verifies same serial suppressed, independent serials preserved, and ambiguous all-zero serials stay separate. Replaces original fake zero-serial name/PID association to preserve hardware identity."
+  }
+]

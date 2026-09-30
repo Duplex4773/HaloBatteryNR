@@ -1,0 +1,248 @@
+[
+  {
+    "upstream_test": "test_asus.ParseTest.test_percent",
+    "status": "mapped",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified.",
+    "rust_tests": [
+      "crates/providers/tests/provider_misc_io.rs::asus_original_parser_edges_are_verified_through_transactions",
+      "crates/providers/tests/provider_misc_io.rs::asus_all_catalog_models_percent_steps_report_id_and_ranges"
+    ]
+  },
+  {
+    "upstream_test": "test_asus.ParseTest.test_steps",
+    "status": "mapped",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified.",
+    "rust_tests": [
+      "crates/providers/tests/provider_misc_io.rs::asus_original_parser_edges_are_verified_through_transactions",
+      "crates/providers/tests/provider_misc_io.rs::asus_all_catalog_models_percent_steps_report_id_and_ranges"
+    ]
+  },
+  {
+    "upstream_test": "test_asus.ParseTest.test_report_id_in_front",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::asus_all_catalog_models_percent_steps_report_id_and_ranges",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_asus.ParseTest.test_standby_is_not_empty",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::asus_all_catalog_models_percent_steps_report_id_and_ranges",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_asus.ParseTest.test_every_model_has_a_known_scale",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::asus_all_catalog_models_percent_steps_report_id_and_ranges",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_asus.ParseTest.test_other_reports_are_not_levels",
+    "status": "mapped",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified.",
+    "rust_tests": [
+      "crates/providers/tests/provider_misc_io.rs::asus_original_parser_edges_are_verified_through_transactions",
+      "crates/providers/tests/provider_misc_io.rs::asus_drain_noise_retry_and_terminal_errors"
+    ]
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_gladius_iii_aimpoint_issue_81",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::asus_exact_request_reference_reading_and_strict_vendor_interface",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_only_the_vendor_collection_of_interface_0_is_opened",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::asus_exact_request_reference_reading_and_strict_vendor_interface",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_button_and_profile_reports_are_skipped",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::asus_drain_noise_retry_and_terminal_errors",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_error_zeros_and_silence_give_no_icon",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::asus_drain_noise_retry_and_terminal_errors",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_error_and_zeros_are_final_answers",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::asus_drain_noise_retry_and_terminal_errors",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_second_request_is_answered",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::asus_drain_noise_retry_and_terminal_errors",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_cable_and_receiver_share_one_icon",
+    "status": "intentional_difference",
+    "notes": "Cable/receiver sources coalesce only with matching trusted identity; same-model ambiguous devices remain separate under the requested identity policy. Both enumeration orders and charging preference are asserted.",
+    "rust_tests": [
+      "crates/providers/tests/provider_misc_io.rs::asus_shared_serial_cable_charging_wins_both_enumeration_orders",
+      "crates/providers/tests/provider_misc_io.rs::asus_distinct_same_model_receivers_keep_separate_readings"
+    ]
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_older_model_shows_an_approximate_level",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::asus_original_parser_edges_are_verified_through_transactions",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_unknown_asus_devices_are_not_opened",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::unknown_misc_devices_and_strict_collections_never_get_requests",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_r1_pro_max_receiver_is_read",
+    "status": "intentional_difference",
+    "notes": "Exact transaction, level/name and voltage diagnostics are asserted. Key deliberately adds trusted identity to original VID+PID to prevent separate receivers sharing settings/history.",
+    "rust_tests": [
+      "crates/providers/tests/provider_misc_io.rs::pulsar_capability_rejections_and_voltage_have_actionable_diagnostics",
+      "crates/providers/tests/provider_misc_io.rs::pulsar_all_claimed_ids_exact_frame_names_and_charging"
+    ]
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_r1_pro_max_on_its_cable_is_read",
+    "status": "intentional_difference",
+    "notes": "Exact requests, vendor collection, names and charging are asserted for all claimed IDs; key deliberately adds trusted identity to original VID+PID.",
+    "rust_tests": [
+      "crates/providers/tests/provider_misc_io.rs::pulsar_all_claimed_ids_exact_frame_names_and_charging",
+      "crates/providers/tests/provider_misc_io.rs::pulsar_literal_hitscan_captures_are_read_as_raw_levels"
+    ]
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_hitscan_receiver_is_read",
+    "status": "intentional_difference",
+    "notes": "Exact requests, vendor collection, names and charging are asserted for all claimed IDs; key deliberately adds trusted identity to original VID+PID.",
+    "rust_tests": [
+      "crates/providers/tests/provider_misc_io.rs::pulsar_all_claimed_ids_exact_frame_names_and_charging",
+      "crates/providers/tests/provider_misc_io.rs::pulsar_literal_hitscan_captures_are_read_as_raw_levels"
+    ]
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_vendor_control_collection_is_the_one_that_gets_the_request",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_all_claimed_ids_exact_frame_names_and_charging",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_request_is_the_17_byte_power_query",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_all_claimed_ids_exact_frame_names_and_charging",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_power_flag_means_charging",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_all_claimed_ids_exact_frame_names_and_charging",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_every_claimed_id_answers_the_same_request",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_all_claimed_ids_exact_frame_names_and_charging",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_hitscan_on_its_cable_is_read",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_all_claimed_ids_exact_frame_names_and_charging",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_a_level_above_100_is_refused",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_noise_checksum_range_short_and_sleep_are_rejected",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_an_event_frame_is_skipped_and_the_reply_after_it_is_used",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_noise_checksum_range_short_and_sleep_are_rejected",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_a_short_reply_is_ignored",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_noise_checksum_range_short_and_sleep_are_rejected",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_a_sleeping_dongle_gives_no_device",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_noise_checksum_range_short_and_sleep_are_rejected",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_a_wrong_checksum_is_refused",
+    "status": "mapped",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified.",
+    "rust_tests": [
+      "crates/providers/tests/provider_misc_io.rs::pulsar_capability_rejections_and_voltage_have_actionable_diagnostics",
+      "crates/providers/tests/provider_misc_io.rs::pulsar_noise_checksum_range_short_and_sleep_are_rejected"
+    ]
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_request_goes_to_the_first_collection_that_fits_when_there_is_no_control_one",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_output_capability_selects_fit_or_unknown_and_skips_incompatible",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_an_unknown_length_still_qualifies_when_the_control_collection_is_wrong",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_output_capability_selects_fit_or_unknown_and_skips_incompatible",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_a_collection_that_cannot_take_the_frame_is_skipped",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_capability_rejections_and_voltage_have_actionable_diagnostics",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_diagnostic_names_the_output_length",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_capability_rejections_and_voltage_have_actionable_diagnostics",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_an_unknown_output_length_never_disqualifies_a_collection",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_all_claimed_ids_exact_frame_names_and_charging",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_captured_hitscan_frames_parse",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_literal_hitscan_captures_are_read_as_raw_levels",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_a_device_that_is_not_in_the_table_is_not_queried",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::unknown_misc_devices_and_strict_collections_never_get_requests",
+    "notes": "Strict fake-HID transcript asserts exact wire request, collection selection and resulting state; physical hardware remains unverified."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_control_collection_is_used_when_its_output_report_fits",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_fitting_control_and_interface_one_fallback_are_selected",
+    "notes": "Strict fake-HID transcript verifies fitting control or interface-one vendor fallback selection and excludes standard consumer collection."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_an_interface_1_collection_is_used_when_the_control_one_is_absent",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_misc_io.rs::pulsar_fitting_control_and_interface_one_fallback_are_selected",
+    "notes": "Strict fake-HID transcript verifies fitting control or interface-one vendor fallback selection and excludes standard consumer collection."
+  }
+]

@@ -107,7 +107,16 @@ fn entry() -> Result<(), ProviderError> {
             return Err(e);
         }
     };
-    hb_windows::system::identify();
+    let icon_path = dir.join("application.png");
+    let icon: &[u8] = include_bytes!("../application.png");
+    let registration = (|| {
+        hb_windows::system::identify();
+        if std::fs::read(&icon_path).ok().as_deref() != Some(icon) {
+            hb_storage::atomic_write(&icon_path, icon)?;
+        }
+        hb_windows::system::identify_registered_with_icon(&icon_path)
+    })();
+    let identity_error = registration.err().map(|e| e.to_string());
     let settings = hb_storage::load_settings(&dir.join("config.json"));
     let runtime = runtime::Runtime::start(
         dir.clone(),
@@ -119,5 +128,6 @@ fn entry() -> Result<(), ProviderError> {
         settings,
         dir,
         args.iter().any(|a| a == "--background"),
+        identity_error,
     )
 }

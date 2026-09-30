@@ -3,8 +3,14 @@ $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $reference = (Resolve-Path (Join-Path $repo '..')).Path
 $exe = Join-Path $repo 'target/x86_64-pc-windows-msvc/release/HaloBatteryNext.exe'
-if (!(Test-Path -LiteralPath $exe)) { throw 'Run cargo build --release --locked first.' }
+if (!(Test-Path -LiteralPath $exe)) { throw 'Run tools/build-rust.ps1 first.' }
 if ((Get-Item -LiteralPath $exe).Length -gt 10MB) { throw 'Executable exceeds the 10 MiB engineering target.' }
+if ($env:USERPROFILE) {
+  $binaryText = [Text.Encoding]::Latin1.GetString([IO.File]::ReadAllBytes($exe))
+  if ($binaryText.Contains($env:USERPROFILE)) {
+    throw 'Executable contains a local build profile path. Rebuild with tools/build-rust.ps1.'
+  }
+}
 $output = Join-Path $repo "dist/HaloBatteryNext-$Version-windows-x64"
 [IO.Directory]::CreateDirectory($output) | Out-Null
 Copy-Item -LiteralPath $exe -Destination $output
@@ -33,7 +39,7 @@ try {
     }
     # HIDAPI's original C-backend license is nested under the crate.
     if ($package.name -eq 'hidapi') {
-      foreach ($file in Get-ChildItem -LiteralPath (Join-Path $folder 'hidapi') -Filter 'LICENSE*' -File) {
+      foreach ($file in Get-ChildItem -LiteralPath (Join-Path $folder 'etc/hidapi') -Filter 'LICENSE*' -File) {
         Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $notices "hidapi-C-$($file.Name)")
       }
     }

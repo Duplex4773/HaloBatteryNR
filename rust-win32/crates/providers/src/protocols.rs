@@ -51,6 +51,12 @@ pub fn pulsar(r: &[u8]) -> Option<Battery> {
     }
     battery(r[6], Some(r[7] != 0))
 }
+pub fn audeze_echo_only(frames: &[Vec<u8>]) -> bool {
+    frames.len() >= 5
+        && frames
+            .iter()
+            .all(|r| r.len() >= 4 && r[0] == 7 && r[3..].iter().all(|b| *b == 0))
+}
 pub fn pulsar_request() -> Vec<u8> {
     let mut d = padded(&[8, 4], 17);
     d[16] = 0x55u8.wrapping_sub(d[..16].iter().fold(0u8, |s, x| s.wrapping_add(*x)));

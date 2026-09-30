@@ -1,6 +1,6 @@
 # Halo Battery Next 0.1.0
 
-A Windows 11 x64 Rust/Win32 port of [HaloBattery](https://github.com/HeyOkay/HaloBattery), based on upstream 1.13.0 (`a566a046`). The Python implementation remains in this checkout as the protocol reference. Development uses the `port/rust-win32` branch.
+A Windows 11 x64 Rust/Win32 port of [HaloBattery](https://github.com/HeyOkay/HaloBattery), based on upstream 1.13.0 (`a566a046`). The Rust workspace lives in `rust-win32/` on `main`; the Python implementation remains at the repository root as the protocol reference. The `port/rust-win32` branch also retains the port checkpoint.
 
 ## Run and build
 
@@ -15,11 +15,13 @@ cd rust-win32
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
-cargo build --release --locked
+./tools/build-rust.ps1
 ./tools/package-rust.ps1
 ```
 
 The portable executable statically links HIDAPI's Windows C backend, bundled SQLite and the MSVC CRT. Native Windows system components provide Win32/WinRT/Direct2D. No Python, .NET, webview or asynchronous runtime is needed by the executable.
+
+The release script also removes local build paths from embedded compiler messages.
 
 ## Architecture
 
@@ -62,7 +64,7 @@ python tools/provider_fixtures.py
 cargo fmt --all
 python tools/merge-coverage.py
 cargo test --workspace --locked
-cargo build --release --locked
+./tools/build-rust.ps1
 ```
 
 The generators import the Python reference one directory above the Rust

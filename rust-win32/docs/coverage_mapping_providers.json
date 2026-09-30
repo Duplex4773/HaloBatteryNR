@@ -157,9 +157,10 @@
   },
   {
     "upstream_test": "test_audeze_stuck.StuckDongleTests.test_a_headset_that_answers_is_not_stuck",
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_io.rs::audeze_repeated_echo_shows_stuck_and_recovery_clears_stuck_and_short_cache",
+    "notes": "Production stuck/recovery behavior is scripted, including visible replug hint. All-zero serials use a trusted container/path identity rather than merging unrelated headsets under the upstream all-zero key.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_audeze_stuck.StuckDongleTests.test_echo_only",
@@ -169,51 +170,63 @@
   },
   {
     "upstream_test": "test_audeze_stuck.StuckDongleTests.test_first_stuck_poll_shows_nothing",
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_io.rs::audeze_repeated_echo_shows_stuck_and_recovery_clears_stuck_and_short_cache",
+    "notes": "Production stuck/recovery behavior is scripted, including visible replug hint. All-zero serials use a trusted container/path identity rather than merging unrelated headsets under the upstream all-zero key.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_audeze_stuck.StuckDongleTests.test_replug_brings_the_level_back_under_the_same_key",
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_io.rs::audeze_repeated_echo_shows_stuck_and_recovery_clears_stuck_and_short_cache",
+    "notes": "Production stuck/recovery behavior is scripted, including visible replug hint. All-zero serials use a trusted container/path identity rather than merging unrelated headsets under the upstream all-zero key.",
+    "scope": "provider_io",
+    "rust_tests": [
+      "crates/providers/tests/provider_io.rs::audeze_repeated_echo_shows_stuck_and_recovery_clears_stuck_and_short_cache",
+      "crates/providers/tests/provider_io.rs::audeze_actual_unplug_replug_keeps_identity_and_resets_stuck_hint"
+    ]
   },
   {
     "upstream_test": "test_audeze_stuck.StuckDongleTests.test_second_stuck_poll_shows_the_hint",
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_io.rs::audeze_repeated_echo_shows_stuck_and_recovery_clears_stuck_and_short_cache",
+    "notes": "Production stuck/recovery behavior is scripted, including visible replug hint. All-zero serials use a trusted container/path identity rather than merging unrelated headsets under the upstream all-zero key.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_audeze_stuck.StuckDongleTests.test_switched_off_headset_is_not_called_stuck",
-    "status": "partial",
-    "rust_test": null,
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "intentional_difference",
+    "rust_test": "crates/providers/tests/provider_io.rs::audeze_missing_vendor_reports_unknown_and_group_off_string_prevents_all_writes",
+    "notes": "Production stuck/recovery behavior is scripted, including visible replug hint. All-zero serials use a trusted container/path identity rather than merging unrelated headsets under the upstream all-zero key.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_audeze_stuck.ZeroAtPowerOnTests.test_a_real_level_is_shown_at_once",
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::audeze_uses_control_input_reports_and_newest_frame",
+    "notes": "Equivalent scripted transport/clock assertions exercise the production poll path.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_audeze_stuck.ZeroAtPowerOnTests.test_switching_off_and_on_starts_a_new_grace_period",
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::audeze_startup_zero_is_pending_then_real_zero_after_monotonic_grace",
+    "notes": "Equivalent scripted transport/clock assertions exercise the production poll path.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_audeze_stuck.ZeroAtPowerOnTests.test_zero_after_the_grace_period_is_believed",
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::audeze_startup_zero_is_pending_then_real_zero_after_monotonic_grace",
+    "notes": "Equivalent scripted transport/clock assertions exercise the production poll path.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_audeze_stuck.ZeroAtPowerOnTests.test_zero_right_after_power_on_is_not_a_reading",
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::audeze_startup_zero_is_pending_then_real_zero_after_monotonic_grace",
+    "notes": "Equivalent scripted transport/clock assertions exercise the production poll path.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_barracuda.PollTest.test_headset_off_shows_the_offline_icon",
@@ -259,33 +272,38 @@
   },
   {
     "upstream_test": "test_blackshark_pa.PollPaTest.test_a_nowake_collection_is_never_cached",
-    "status": "partial",
-    "rust_test": null,
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::blackshark_no_wake_reopens_once_and_does_not_cache_rejected_path",
+    "notes": "Equivalent scripted transport/clock assertions exercise the production poll path.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_blackshark_pa.PollPaTest.test_a_working_collection_is_still_reached_after_a_nowake_first",
-    "status": "partial",
-    "rust_test": null,
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::blackshark_nowake_candidate_does_not_block_working_path_and_offline_path_is_cached",
+    "notes": "Equivalent scripted transport/clock assertions exercise the production poll path.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_blackshark_pa.PollPaTest.test_the_collection_that_speaks_is_remembered_and_the_walk_stops",
-    "status": "partial",
-    "rust_test": null,
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::blackshark_nowake_candidate_does_not_block_working_path_and_offline_path_is_cached",
+    "notes": "Equivalent scripted transport/clock assertions exercise the production poll path.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_blackshark_pa.ReadBatteryTest.test_a_collection_that_accepts_and_stays_silent_is_offline",
-    "status": "partial",
-    "rust_test": null,
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::blackshark_nowake_candidate_does_not_block_working_path_and_offline_path_is_cached",
+    "notes": "Equivalent scripted transport/clock assertions exercise the production poll path.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_blackshark_pa.ReadBatteryTest.test_a_collection_that_never_accepts_a_command_is_nowake",
-    "status": "partial",
-    "rust_test": null,
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::blackshark_no_wake_reopens_once_and_does_not_cache_rejected_path",
+    "notes": "Equivalent scripted transport/clock assertions exercise the production poll path.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_blackshark_pa.ReadBatteryTest.test_a_path_that_cannot_be_opened_is_fail",
@@ -297,7 +315,8 @@
     "upstream_test": "test_blackshark_pa.ReadBatteryTest.test_a_reading_is_ok",
     "status": "mapped",
     "rust_test": "crates/providers/tests/provider_io.rs::blackshark_queries_wake_and_disable_remote_for_each_command",
-    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+    "notes": "Equivalent scripted transport/clock assertions exercise the production poll path.",
+    "scope": "provider_io"
   },
   {
     "upstream_test": "test_corsair.NxpParseTest.test_a_short_reply_is_refused",

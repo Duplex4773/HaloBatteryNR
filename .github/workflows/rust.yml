@@ -20,7 +20,7 @@ jobs:
       - run: cargo test --workspace --locked
       - name: Audit upstream coverage mapping
         run: python tools/merge-coverage.py --check
-      - run: cargo build --release --locked
+      - run: ./tools/build-rust.ps1
       - name: Simulated lifecycle and resource smoke
         shell: pwsh
         run: ./tools/validate-native.ps1 -Seconds 15

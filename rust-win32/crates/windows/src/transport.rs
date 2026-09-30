@@ -414,6 +414,41 @@ mod cache_tests {
         assert_eq!(calls, 2);
     }
     #[test]
+    fn cached_collection_preserves_capabilities_without_reprobing() {
+        let mut cache = EnumerationCache::default();
+        let mut probes = 0;
+        for seconds in [0, 1, 29] {
+            let entries = cache
+                .enumerate(0x372e, 0, Duration::from_secs(seconds), || {
+                    probes += 1;
+                    Ok((
+                        vec![HidInfo {
+                            path: "selected-feature-collection".into(),
+                            feature_length: Some(65),
+                            output_length: Some(33),
+                            usage_page: 0xff00,
+                            usage: 1,
+                            ..Default::default()
+                        }],
+                        1,
+                    ))
+                })
+                .unwrap();
+            assert_eq!(entries.len(), 1);
+            assert_eq!(
+                (
+                    &*entries[0].path,
+                    entries[0].feature_length,
+                    entries[0].output_length,
+                    entries[0].usage_page,
+                    entries[0].usage
+                ),
+                ("selected-feature-collection", Some(65), Some(33), 0xff00, 1)
+            );
+        }
+        assert_eq!(probes, 1);
+    }
+    #[test]
     fn vendor_path_census_keeps_usb_and_bluetooth_vendor_boundaries() {
         let paths = [
             "\\\\?\\hid#vid_1532&pid_0000&col1#{abcd}",

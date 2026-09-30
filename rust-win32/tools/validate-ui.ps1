@@ -1,4 +1,5 @@
 $ErrorActionPreference='Stop'
+if(Get-Process HaloBatteryNext -ErrorAction SilentlyContinue){throw 'Close the existing Halo Battery Next instance before running this isolated smoke test.'}
 $repo=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $folder=Join-Path $repo 'validation-local/screenshots'
 [IO.Directory]::CreateDirectory($folder)|Out-Null
@@ -27,6 +28,7 @@ public static class HaloShot {
  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc c,IntPtr p);
  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);
  [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h,StringBuilder b,int n);
+ public static string Text(IntPtr window){var b=new StringBuilder(1024);GetWindowText(window,b,1024);return b.ToString();}
  public static string Dump(int pid){string result="";EnumWindows((h,p)=>{uint id;GetWindowThreadProcessId(h,out id);if(id==pid){var b=new StringBuilder(1024);GetWindowText(h,b,1024);result+=h.ToString()+":"+b.ToString()+";";}return true;},IntPtr.Zero);return result;}
  [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint t,ref G g);
  public struct G{public uint cbSize,flags;public IntPtr active,focus,capture,menu,move,caret;public R rect;}
@@ -55,11 +57,46 @@ $focusBefore=[HaloShot]::Focus($dashboard);[HaloShot]::PostMessage($dashboard,25
 [HaloShot]::PostMessage($dashboard,262,[UIntPtr]104,[IntPtr]536870912)|Out-Null;Start-Sleep -Milliseconds 400;if([HaloShot]::GetDlgItem($dashboard,20)-eq [IntPtr]::Zero){throw "Alt H history mnemonic failed"}
 [HaloShot]::PostMessage($dashboard,262,[UIntPtr]115,[IntPtr]536870912)|Out-Null;Start-Sleep -Milliseconds 400;if([HaloShot]::GetDlgItem($dashboard,210)-eq [IntPtr]::Zero){throw "Alt S settings mnemonic failed"}
 Write-Output "Tab moves focus; Alt H/Alt S select History/Settings."
+# Native settings interactions assert persistence through the actual Save handler.
+if([HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,108),240,[UIntPtr]::Zero,[IntPtr]::Zero).ToInt32()-ne1){throw 'Quiet mode should default on'}
+if([HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,110),240,[UIntPtr]::Zero,[IntPtr]::Zero).ToInt32()-ne0){throw 'PlayStation full mode must default off'}
+if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,110))-notlike'*PlayStation*opt in*'){throw 'Missing explicit PlayStation opt-in control'}
+foreach($setting in @(@{id=108;key='quiet_fullscreen'},@{id=110;key='playstation_full_mode'})){
+ foreach($value in 0,1){
+  [HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,$setting.id),241,[UIntPtr]$value,[IntPtr]::Zero)|Out-Null
+  [HaloShot]::PostMessage($dashboard,273,[UIntPtr]210,[IntPtr]::Zero)|Out-Null
+  Start-Sleep -Milliseconds 300
+  $config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json
+  if([bool]$config.($setting.key)-ne[bool]$value){throw "$($setting.key) native checkbox did not persist value $value"}
+ }
+}
+$labels=@();foreach($id in 300..324){$widget=[HaloShot]::GetDlgItem($dashboard,$id);if($widget-eq[IntPtr]::Zero){throw "Missing provider switch $id"};$label=[HaloShot]::Text($widget);if(!$label-or$label.Contains('_')){throw "Unreadable provider label $id"};$labels+=$label}
+if(@($labels|Select-Object -Unique).Count-ne25-or$labels[0]-ne'Razer'-or$labels-notcontains'PlayStation'){throw 'Provider labels are missing or duplicated'}
+[HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,300),241,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]210,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 300
+$config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json
+if($config.disabled_providers-notcontains'razer'){throw 'Razer provider switch did not persist disabled state'}
+foreach($id in 300..324){[HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,$id),241,[UIntPtr]1,[IntPtr]::Zero)|Out-Null}
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]210,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 300
+$config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json
+if(@($config.disabled_providers).Count-ne0){throw 'Restoring all provider switches did not clear disabled providers'}
+[HaloShot]::PostMessage($monitor,26,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 300
+if([HaloShot]::FindWindow($null,'Halo Battery Next')-eq[IntPtr]::Zero){throw 'Theme change closed the dashboard'}
+Write-Output 'Quiet/full-mode false and true persisted; all25 readable provider switches present; Razer disable and restore persisted; theme message preserved dashboard.'
 [HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,101),241,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;[HaloShot]::PostMessage($dashboard,273,[UIntPtr]210,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 300;$config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json;if($config.full_alert){throw 'Full alert checkbox save failed'}
 [HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,101),241,[UIntPtr]1,[IntPtr]::Zero)|Out-Null;[HaloShot]::PostMessage($dashboard,273,[UIntPtr]210,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 300;[HaloShot]::PostMessage($dashboard,262,[UIntPtr]100,[IntPtr]536870912)|Out-Null;Start-Sleep -Milliseconds 150;
+if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,13))-ne''){throw 'Fresh device threshold must be blank to inherit default'}
 $icons=[HaloShot]::GetDlgItem($dashboard,14);if([HaloShot]::SendMessage($icons,326,[UIntPtr]::Zero,[IntPtr]::Zero).ToInt32()-ne8){throw 'Missing automatic/pictogram choices'};if([HaloShot]::SendMessage($icons,327,[UIntPtr]::Zero,[IntPtr]::Zero).ToInt32()-ne0){throw 'Default pictogram must be automatic'}
 [HaloShot]::SendText([HaloShot]::GetDlgItem($dashboard,11),12,[UIntPtr]::Zero,'Renamed simulation')|Out-Null;[HaloShot]::SendMessage($icons,334,[UIntPtr]5,[IntPtr]::Zero)|Out-Null;[HaloShot]::PostMessage($dashboard,273,[UIntPtr]15,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 300;$config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json;$device=$config.devices.'simulated:mouse';if($device.name-ne'Renamed simulation'-or$device.icon-ne'bluetooth'){throw 'Rename/pictogram persistence failed'}
 [HaloShot]::SendMessage($icons,334,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;[HaloShot]::PostMessage($dashboard,273,[UIntPtr]15,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 300;$config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json;$device=$config.devices.'simulated:mouse';if($null-ne$device.icon-or$device.name-ne'Renamed simulation'){throw 'Automatic icon should retain rename'}
+foreach($threshold in '30','0',''){
+ [HaloShot]::SendText([HaloShot]::GetDlgItem($dashboard,13),12,[UIntPtr]::Zero,$threshold)|Out-Null
+ [HaloShot]::PostMessage($dashboard,273,[UIntPtr]15,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 300
+ $config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json;$device=$config.devices.'simulated:mouse'
+ if($threshold-eq''){if($null-ne$device.low){throw 'Clearing threshold did not restore default'}}elseif($device.low-ne[int]$threshold){throw 'Per-device threshold did not persist'}
+ if($device.name-ne'Renamed simulation'){throw 'Threshold save lost rename'}
+}
+Write-Output 'Per-device low threshold30,0disable and blank/default persisted without losing rename.'
 [HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,12),241,[UIntPtr]1,[IntPtr]::Zero)|Out-Null;[HaloShot]::PostMessage($dashboard,273,[UIntPtr]15,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 300;$config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json;if(!$config.devices.'simulated:mouse'.hidden){throw 'Hide setting save failed'}
 [HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,12),241,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;[HaloShot]::PostMessage($dashboard,273,[UIntPtr]15,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 300;Write-Output 'Full charge toggle,8iconchoices,rename,pictogram override/automatic and hide/unhide persisted.'
 [HaloShot]::PostMessage($monitor,32777,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 200
@@ -67,6 +104,7 @@ if([HaloShot]::FindWindow($null,'Halo Battery Next')-ne[IntPtr]::Zero){throw 'Da
 if([HaloShot]::FindWindow($null,'Halo Battery Next monitor')-eq[IntPtr]::Zero){throw 'Monitor lost on dashboard close'}
  $samples=@{};foreach($cycle in 1..40){[HaloShot]::PostMessage($monitor,32776,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 80;$d=[HaloShot]::FindWindow($null,'Halo Battery Next');[HaloShot]::PostMessage($d,273,[UIntPtr]2,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 80;[HaloShot]::PostMessage($d,273,[UIntPtr]3,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 60;[HaloShot]::PostMessage($monitor,32777,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 80;if($cycle -in 1,20,40){$p.Refresh();$samples["$cycle"]=@{user=[HaloShot]::GetGuiResources($p.Handle,1);gdi=[HaloShot]::GetGuiResources($p.Handle,0);private=$p.PrivateMemorySize64}}}
 @{cold=$cold;cycles=$samples}|ConvertTo-Json -Depth 5|Set-Content (Join-Path $folder 'resource-cycles.json')
+if($samples['40'].gdi-gt$samples['1'].gdi-or$samples['40'].user-gt($samples['1'].user+2)){throw 'Native resources grew after the warm dashboard lifecycle baseline'}
 Write-Output ($samples|ConvertTo-Json -Depth 5)
 [HaloShot]::PostMessage($monitor,32778,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
 if(!$p.WaitForExit(30000)){throw 'Quit timeout'}
