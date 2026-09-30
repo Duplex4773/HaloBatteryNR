@@ -7,16 +7,29 @@
         "am_infinity"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::infinity_report_id_tolerance_clamp_and_exact_zero_payload_request",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::infinity_report_id_tolerance_clamp_and_exact_zero_payload_request"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::infinity_report_id_tolerance_clamp_and_exact_zero_payload_request": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -28,29 +41,55 @@
         "am_infinity"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::infinity_two_junk_frames_cannot_be_a_battery_and_unknown_pids_never_open",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::infinity_two_junk_frames_cannot_be_a_battery_and_unknown_pids_never_open"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::infinity_two_junk_frames_cannot_be_a_battery_and_unknown_pids_never_open": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
   {
     "upstream_test": "test_am_infinity.PollTest.test_missing_collection_sends_nothing",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::infinity_sleeping_cache_expires_and_missing_collection_or_unknown_pid_has_no_io",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::infinity_sleeping_cache_expires_and_missing_collection_or_unknown_pid_has_no_io"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::infinity_sleeping_cache_expires_and_missing_collection_or_unknown_pid_has_no_io": "rust_test"
+    }
   },
   {
     "upstream_test": "test_am_infinity.PollTest.test_only_ffff_0002_gets_the_poll",
@@ -60,31 +99,57 @@
         "am_infinity"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::infinity_report_id_tolerance_clamp_and_exact_zero_payload_request",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::infinity_report_id_tolerance_clamp_and_exact_zero_payload_request"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::infinity_report_id_tolerance_clamp_and_exact_zero_payload_request": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
   {
     "upstream_test": "test_am_infinity.PollTest.test_other_pids_are_ignored",
     "status": "mapped",
-    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::infinity_sleeping_cache_expires_and_missing_collection_or_unknown_pid_has_no_io",
     "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::infinity_sleeping_cache_expires_and_missing_collection_or_unknown_pid_has_no_io",
       "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands"
     ],
-    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "mapped",
+        "test_targets": [
+          "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands"
+        ],
+        "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::infinity_sleeping_cache_expires_and_missing_collection_or_unknown_pid_has_no_io": "rust_test",
       "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands": "rust_test"
     }
   },
@@ -96,16 +161,29 @@
         "am_infinity"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::infinity_report_id_tolerance_clamp_and_exact_zero_payload_request",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::infinity_report_id_tolerance_clamp_and_exact_zero_payload_request"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::infinity_report_id_tolerance_clamp_and_exact_zero_payload_request": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -117,16 +195,29 @@
         "am_infinity"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::infinity_junk_zero_and_alternative_length_retry",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::infinity_junk_zero_and_alternative_length_retry"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::infinity_junk_zero_and_alternative_length_retry": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -138,16 +229,29 @@
         "am_infinity"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::infinity_sleeping_cache_expires_and_missing_collection_or_unknown_pid_has_no_io",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::infinity_sleeping_cache_expires_and_missing_collection_or_unknown_pid_has_no_io"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::infinity_sleeping_cache_expires_and_missing_collection_or_unknown_pid_has_no_io": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -159,16 +263,29 @@
         "am_infinity"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::infinity_report_id_tolerance_clamp_and_exact_zero_payload_request",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::infinity_report_id_tolerance_clamp_and_exact_zero_payload_request"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::infinity_report_id_tolerance_clamp_and_exact_zero_payload_request": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -181,15 +298,28 @@
       ]
     },
     "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::infinity_junk_zero_and_alternative_length_retry",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::infinity_junk_zero_and_alternative_length_retry"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "No reading and alternate-length retry asserted; original specific no-charge diagnostic not yet asserted.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::infinity_junk_zero_and_alternative_length_retry": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -967,18 +1097,30 @@
       ]
     },
     "status": "mapped",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_rejects_out_of_table_short_and_empty_replies",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_rejects_out_of_table_short_and_empty_replies"
     ],
-    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "mapped",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_rejects_out_of_table_short_and_empty_replies": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
-    },
-    "scope": "parser"
+    }
   },
   {
     "upstream_test": "test_corsair.NxpParseTest.test_an_empty_reply_is_refused",
@@ -989,18 +1131,30 @@
       ]
     },
     "status": "mapped",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_rejects_out_of_table_short_and_empty_replies",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_rejects_out_of_table_short_and_empty_replies"
     ],
-    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "mapped",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_rejects_out_of_table_short_and_empty_replies": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
-    },
-    "scope": "parser"
+    }
   },
   {
     "upstream_test": "test_corsair.NxpParseTest.test_an_index_past_the_table_is_refused",
@@ -1011,18 +1165,30 @@
       ]
     },
     "status": "mapped",
-    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_rejects_out_of_table_short_and_empty_replies",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables"
+      "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_rejects_out_of_table_short_and_empty_replies"
     ],
-    "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "mapped",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables"
+        ],
+        "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_rejects_out_of_table_short_and_empty_replies": "rust_test",
       "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables": "rust_test"
-    },
-    "scope": "parser"
+    }
   },
   {
     "upstream_test": "test_corsair.NxpParseTest.test_every_index_maps_through_the_five_step_table",
@@ -1033,18 +1199,30 @@
       ]
     },
     "status": "mapped",
-    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables"
+      "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge"
     ],
-    "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "mapped",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables"
+        ],
+        "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge": "rust_test",
       "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables": "rust_test"
-    },
-    "scope": "parser"
+    }
   },
   {
     "upstream_test": "test_corsair.NxpParseTest.test_the_label_says_about_and_the_level",
@@ -1055,18 +1233,30 @@
       ]
     },
     "status": "mapped",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge"
     ],
-    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "mapped",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
-    },
-    "scope": "parser"
+    }
   },
   {
     "upstream_test": "test_corsair.NxpParseTest.test_the_report_id_is_tolerated_with_or_without",
@@ -1077,31 +1267,56 @@
       ]
     },
     "status": "mapped",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge"
     ],
-    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "mapped",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
-    },
-    "scope": "parser"
+    }
   },
   {
     "upstream_test": "test_corsair.NxpParseTest.test_the_request_is_the_ckb_next_packet_behind_a_report_id",
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::request_sizes_and_checksum",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::request_sizes_and_checksum"
+      "crates/providers/tests/parser_parity.rs::request_sizes_and_checksum",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge"
     ],
-    "notes": "Related request checks exist, but this exact upstream request assertion has not been individually audited.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::request_sizes_and_checksum"
+        ],
+        "notes": "Related request checks exist, but this exact upstream request assertion has not been individually audited."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge": "rust_test",
       "crates/providers/tests/parser_parity.rs::request_sizes_and_checksum": "rust_test"
     }
   },
@@ -1113,16 +1328,29 @@
         "corsair_nxp"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_no_keyboard_fallback_when_vendor_exists_but_missing_vendor_can_fallback",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_no_keyboard_fallback_when_vendor_exists_but_missing_vendor_can_fallback"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_no_keyboard_fallback_when_vendor_exists_but_missing_vendor_can_fallback": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -1134,16 +1362,29 @@
         "corsair_nxp"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_no_keyboard_fallback_when_vendor_exists_but_missing_vendor_can_fallback",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_no_keyboard_fallback_when_vendor_exists_but_missing_vendor_can_fallback"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_no_keyboard_fallback_when_vendor_exists_but_missing_vendor_can_fallback": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -1155,16 +1396,29 @@
         "corsair_nxp"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_rejects_out_of_table_short_and_empty_replies",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_rejects_out_of_table_short_and_empty_replies"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_rejects_out_of_table_short_and_empty_replies": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -1176,16 +1430,29 @@
         "corsair_nxp"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_priority_retry_and_dedup_are_independent_of_enumeration_order",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_priority_retry_and_dedup_are_independent_of_enumeration_order"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_priority_retry_and_dedup_are_independent_of_enumeration_order": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -1197,16 +1464,29 @@
         "corsair_nxp"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -1229,16 +1509,29 @@
         "corsair_nxp"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_priority_retry_and_dedup_are_independent_of_enumeration_order",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_priority_retry_and_dedup_are_independent_of_enumeration_order"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_priority_retry_and_dedup_are_independent_of_enumeration_order": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -1250,16 +1543,29 @@
         "corsair_nxp"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_all_steps_report_id_compatibility_and_coarse_gauge": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -1271,16 +1577,29 @@
         "corsair_nxp"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::corsair_nxp_priority_retry_and_dedup_are_independent_of_enumeration_order",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_priority_retry_and_dedup_are_independent_of_enumeration_order"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::corsair_nxp_priority_retry_and_dedup_are_independent_of_enumeration_order": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -2043,73 +2362,151 @@
   },
   {
     "upstream_test": "test_gwolves.PollTest.test_charging",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::gwolves_selects_actual_feature_length_at_any_collection_not_usage_guesses",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::gwolves_selects_actual_feature_length_at_any_collection_not_usage_guesses"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::gwolves_selects_actual_feature_length_at_any_collection_not_usage_guesses": "rust_test"
+    }
   },
   {
     "upstream_test": "test_gwolves.PollTest.test_mouse_on_the_cable_names_the_model_and_wins",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::gwolves_trusted_cable_identity_names_model_and_wins_before_receiver_query",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::gwolves_trusted_cable_identity_names_model_and_wins_before_receiver_query"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::gwolves_trusted_cable_identity_names_model_and_wins_before_receiver_query": "rust_test"
+    }
   },
   {
     "upstream_test": "test_gwolves.PollTest.test_no_such_collection_sends_nothing",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::gwolves_selects_actual_feature_length_at_any_collection_not_usage_guesses",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::gwolves_selects_actual_feature_length_at_any_collection_not_usage_guesses"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::gwolves_selects_actual_feature_length_at_any_collection_not_usage_guesses": "rust_test"
+    }
   },
   {
     "upstream_test": "test_gwolves.PollTest.test_only_the_collection_with_the_64_byte_feature_report_gets_the_request",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::gwolves_selects_actual_feature_length_at_any_collection_not_usage_guesses",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::gwolves_selects_actual_feature_length_at_any_collection_not_usage_guesses"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::gwolves_selects_actual_feature_length_at_any_collection_not_usage_guesses": "rust_test"
+    }
   },
   {
     "upstream_test": "test_gwolves.PollTest.test_other_vendors_ids_are_ignored",
     "status": "mapped",
-    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::infinity_two_junk_frames_cannot_be_a_battery_and_unknown_pids_never_open",
     "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::infinity_two_junk_frames_cannot_be_a_battery_and_unknown_pids_never_open",
       "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands"
     ],
-    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "mapped",
+        "test_targets": [
+          "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands"
+        ],
+        "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::infinity_two_junk_frames_cannot_be_a_battery_and_unknown_pids_never_open": "rust_test",
       "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands": "rust_test"
     }
   },
   {
     "upstream_test": "test_gwolves.PollTest.test_receiver_issue_82",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::gwolves_receiver_issue82_exact_name_level_and_packet",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::gwolves_receiver_issue82_exact_name_level_and_packet"
+    ],
+    "notes": "Strict fake-HID exchange reproduces captured reference reply, exact request and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::gwolves_receiver_issue82_exact_name_level_and_packet": "rust_test"
+    }
   },
   {
     "upstream_test": "test_gwolves.PollTest.test_reply_without_a1_is_not_a_level",
@@ -2124,14 +2521,27 @@
   },
   {
     "upstream_test": "test_gwolves.PollTest.test_sleeping_mouse_keeps_its_last_value_greyed",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::lamzu_and_gwolves_retry_feature_reads_and_keep_sleeping_cache_under_five_minutes",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::lamzu_and_gwolves_retry_feature_reads_and_keep_sleeping_cache_under_five_minutes"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::lamzu_and_gwolves_retry_feature_reads_and_keep_sleeping_cache_under_five_minutes": "rust_test"
+    }
   },
   {
     "upstream_test": "test_gwolves.PollTest.test_the_collection_is_remembered",
@@ -2147,18 +2557,30 @@
   {
     "upstream_test": "test_gwolves.TableTest.test_warg_is_known",
     "status": "mapped",
-    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::gwolves_trusted_cable_identity_names_model_and_wins_before_receiver_query",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables"
+      "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+      "crates/providers/tests/provider_family_io.rs::gwolves_trusted_cable_identity_names_model_and_wins_before_receiver_query"
     ],
-    "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "mapped",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables"
+        ],
+        "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::gwolves_trusted_cable_identity_names_model_and_wins_before_receiver_query": "rust_test",
       "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables": "rust_test"
-    },
-    "scope": "catalog"
+    }
   },
   {
     "upstream_test": "test_hide_rename.AskNameTests.test_name_goes_in_the_environment_not_the_command",
@@ -2535,42 +2957,81 @@
         "hyperx_alpha"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_controller_usage_drain_cap_and_flood_noise_matching",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_controller_usage_drain_cap_and_flood_noise_matching"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_controller_usage_drain_cap_and_flood_noise_matching": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
   {
     "upstream_test": "test_hyperx_alpha2.Polling.test_ignores_the_chat_half",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_missing_controller_and_chat_half_never_receive_requests",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_missing_controller_and_chat_half_never_receive_requests"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_missing_controller_and_chat_half_never_receive_requests": "rust_test"
+    }
   },
   {
     "upstream_test": "test_hyperx_alpha2.Polling.test_missing_collection_writes_nothing",
     "status": "mapped",
-    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_missing_controller_and_chat_half_never_receive_requests",
     "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_missing_controller_and_chat_half_never_receive_requests",
       "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands"
     ],
-    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "mapped",
+        "test_targets": [
+          "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands"
+        ],
+        "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_missing_controller_and_chat_half_never_receive_requests": "rust_test",
       "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands": "rust_test"
     }
   },
@@ -2582,16 +3043,29 @@
         "hyperx_alpha"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_only_keepalive_queue_obeys_poll_deadline",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_only_keepalive_queue_obeys_poll_deadline"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_only_keepalive_queue_obeys_poll_deadline": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -2603,16 +3077,29 @@
         "hyperx_alpha"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_controller_usage_drain_cap_and_flood_noise_matching",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_controller_usage_drain_cap_and_flood_noise_matching"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_controller_usage_drain_cap_and_flood_noise_matching": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -2624,16 +3111,29 @@
         "hyperx_alpha"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_controller_usage_drain_cap_and_flood_noise_matching",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_controller_usage_drain_cap_and_flood_noise_matching"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::hyperx_alpha2_controller_usage_drain_cap_and_flood_noise_matching": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -2748,16 +3248,29 @@
         "hyperx3"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx3_reads_noise_then_accepted_battery_and_charging_echo",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::hyperx3_reads_noise_then_accepted_battery_and_charging_echo"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::hyperx3_reads_noise_then_accepted_battery_and_charging_echo": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -2770,15 +3283,28 @@
       ]
     },
     "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx3_unrelated_output_errors_do_not_fallback_and_feature_failure_is_reported",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::hyperx3_unrelated_output_errors_do_not_fallback_and_feature_failure_is_reported"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Exact no-fallback/failure sequence asserted; original detailed diagnostic assertions remain unaudited.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::hyperx3_unrelated_output_errors_do_not_fallback_and_feature_failure_is_reported": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -2791,15 +3317,28 @@
       ]
     },
     "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx3_unrelated_output_errors_do_not_fallback_and_feature_failure_is_reported",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::hyperx3_unrelated_output_errors_do_not_fallback_and_feature_failure_is_reported"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Exact no-fallback/failure sequence asserted; original detailed diagnostic assertions remain unaudited.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::hyperx3_unrelated_output_errors_do_not_fallback_and_feature_failure_is_reported": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -2812,15 +3351,28 @@
       ]
     },
     "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx3_incorrect_function_fallback_is_same_feature_packet_for_both_commands",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::hyperx3_incorrect_function_fallback_is_same_feature_packet_for_both_commands"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Exact same feature packet and both commands asserted; original retry/accepted diagnostic strings remain unaudited.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::hyperx3_incorrect_function_fallback_is_same_feature_packet_for_both_commands": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -2832,16 +3384,29 @@
         "hyperx3"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx3_incorrect_function_fallback_is_same_feature_packet_for_both_commands",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::hyperx3_incorrect_function_fallback_is_same_feature_packet_for_both_commands"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::hyperx3_incorrect_function_fallback_is_same_feature_packet_for_both_commands": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -2853,99 +3418,203 @@
         "hyperx3"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::hyperx3_unrelated_output_errors_do_not_fallback_and_feature_failure_is_reported",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::hyperx3_unrelated_output_errors_do_not_fallback_and_feature_failure_is_reported"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::hyperx3_unrelated_output_errors_do_not_fallback_and_feature_failure_is_reported": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
   {
     "upstream_test": "test_lamzu.PollTest.test_cable_is_asked_first_and_wins",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::lamzu_cable_charging_source_wins_without_poking_dongle",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::lamzu_cable_charging_source_wins_without_poking_dongle"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::lamzu_cable_charging_source_wins_without_poking_dongle": "rust_test"
+    }
   },
   {
     "upstream_test": "test_lamzu.PollTest.test_charging",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::lamzu_cable_charging_source_wins_without_poking_dongle",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::lamzu_cable_charging_source_wins_without_poking_dongle"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::lamzu_cable_charging_source_wins_without_poking_dongle": "rust_test"
+    }
   },
   {
     "upstream_test": "test_lamzu.PollTest.test_dongle",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::lamzu_only_interface2_vendor_collection_receives_feature_packet",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::lamzu_only_interface2_vendor_collection_receives_feature_packet"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::lamzu_only_interface2_vendor_collection_receives_feature_packet": "rust_test"
+    }
   },
   {
     "upstream_test": "test_lamzu.PollTest.test_no_such_collection_sends_nothing",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::lamzu_only_interface2_vendor_collection_receives_feature_packet",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::lamzu_only_interface2_vendor_collection_receives_feature_packet"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::lamzu_only_interface2_vendor_collection_receives_feature_packet": "rust_test"
+    }
   },
   {
     "upstream_test": "test_lamzu.PollTest.test_only_interface_2_usage_page_ffff_gets_the_request",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::lamzu_only_interface2_vendor_collection_receives_feature_packet",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::lamzu_only_interface2_vendor_collection_receives_feature_packet"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::lamzu_only_interface2_vendor_collection_receives_feature_packet": "rust_test"
+    }
   },
   {
     "upstream_test": "test_lamzu.PollTest.test_other_pids_are_ignored",
     "status": "mapped",
-    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::infinity_two_junk_frames_cannot_be_a_battery_and_unknown_pids_never_open",
     "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::infinity_two_junk_frames_cannot_be_a_battery_and_unknown_pids_never_open",
       "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands"
     ],
-    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "mapped",
+        "test_targets": [
+          "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands"
+        ],
+        "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::infinity_two_junk_frames_cannot_be_a_battery_and_unknown_pids_never_open": "rust_test",
       "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands": "rust_test"
     }
   },
   {
     "upstream_test": "test_lamzu.PollTest.test_sleeping_mouse_keeps_its_last_value_greyed",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::lamzu_and_gwolves_retry_feature_reads_and_keep_sleeping_cache_under_five_minutes",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::lamzu_and_gwolves_retry_feature_reads_and_keep_sleeping_cache_under_five_minutes"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::lamzu_and_gwolves_retry_feature_reads_and_keep_sleeping_cache_under_five_minutes": "rust_test"
+    }
   },
   {
     "upstream_test": "test_lofree.PollTest.test_hyzen_on_the_dongle_issue_82",
@@ -6185,124 +6854,267 @@
   },
   {
     "upstream_test": "test_steelseries.ClassicTests.test_arctis1",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_classic_arctis1_and_arctis9_exact_transactions_names_and_gate",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_classic_arctis1_and_arctis9_exact_transactions_names_and_gate"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_classic_arctis1_and_arctis9_exact_transactions_names_and_gate": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.ClassicTests.test_arctis1_off",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_classic_arctis1_and_arctis9_exact_transactions_names_and_gate",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_classic_arctis1_and_arctis9_exact_transactions_names_and_gate"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_classic_arctis1_and_arctis9_exact_transactions_names_and_gate": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.ClassicTests.test_arctis7_2018_connected",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_arctis7_connection_precedes_level_and_off_never_requests_level",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_arctis7_connection_precedes_level_and_off_never_requests_level"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_arctis7_connection_precedes_level_and_off_never_requests_level": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.ClassicTests.test_arctis7_2018_off_does_not_ask_level",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_arctis7_connection_precedes_level_and_off_never_requests_level",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_arctis7_connection_precedes_level_and_off_never_requests_level"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_arctis7_connection_precedes_level_and_off_never_requests_level": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.ClassicTests.test_arctis7_zero_level_is_no_reading",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_arctis7_connection_precedes_level_and_off_never_requests_level",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_arctis7_connection_precedes_level_and_off_never_requests_level"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_arctis7_connection_precedes_level_and_off_never_requests_level": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.ClassicTests.test_arctis9",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_classic_arctis1_and_arctis9_exact_transactions_names_and_gate",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_classic_arctis1_and_arctis9_exact_transactions_names_and_gate"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_classic_arctis1_and_arctis9_exact_transactions_names_and_gate": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.ClassicTests.test_arctis9_off",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_classic_arctis1_and_arctis9_exact_transactions_names_and_gate",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_classic_arctis1_and_arctis9_exact_transactions_names_and_gate"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_classic_arctis1_and_arctis9_exact_transactions_names_and_gate": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.ClassicTests.test_pro_wireless",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_pro_wireless_31byte_state_and_level_requests",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_pro_wireless_31byte_state_and_level_requests"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_pro_wireless_31byte_state_and_level_requests": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.ClassicTests.test_pro_wireless_off",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_pro_wireless_31byte_state_and_level_requests",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_pro_wireless_31byte_state_and_level_requests"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_pro_wireless_31byte_state_and_level_requests": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.ClassicTests.test_remembers_the_collection_that_answered",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_classic_response_matching_and_cached_answering_collection",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_classic_response_matching_and_cached_answering_collection"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_classic_response_matching_and_cached_answering_collection": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.ClassicTests.test_wrong_reply_is_never_a_level",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_classic_response_matching_and_cached_answering_collection",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_classic_response_matching_and_cached_answering_collection"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_classic_response_matching_and_cached_answering_collection": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.Nova7HardwareTests.test_charging",
@@ -6312,16 +7124,29 @@
         "parse_nova7"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_b0_models_use_reference_echo_and_link_charging_fields",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::steel_b0_models_use_reference_echo_and_link_charging_fields"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_b0_models_use_reference_echo_and_link_charging_fields": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -6333,16 +7158,29 @@
         "parse_nova7"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_b0_models_use_reference_echo_and_link_charging_fields",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::steel_b0_models_use_reference_echo_and_link_charging_fields"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_b0_models_use_reference_echo_and_link_charging_fields": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -6354,16 +7192,29 @@
         "parse_nova7"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_b0_models_use_reference_echo_and_link_charging_fields",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::steel_b0_models_use_reference_echo_and_link_charging_fields"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_b0_models_use_reference_echo_and_link_charging_fields": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -6375,16 +7226,29 @@
         "parse_nova7"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_b0_models_use_reference_echo_and_link_charging_fields",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::steel_b0_models_use_reference_echo_and_link_charging_fields"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_b0_models_use_reference_echo_and_link_charging_fields": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -6396,110 +7260,227 @@
         "parse_nova7"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_nova7_captured_eight_byte_replies_and_foreign_noise_are_matched",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::steel_nova7_captured_eight_byte_replies_and_foreign_noise_are_matched"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID exchange reproduces captured reference reply, exact request and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_nova7_captured_eight_byte_replies_and_foreign_noise_are_matched": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
   {
     "upstream_test": "test_steelseries.NovaProTests.test_a_stray_report_before_the_reply_is_ignored",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_nova_pro_ignores_foreign_reports_and_coexists_with_nova7",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_ignores_foreign_reports_and_coexists_with_nova7"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_ignores_foreign_reports_and_coexists_with_nova7": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.NovaProTests.test_cable_charging",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.NovaProTests.test_every_step_of_the_nine_step_scale",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.NovaProTests.test_headset_off_gives_no_reading",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_nova_pro_rejects_short_invalid_gate_and_level_codes",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_rejects_short_invalid_gate_and_level_codes"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_rejects_short_invalid_gate_and_level_codes": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.NovaProTests.test_interface_3_is_accepted_too",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.NovaProTests.test_level_code_above_8_is_refused",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_nova_pro_rejects_short_invalid_gate_and_level_codes",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_rejects_short_invalid_gate_and_level_codes"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_rejects_short_invalid_gate_and_level_codes": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.NovaProTests.test_only_vendor_collections_get_the_request",
     "status": "mapped",
-    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io",
     "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io",
       "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands"
     ],
-    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "mapped",
+        "test_targets": [
+          "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands"
+        ],
+        "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io": "rust_test",
       "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands": "rust_test"
     }
   },
   {
     "upstream_test": "test_steelseries.NovaProTests.test_short_reply_is_refused",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_nova_pro_rejects_short_invalid_gate_and_level_codes",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_rejects_short_invalid_gate_and_level_codes"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_rejects_short_invalid_gate_and_level_codes": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.NovaProTests.test_the_nova_7_path_is_untouched_beside_it",
@@ -6509,108 +7490,225 @@
         "parse_nova7"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_nova_pro_ignores_foreign_reports_and_coexists_with_nova7",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_ignores_foreign_reports_and_coexists_with_nova7"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_ignores_foreign_reports_and_coexists_with_nova7": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
   {
     "upstream_test": "test_steelseries.NovaProTests.test_the_request_is_06_b0",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.NovaProTests.test_the_state_byte_is_the_gate",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_nova_pro_rejects_short_invalid_gate_and_level_codes",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_rejects_short_invalid_gate_and_level_codes"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_rejects_short_invalid_gate_and_level_codes": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.NovaProTests.test_the_x_station_is_recognised",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_nova_pro_every_coarse_step_cable_state_and_both_stations": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.SafetyTests.test_arctis1_needs_its_documented_collection",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.SafetyTests.test_classic_never_writes_to_standard_collections",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.SafetyTests.test_gamedac_is_not_polled",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.SafetyTests.test_nova_needs_ffc0",
-    "status": "partial",
-    "rust_test": null,
-    "rust_tests": [],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io",
+    "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io"
+    ],
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
-    "target_kinds": {}
+    "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io": "rust_test"
+    }
   },
   {
     "upstream_test": "test_steelseries.SafetyTests.test_unknown_product_gets_nothing",
     "status": "mapped",
-    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io",
     "rust_tests": [
+      "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io",
       "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands"
     ],
-    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "mapped",
+        "test_targets": [
+          "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands"
+        ],
+        "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_standard_wrong_vendor_and_unknown_product_collections_receive_no_io": "rust_test",
       "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands": "rust_test"
     }
   },
@@ -6622,16 +7720,29 @@
         "parse_aerox3"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -6643,16 +7754,29 @@
         "parse_aerox3"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -6664,16 +7788,29 @@
         "parse_aerox3"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -6685,16 +7822,29 @@
         "parse_aerox3"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -6706,16 +7856,29 @@
         "parse_aerox3"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },
@@ -6727,16 +7890,29 @@
         "parse_aerox3"
       ]
     },
-    "status": "partial",
-    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps",
     "rust_tests": [
-      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+      "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+      "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps"
     ],
-    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.",
+    "notes": "Strict fake-HID transcript asserts selection, exact requests and resulting state; physical hardware remains unverified.",
+    "additional_evidence": [
+      {
+        "source": "coverage_mapping_providers.json",
+        "status": "partial",
+        "test_targets": [
+          "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures"
+        ],
+        "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+      }
+    ],
     "mapping_sources": [
+      "coverage_mapping_provider_family.json",
       "coverage_mapping_providers.json"
     ],
     "target_kinds": {
+      "crates/providers/tests/provider_family_io.rs::steel_aerox_all_wireless_editions_exact_d2_packet_and_all_steps": "rust_test",
       "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures": "rust_test"
     }
   },

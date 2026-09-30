@@ -32,3 +32,6 @@ version_info.txt
 /target/
 /*-probe.json
 /validation-local/
+/rust-win32/target/
+/rust-win32/*-probe.json
+/rust-win32/validation-local/

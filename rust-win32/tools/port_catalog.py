@@ -8,8 +8,9 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+REFERENCE_ROOT = ROOT.parent
 import sys
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(REFERENCE_ROOT))
 rows = []
 def add(provider, vid, pid, name, variant="", param=0):
     rows.append((provider, vid, pid, name, variant, param))

@@ -23,6 +23,7 @@ import sys
 import warnings
 
 ROOT = Path(__file__).resolve().parents[1]
+REFERENCE_ROOT = ROOT.parent
 INVENTORY = ROOT / "docs/provider-test-inventory.json"
 SUMMARY = ROOT / "docs/coverage-summary.md"
 STATUSES = {"mapped", "partial", "obsolete", "intentional_difference", "manual", "not_mapped"}
@@ -34,7 +35,7 @@ def read_json(path: Path):
 
 def discover_reference_ids():
     ids = set()
-    for path in sorted((ROOT / "tests").glob("test_*.py")):
+    for path in sorted((REFERENCE_ROOT / "tests").glob("test_*.py")):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", SyntaxWarning)
             tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))

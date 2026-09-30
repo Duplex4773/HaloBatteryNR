@@ -1,18 +1,20 @@
 param([string]$Version = '0.1.0')
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$reference = (Resolve-Path (Join-Path $repo '..')).Path
 $exe = Join-Path $repo 'target/x86_64-pc-windows-msvc/release/HaloBatteryNext.exe'
 if (!(Test-Path -LiteralPath $exe)) { throw 'Run cargo build --release --locked first.' }
 if ((Get-Item -LiteralPath $exe).Length -gt 10MB) { throw 'Executable exceeds the 10 MiB engineering target.' }
 $output = Join-Path $repo "dist/HaloBatteryNext-$Version-windows-x64"
 [IO.Directory]::CreateDirectory($output) | Out-Null
 Copy-Item -LiteralPath $exe -Destination $output
-Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $output 'LICENSE-HaloBattery.txt')
+Copy-Item -LiteralPath (Join-Path $reference 'LICENSE') -Destination (Join-Path $output 'LICENSE-HaloBattery.txt')
 Copy-Item -LiteralPath (Join-Path $repo 'README-next.md') -Destination (Join-Path $output 'README.md')
-Copy-Item -LiteralPath (Join-Path $repo 'docs/protocols.md') -Destination (Join-Path $output 'PROTOCOL-CREDITS.md')
+Copy-Item -LiteralPath (Join-Path $reference 'docs/protocols.md') -Destination (Join-Path $output 'PROTOCOL-CREDITS.md')
 $documentation = Join-Path $output 'docs'
 [IO.Directory]::CreateDirectory($documentation) | Out-Null
-foreach ($name in @('protocols.md', 'provider-parity.md', 'coverage-summary.md', 'validation-next.md', 'windows-integration.md')) {
+Copy-Item -LiteralPath (Join-Path $reference 'docs/protocols.md') -Destination $documentation
+foreach ($name in @('provider-parity.md', 'coverage-summary.md', 'validation-next.md', 'windows-integration.md')) {
   Copy-Item -LiteralPath (Join-Path $repo "docs/$name") -Destination $documentation
 }
 $notices = Join-Path $output 'licenses'

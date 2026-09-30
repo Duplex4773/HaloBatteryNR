@@ -11,6 +11,7 @@ Configuration, diagnostics, optional `status.json` and SQLite history are stored
 Build with Rust and the Visual Studio C++/Windows SDK tools:
 
 ```powershell
+cd rust-win32
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
@@ -43,3 +44,29 @@ See `docs/provider-parity.md` for provider/test coverage and limitations, and `d
 Engineering targets are an executable at most 10 MiB, background private memory at most 30 MiB with one device, and five-minute average CPU at most 0.5% of one logical core without animation or 1% with one animated charging icon. Measurements, rather than the choice of language alone, determine whether these targets are met.
 
 The upstream MIT license is retained in `LICENSE`. Protocol authors and captures are credited in `docs/protocols.md`; portable packages also include third-party notices.
+
+## Updating the upstream reference
+
+The Python reference remains at the repository root; Rust files live under
+`rust-win32/`. This keeps upstream source updates separate from the port.
+From the repository root, merge the upstream branch, then refresh the port's
+catalog and parser fixtures using a Python environment with the upstream
+dependencies installed:
+
+```powershell
+git fetch upstream
+git merge upstream/main
+cd rust-win32
+python tools/port_catalog.py
+python tools/provider_fixtures.py
+cargo fmt --all
+python tools/merge-coverage.py
+cargo test --workspace --locked
+cargo build --release --locked
+```
+
+The generators import the Python reference one directory above the Rust
+workspace. New products in existing protocol families refresh the command
+allowlists, and regression fixtures reveal changed packet interpretation. New
+protocols or altered polling behavior still require a reviewed Rust implementation
+and transaction tests before release; recompiling alone cannot establish support.

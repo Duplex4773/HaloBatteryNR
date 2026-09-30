@@ -1008,7 +1008,7 @@ impl HidProvider {
             }
             "exchange_nova_pro" => self
                 .query(s, c, &[6, 0xb0], 10, 100, |r| {
-                    r.len() >= 16 && [1, 2, 8].contains(&r[15])
+                    r.len() >= 16 && r[0] == 0xb0 && [1, 2, 8].contains(&r[15])
                 })?
                 .and_then(|r| {
                     if r[15] == 1 || r[6] > 8 {
@@ -1559,7 +1559,8 @@ impl BatteryProvider for HidProvider {
         }
         selected.sort_by_key(|(_, i)| {
             (
-                ![0x4b1a, 0x4b1e, 0x001c].contains(&i.product_id),
+                !([0x4b1a, 0x4b1e, 0x001c].contains(&i.product_id)
+                    || self.id == "gwolves" && i.product_id != 0x3854),
                 if self.id == "razer" {
                     let key = format!("{:04x}:{}", i.product_id, i.serial);
                     if self

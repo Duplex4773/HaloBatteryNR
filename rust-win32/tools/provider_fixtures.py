@@ -16,7 +16,8 @@ import contextlib
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+REFERENCE_ROOT = ROOT.parent
+sys.path.insert(0, str(REFERENCE_ROOT))
 cases = []
 rng = random.Random(1130)
 
@@ -176,7 +177,7 @@ for (module,function),name in functions.items():
                 table[key]=tuple(wrapped if item is original else item for item in value)
 # Each upstream test replaces device I/O with fakes. The suite is preserved and
 # all assertions must pass before captured calls become reusable Rust evidence.
-reference_suite=unittest.defaultTestLoader.discover(str(ROOT/'tests'))
+reference_suite=unittest.defaultTestLoader.discover(str(REFERENCE_ROOT/'tests'))
 with contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()):
     result=unittest.TextTestRunner(stream=io.StringIO()).run(reference_suite)
 if not result.wasSuccessful():
@@ -186,7 +187,7 @@ dest.mkdir(exist_ok=True)
 (dest/'parser-fixtures.json').write_text(json.dumps(cases,indent=2)+'\n')
 (dest/'pa-fixtures.json').write_text(json.dumps(wire_cases,indent=2)+'\n')
 # unittest discovery is the upstream runner; flatten the collected suite without running it.
-suite = unittest.defaultTestLoader.discover(str(ROOT/'tests'))
+suite = unittest.defaultTestLoader.discover(str(REFERENCE_ROOT/'tests'))
 inventory = []
 def visit(suite):
     for test in suite:

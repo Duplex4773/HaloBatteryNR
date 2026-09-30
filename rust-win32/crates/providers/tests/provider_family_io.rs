@@ -214,7 +214,11 @@ fn steel_nova_pro_ignores_foreign_reports_and_coexists_with_nova7() {
             Step::Write(vec![0, 0xb0]),
             rd(&[0xb0, 3, 73, 3]),
             Step::Write(vec![6, 0xb0]),
-            rd(&[1, 0, 99, 2]),
+            rd(&{
+                let mut foreign = nova_pro(5, 8);
+                foreign[0] = 1;
+                foreign
+            }),
             rd(&nova_pro(5, 8)),
         ],
     );
@@ -865,5 +869,152 @@ fn hyperx_alpha2_missing_controller_and_chat_half_never_receive_requests() {
     );
     assert!(poll("hyperx_alpha2", &h).is_empty());
     assert!(h.opened.lock().unwrap().is_empty());
+    h.done();
+}
+
+struct TimedHid<'a> {
+    inner: &'a FakeHid,
+    clock: std::sync::Arc<FakeClock>,
+}
+struct TimedSession {
+    inner: Box<dyn HidSession>,
+    clock: std::sync::Arc<FakeClock>,
+}
+impl HidTransport for TimedHid<'_> {
+    fn enumerate(&self, vendor: u16) -> Result<Vec<HidInfo>, ProviderError> {
+        self.inner.enumerate(vendor)
+    }
+    fn open(&self, i: &HidInfo) -> Result<Box<dyn HidSession>, ProviderError> {
+        Ok(Box::new(TimedSession {
+            inner: self.inner.open(i)?,
+            clock: self.clock.clone(),
+        }))
+    }
+}
+impl HidSession for TimedSession {
+    fn write(&mut self, b: &[u8]) -> Result<(), ProviderError> {
+        self.inner.write(b)
+    }
+    fn send_feature(&mut self, b: &[u8]) -> Result<(), ProviderError> {
+        self.inner.send_feature(b)
+    }
+    fn feature(&mut self, id: u8, len: usize) -> Result<Vec<u8>, ProviderError> {
+        self.inner.feature(id, len)
+    }
+    fn read(&mut self, len: usize, timeout: Duration) -> Result<Vec<u8>, ProviderError> {
+        let r = self.inner.read(len, timeout);
+        self.clock.sleep(Duration::from_millis(10));
+        r
+    }
+}
+#[test]
+fn hyperx_alpha2_only_keepalive_queue_obeys_poll_deadline() {
+    let clock = std::sync::Arc::new(FakeClock::default());
+    let cancelled = AtomicBool::new(false);
+    let mut steps = vec![rd(&[]), Step::Write(padded(&[0x50, 2], 64))];
+    steps.extend((0..14).map(|_| rd(&[0x61, 2, 90, 0, 1, 0x14])));
+    let h = FakeHid::new(vec![alpha()], steps);
+    let timed = TimedHid {
+        inner: &h,
+        clock: clock.clone(),
+    };
+    let c = PollContext {
+        clock: &*clock,
+        cancelled: &cancelled,
+        deadline: Duration::from_millis(150),
+        playstation_full_mode: false,
+    };
+    assert!(
+        HidProvider::new("hyperx_alpha2")
+            .poll(&timed, &c)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(clock.monotonic(), Duration::from_millis(150));
+    h.done();
+}
+#[test]
+fn gwolves_trusted_cable_identity_names_model_and_wins_before_receiver_query() {
+    let mut cable = device("gwolves", 0x4219, 1, 2, 2, "z-cable");
+    let mut receiver = device("gwolves", 0x3854, 0xff02, 2, 0, "a-receiver");
+    for i in [&mut cable, &mut receiver] {
+        i.feature_length = Some(65);
+        i.serial = "shared-mouse-id".into();
+    }
+    let h = FakeHid::new(vec![receiver, cable], feature_steps(1, 71));
+    let r = poll("gwolves", &h);
+    assert_eq!(
+        (&*r[0].name, r[0].level, r[0].charging),
+        ("G-Wolves WARG", Some(71), Some(true))
+    );
+    assert_eq!(*h.opened.lock().unwrap(), vec!["z-cable"]);
+    h.done();
+}
+#[test]
+fn infinity_two_junk_frames_cannot_be_a_battery_and_unknown_pids_never_open() {
+    let h = FakeHid::new(
+        vec![infinity()],
+        infinity_steps(
+            vec![5, 0xad, 4, 99, 1, 1, 1, 2],
+            Some(vec![5, 0xad, 4, 99, 1, 1, 1, 2]),
+        ),
+    );
+    assert!(poll("am_infinity", &h).is_empty());
+    h.done();
+    for family in ["lamzu", "gwolves"] {
+        let known = if family == "lamzu" { 0x1e } else { 0x3854 };
+        let mut i = device(family, known, 0xffff, 0, 2, "unknown");
+        i.product_id = 0x3808;
+        i.feature_length = Some(65);
+        let h = FakeHid::new(vec![i], vec![]);
+        assert!(poll(family, &h).is_empty());
+        assert!(h.opened.lock().unwrap().is_empty());
+        h.done();
+    }
+}
+
+#[test]
+fn steel_nova7_captured_eight_byte_replies_and_foreign_noise_are_matched() {
+    for (reply, expected) in [
+        (vec![0xb0, 3, 0x49, 3, 0x1e, 0x64, 0, 0], Some((73, false))),
+        (vec![0xb0, 3, 0x45, 1, 0x22, 0x64, 0, 0], Some((69, true))),
+        (vec![0xb0, 2, 0x49, 0, 0x64, 0x64, 0, 0], None),
+        (vec![0xb0, 2, 0x49, 3, 0x1e, 0x64, 0, 0], None),
+        (vec![0xb0, 3, 100, 2], Some((100, true))),
+    ] {
+        let h = FakeHid::new(
+            vec![device("steelseries", 0x22a1, 0xffc0, 1, 3, "nova7")],
+            vec![Step::Write(vec![0, 0xb0]), rd(&[1, 0, 99, 2]), rd(&reply)],
+        );
+        let r = poll("steelseries", &h);
+        assert_eq!(
+            r.first().map(|r| (r.level.unwrap(), r.charging.unwrap())),
+            expected
+        );
+        h.done();
+    }
+}
+#[test]
+fn gwolves_receiver_issue82_exact_name_level_and_packet() {
+    let mut i = device("gwolves", 0x3854, 0xff02, 2, 1, "receiver");
+    i.feature_length = Some(65);
+    let h = FakeHid::new(vec![i], feature_steps(0, 77));
+    let r = poll("gwolves", &h);
+    assert_eq!(
+        (
+            &*r[0].name,
+            r[0].level,
+            r[0].charging,
+            &*r[0].kind,
+            &r[0].connection
+        ),
+        (
+            "G-Wolves mouse",
+            Some(77),
+            Some(false),
+            "mouse",
+            &Connection::Online
+        )
+    );
     h.done();
 }

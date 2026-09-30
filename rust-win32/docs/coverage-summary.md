@@ -4,30 +4,22 @@ The pinned reference contains **459 upstream test IDs**. This inventory distingu
 
 | Status | IDs | Meaning |
 | --- | ---: | --- |
-| mapped | 183 | Automated regression asserts the original behavior or its native equivalent. |
+| mapped | 257 | Automated regression asserts the original behavior or its native equivalent. |
 | intentional_difference | 11 | Tested policy deliberately replaces the original behavior; rationale is recorded per ID. |
 | obsolete | 58 | Python implementation retired; no claim of automated native equivalence. |
-| partial | 207 | Some parser/helper evidence exists; original behavior is not fully established. |
+| partial | 133 | Some parser/helper evidence exists; original behavior is not fully established. |
 | manual | 0 | Manual evidence only; automated regression remains outstanding. |
 | not_mapped | 0 | No usable regression link yet. |
 
-**207 IDs remain incomplete for automated parity.** Parser fixture counts are not a substitute for safe transaction, timeout, identity, and recovery tests. Hardware-free I/O tests do not claim physical hardware validation. Only the attached Razer hardware was available for hardware smoke checks; GameSir/WGI and other vendors use simulated/pure report evidence.
+**133 IDs remain incomplete for automated parity.** Parser fixture counts are not a substitute for safe transaction, timeout, identity, and recovery tests. Hardware-free I/O tests do not claim physical hardware validation. Only the attached Razer hardware was available for hardware smoke checks; GameSir/WGI and other vendors use simulated/pure report evidence.
 
-Inputs: `docs/coverage_mapping_core.json`, `docs/coverage_mapping_providers.json`, `docs/coverage_mapping_storage.json`, `docs/coverage_mapping_ui.json`, `docs/coverage_mapping_windows.json`.
+Inputs: `docs/coverage_mapping_core.json`, `docs/coverage_mapping_provider_family.json`, `docs/coverage_mapping_providers.json`, `docs/coverage_mapping_storage.json`, `docs/coverage_mapping_ui.json`, `docs/coverage_mapping_windows.json`.
 
 Run `python tools/merge-coverage.py` to regenerate, `python tools/merge-coverage.py --check` to validate generated evidence, and add `--require-complete` to enforce no partial/manual/unmapped IDs. The tool uses Python's standard library and does not import the original app or query hardware.
 
 ## Incomplete IDs
 
-- `test_am_infinity.PollTest.test_charge_is_clamped_to_100` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_am_infinity.PollTest.test_junk_frame_is_refused` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_am_infinity.PollTest.test_missing_collection_sends_nothing` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_am_infinity.PollTest.test_only_ffff_0002_gets_the_poll` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_am_infinity.PollTest.test_receiver_reports_the_windows_frame` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_am_infinity.PollTest.test_second_buffer_length_is_tried` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_am_infinity.PollTest.test_silent_receiver_keeps_the_last_value_greyed` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_am_infinity.PollTest.test_unnumbered_frame_reads_byte_2` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_am_infinity.PollTest.test_zero_charge_is_unknown_not_0` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
+- `test_am_infinity.PollTest.test_zero_charge_is_unknown_not_0` — partial: No reading and alternate-length retry asserted; original specific no-charge diagnostic not yet asserted.
 - `test_asus.PollTest.test_button_and_profile_reports_are_skipped` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_asus.PollTest.test_cable_and_receiver_share_one_icon` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_asus.PollTest.test_error_zeros_and_silence_give_no_icon` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
@@ -57,47 +49,18 @@ Run `python tools/merge-coverage.py` to regenerate, `python tools/merge-coverage
 - `test_blackshark_pa.ReadBatteryTest.test_a_collection_that_accepts_and_stays_silent_is_offline` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_blackshark_pa.ReadBatteryTest.test_a_collection_that_never_accepts_a_command_is_nowake` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_blackshark_pa.ReadBatteryTest.test_a_path_that_cannot_be_opened_is_fail` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_corsair.NxpParseTest.test_the_request_is_the_ckb_next_packet_behind_a_report_id` — partial: Related request checks exist, but this exact upstream request assertion has not been individually audited.
-- `test_corsair.NxpPollTest.test_a_non_ff42_collection_is_not_substituted_when_ff42_exists` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_corsair.NxpPollTest.test_an_empty_dump_entry_set_is_tried_when_ff42_is_missing` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_corsair.NxpPollTest.test_an_index_past_the_table_gives_no_reading` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_corsair.NxpPollTest.test_both_vendor_collections_are_tried_and_the_first_that_answers_wins` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_corsair.NxpPollTest.test_the_dongle_is_shown_as_a_gauge` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_corsair.NxpPollTest.test_the_headset_family_is_untouched` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_corsair.NxpPollTest.test_the_iface_1_collection_is_tried_first` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_corsair.NxpPollTest.test_the_packet_goes_on_the_wire_unchanged` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_corsair.NxpPollTest.test_the_usage_1_collection_wins_on_one_interface` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_eightbitdo.ProviderTest.test_enhanced_bluetooth_report_is_read` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_eightbitdo.ProviderTest.test_idle_ordinary_mode_shows_no_level` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_eightbitdo.ProviderTest.test_other_report_ids_are_ignored` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_eightbitdo.ProviderTest.test_unopenable_controller_still_shows_without_level` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_eightbitdo.ProviderTest.test_zero_padded_ordinary_report_is_not_zero_percent` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_gwolves.PollTest.test_charging` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_gwolves.PollTest.test_mouse_on_the_cable_names_the_model_and_wins` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_gwolves.PollTest.test_no_such_collection_sends_nothing` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_gwolves.PollTest.test_only_the_collection_with_the_64_byte_feature_report_gets_the_request` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_gwolves.PollTest.test_receiver_issue_82` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_gwolves.PollTest.test_reply_without_a1_is_not_a_level` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_gwolves.PollTest.test_sleeping_mouse_keeps_its_last_value_greyed` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_gwolves.PollTest.test_the_collection_is_remembered` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_hyperx_alpha2.Polling.test_drain_is_capped_and_the_reply_still_arrives` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_hyperx_alpha2.Polling.test_ignores_the_chat_half` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_hyperx_alpha2.Polling.test_only_keepalives_ends_in_no_reading` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_hyperx_alpha2.Polling.test_reads_the_level_from_the_controller_collection` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_hyperx_alpha2.Polling.test_survives_a_flooded_queue` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_hyperx_alpha2.ReplyParsing.test_request_shape` — partial: Related request checks exist, but this exact upstream request assertion has not been individually audited.
-- `test_hyperx_cloud3.WritePath.test_write_accepted` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_hyperx_cloud3.WritePath.test_write_minus_one_and_feature_minus_one` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_hyperx_cloud3.WritePath.test_write_minus_one_other_error_no_fallback` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_hyperx_cloud3.WritePath.test_write_minus_one_then_feature_report_accepted` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_hyperx_cloud3.WritePath.test_write_raises_incorrect_function_then_feature_report` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_hyperx_cloud3.WritePath.test_write_raises_other_error_no_fallback` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_lamzu.PollTest.test_cable_is_asked_first_and_wins` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_lamzu.PollTest.test_charging` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_lamzu.PollTest.test_dongle` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_lamzu.PollTest.test_no_such_collection_sends_nothing` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_lamzu.PollTest.test_only_interface_2_usage_page_ffff_gets_the_request` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_lamzu.PollTest.test_sleeping_mouse_keeps_its_last_value_greyed` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
+- `test_hyperx_cloud3.WritePath.test_write_minus_one_and_feature_minus_one` — partial: Exact no-fallback/failure sequence asserted; original detailed diagnostic assertions remain unaudited.
+- `test_hyperx_cloud3.WritePath.test_write_minus_one_other_error_no_fallback` — partial: Exact no-fallback/failure sequence asserted; original detailed diagnostic assertions remain unaudited.
+- `test_hyperx_cloud3.WritePath.test_write_minus_one_then_feature_report_accepted` — partial: Exact same feature packet and both commands asserted; original retry/accepted diagnostic strings remain unaudited.
 - `test_lofree.PollTest.test_level_out_of_range_is_refused` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_lofree.PollTest.test_offline_keyboard_gives_no_icon_and_no_battery_request` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_lofree.PollTest.test_on_the_cable_the_dongle_is_not_read` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
@@ -189,40 +152,3 @@ Run `python tools/merge-coverage.py` to regenerate, `python tools/merge-coverage
 - `test_razer_foreign.ForeignRepliesTest.test_a_normal_mouse_is_asked_once` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_razer_foreign.ForeignRepliesTest.test_an_answer_to_a_repeated_request_is_read` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
 - `test_razer_foreign.ForeignRepliesTest.test_last_level_stays_greyed_while_another_app_holds_the_mouse` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.ClassicTests.test_arctis1` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.ClassicTests.test_arctis1_off` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.ClassicTests.test_arctis7_2018_connected` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.ClassicTests.test_arctis7_2018_off_does_not_ask_level` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.ClassicTests.test_arctis7_zero_level_is_no_reading` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.ClassicTests.test_arctis9` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.ClassicTests.test_arctis9_off` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.ClassicTests.test_pro_wireless` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.ClassicTests.test_pro_wireless_off` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.ClassicTests.test_remembers_the_collection_that_answered` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.ClassicTests.test_wrong_reply_is_never_a_level` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.Nova7HardwareTests.test_charging` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.Nova7HardwareTests.test_headset_off` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.Nova7HardwareTests.test_headset_switching_on_shows_nothing` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.Nova7HardwareTests.test_on_battery` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.Nova7HardwareTests.test_other_report_first` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.NovaProTests.test_a_stray_report_before_the_reply_is_ignored` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.NovaProTests.test_cable_charging` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.NovaProTests.test_every_step_of_the_nine_step_scale` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.NovaProTests.test_headset_off_gives_no_reading` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.NovaProTests.test_interface_3_is_accepted_too` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.NovaProTests.test_level_code_above_8_is_refused` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.NovaProTests.test_short_reply_is_refused` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.NovaProTests.test_the_nova_7_path_is_untouched_beside_it` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.NovaProTests.test_the_request_is_06_b0` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.NovaProTests.test_the_state_byte_is_the_gate` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.NovaProTests.test_the_x_station_is_recognised` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.SafetyTests.test_arctis1_needs_its_documented_collection` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.SafetyTests.test_classic_never_writes_to_standard_collections` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.SafetyTests.test_gamedac_is_not_polled` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries.SafetyTests.test_nova_needs_ffc0` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries_aerox.AeroxTest.test_aerox_9_issue_79` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries_aerox.AeroxTest.test_charging_bit` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries_aerox.AeroxTest.test_every_aerox_5_and_9_model_uses_the_d2_exchange` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries_aerox.AeroxTest.test_level_zero_is_off_not_empty` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries_aerox.AeroxTest.test_real_aerox_9_reply_issue_79` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
-- `test_steelseries_aerox.AeroxTest.test_rivalcfg_level_formula_for_all_steps` — partial: Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains.
