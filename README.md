@@ -1,5 +1,9 @@
 # Halo Battery
 
+This checkout also contains **Halo Battery Next**, the independent Rust/Win32 port.
+See [README-next.md](README-next.md) for building, running and validation. The Python
+implementation below remains available as the migration reference.
+
 Battery levels for wireless mice, keyboards, headsets and controllers in the Windows system tray - one icon per device, no vendor software.
 
 ![All icon states](docs/icons.png)

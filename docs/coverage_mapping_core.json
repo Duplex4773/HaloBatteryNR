@@ -1,0 +1,362 @@
+[
+  {
+    "upstream_test": "test_tray_features.FullChargeTests.test_alert_when_a_charging_device_reaches_100",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::full_charge_observed_transition_stopping_charging_and_custom_name",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_tray_features.FullChargeTests.test_device_that_stops_reporting_charging_when_full",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::full_charge_observed_transition_stopping_charging_and_custom_name",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_tray_features.FullChargeTests.test_already_full_at_start_gives_no_alert",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::full_charge_startup_and_unobserved_charging_do_not_alert",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_tray_features.FullChargeTests.test_not_charging_gives_no_alert",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::full_charge_startup_and_unobserved_charging_do_not_alert",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_tray_features.FullChargeTests.test_99_100_jitter_on_the_charger_alerts_once",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::full_charge_jitter_and_next_charge_rearm",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_tray_features.FullChargeTests.test_next_charge_alerts_again",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::full_charge_jitter_and_next_charge_rearm",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_tray_features.FullChargeTests.test_drop_below_95_on_the_charger_rearms",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::full_charge_jitter_and_next_charge_rearm",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_tray_features.FullChargeTests.test_setting_off",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::full_charge_setting_and_notify_setting_suppress",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_tray_features.FullChargeTests.test_uses_the_name_the_user_gave",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::full_charge_observed_transition_stopping_charging_and_custom_name",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_tray_features.FullChargeTests.test_asleep_or_unknown_level_changes_nothing",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::full_charge_unknown_and_sleep_leave_charge_cycle_armed",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.HistoryTests.test_steady_drain_gives_the_right_estimate",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::estimator_steady_drain_minimum_span_and_drop",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.HistoryTests.test_no_estimate_too_early",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::estimator_steady_drain_minimum_span_and_drop",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.HistoryTests.test_charging_starts_over",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::estimator_charge_rise_reset_and_small_jitter_ignored",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.HistoryTests.test_a_jump_up_without_charging_starts_over",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::estimator_charge_rise_reset_and_small_jitter_ignored",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.HistoryTests.test_small_rise_is_jitter",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::estimator_charge_rise_reset_and_small_jitter_ignored",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.HistoryTests.test_asleep_time_does_not_count",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::estimator_sleep_long_gap_unknown_coarse_and_backward_clock",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.HistoryTests.test_long_gap_counts_as_max_gap",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::estimator_sleep_long_gap_unknown_coarse_and_backward_clock",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.HistoryTests.test_coarse_and_unknown_readings_are_ignored",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::estimator_sleep_long_gap_unknown_coarse_and_backward_clock",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.HistoryTests.test_stalled_level_slows_the_estimate",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::estimator_stalled_level_slows_fit_and_samples_are_bounded",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.HistoryTests.test_format",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::estimate_format_hours_days_and_less_than_hour",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.HistoryTests.test_save_and_load",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::estimator_roundtrip_damaged_entries_expiry_and_baseline_reset",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.HistoryTests.test_damaged_file_is_ignored",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::estimator_roundtrip_damaged_entries_expiry_and_baseline_reset",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.TimeLeftTooltipTests.test_tooltip_shows_time_left",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::snapshot_estimate_only_awake_exact_battery_and_enabled",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.TimeLeftTooltipTests.test_not_while_charging_or_asleep",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::snapshot_estimate_only_awake_exact_battery_and_enabled",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.TimeLeftTooltipTests.test_setting_off",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::snapshot_estimate_only_awake_exact_battery_and_enabled",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.TimeLeftTooltipTests.test_apply_records_history",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::snapshot_estimate_only_awake_exact_battery_and_enabled",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.TimeLeftTooltipTests.test_hidden_device_has_no_history",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::disabled_provider_and_hidden_device_do_not_alert_or_learn",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.DeviceLowTests.test_own_level_alerts_instead_of_the_default",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::low_uses_device_threshold_default_and_off",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.DeviceLowTests.test_other_devices_keep_the_default",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::low_uses_device_threshold_default_and_off",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.DeviceLowTests.test_off_for_one_device",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::low_uses_device_threshold_default_and_off",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.DeviceLowTests.test_damaged_value_is_ignored",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::settings_invalid_low_values_and_container_types_fall_back",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_more_features.QuietTests.test_alerts_are_held_and_shown_after_the_game",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::quiet_game_holds_once_per_device_and_kind",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_more_features.QuietTests.test_one_held_alert_per_device_and_kind",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::quiet_game_holds_once_per_device_and_kind",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_more_features.QuietTests.test_low_alert_is_dropped_when_it_was_charged_meanwhile",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::held_low_drops_on_charge_recovery_hidden_or_threshold_off",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_more_features.QuietTests.test_setting_off_shows_alerts_during_the_game",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::quiet_disabled_delivers_during_game",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_more_features.StatusFileTests.test_time_left_only_on_battery",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::snapshot_estimate_only_awake_exact_battery_and_enabled",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_notifications.TextTests.test_real_low_battery_alert_uses_the_shared_text",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::notifications_use_shared_exact_and_coarse_text",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_notifications.TextTests.test_texts_are_the_ones_users_see",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::notifications_use_shared_exact_and_coarse_text",
+    "notes": "Low/full notification text covered; upstream update text intentionally replaced by independently configured release repository."
+  },
+  {
+    "upstream_test": "test_robustness.ConfigTests.test_interval_out_of_range",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::settings_defaults_individual_validation_and_update_repository",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_robustness.ConfigTests.test_no_file_gives_the_defaults",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::settings_defaults_individual_validation_and_update_repository",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_robustness.ConfigTests.test_not_an_object",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::settings_defaults_individual_validation_and_update_repository",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_robustness.ConfigTests.test_wrong_values_fall_back_one_by_one",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::settings_defaults_individual_validation_and_update_repository",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_hide_rename.HideTests.test_hidden_device_gets_no_icon_and_no_alert",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::disabled_provider_and_hidden_device_do_not_alert_or_learn",
+    "notes": "Snapshot marks hidden; UI separately excludes hidden tray icons."
+  },
+  {
+    "upstream_test": "test_hide_rename.HideTests.test_unhide_brings_it_back",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::unhide_restores_name_icon_and_alert_without_hidden_time",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_hide_rename.HideTests.test_damaged_settings_value_is_ignored",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::settings_invalid_low_values_and_container_types_fall_back",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_hide_rename.RenameTests.test_rename_changes_tooltip_and_alert",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::unhide_restores_name_icon_and_alert_without_hidden_time",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_hide_rename.RenameTests.test_own_name_again_removes_the_rename",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::unhide_restores_name_icon_and_alert_without_hidden_time",
+    "notes": "Resetting optional name restores detected name; UI owns removal interaction."
+  },
+  {
+    "upstream_test": "test_hide_rename.RenameTests.test_reset_name",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::unhide_restores_name_icon_and_alert_without_hidden_time",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_hide_rename.RenameTests.test_rename_keeps_the_badge",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::rename_changes_text_keeps_detected_kind_and_other_device_icon",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_tray_features.PictogramTests.test_automatic_goes_back",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::unhide_restores_name_icon_and_alert_without_hidden_time",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_tray_features.PictogramTests.test_bluetooth_controller_can_show_the_controller",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::damaged_icon_values_and_bluetooth_override_keep_automatic_fallback",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_tray_features.PictogramTests.test_unknown_or_damaged_value_is_ignored",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::damaged_icon_values_and_bluetooth_override_keep_automatic_fallback",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_tray_features.PictogramTests.test_other_devices_keep_their_own_pictogram",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::rename_changes_text_keeps_detected_kind_and_other_device_icon",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_bt_duplicates.BluetoothDuplicateTests.test_dongle_without_link_keeps_the_bluetooth_reading",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::bluetooth_dedup_requires_identity_and_live_known_hid",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_bt_duplicates.BluetoothDuplicateTests.test_greyed_hid_entry_keeps_the_bluetooth_reading",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::bluetooth_dedup_requires_identity_and_live_known_hid",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_bt_duplicates.BluetoothDuplicateTests.test_online_hid_entry_without_level_keeps_the_bluetooth_reading",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::bluetooth_dedup_requires_identity_and_live_known_hid",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_bt_duplicates.BluetoothDuplicateTests.test_live_hid_reading_drops_the_bluetooth_copy",
+    "status": "intentional_difference",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::ambiguous_names_zero_and_placeholder_identities_stay_separate",
+    "notes": "Name similarity cannot prove physical identity. Only trusted matching container/serial plus a live known-level HID reading suppresses Bluetooth; covered also by bluetooth_dedup_requires_identity_and_live_known_hid."
+  },
+  {
+    "upstream_test": "test_new_features.DeviceTypeTests.test_damaged_settings_value_counts_as_none_off",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::settings_invalid_low_values_and_container_types_fall_back",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_new_features.DeviceTypeTests.test_turning_off_removes_its_icons_at_once_and_back_on",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::disabled_provider_and_hidden_device_do_not_alert_or_learn",
+    "notes": "Disabled cache removal covered; dispatch scheduling and menu ownership are runtime/UI."
+  },
+  {
+    "upstream_test": "test_robustness.TrayIconTests.test_icon_uid_is_stable_and_differs_per_device",
+    "status": "mapped",
+    "rust_test": "crates/core/tests/behaviour.rs::guid_identity_is_stable_and_distinct",
+    "notes": "Rust tray uses deterministic 128-bit GUID identity instead of upstream 31-bit integer."
+  }
+]

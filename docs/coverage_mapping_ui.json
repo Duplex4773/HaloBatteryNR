@@ -1,0 +1,680 @@
+[
+  {
+    "upstream_test": "test_flyout.ColourTests.test_argb",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.ColourTests.test_gradient_colour_is_abgr",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.ColourTests.test_translucent_colours_are_laid_over_the_tint",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.ColourTests.test_transparent_key_is_next_to_the_tint_and_not_a_used_colour",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.ColourTests.test_hover_keeps_its_opacity",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PlacementTests.test_bottom_taskbar_centred_on_the_click_with_a_gap",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PlacementTests.test_top_taskbar",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PlacementTests.test_right_taskbar_centred_vertically",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PlacementTests.test_left_taskbar",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PlacementTests.test_kept_off_the_screen_edges",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PlacementTests.test_gap_scales",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PlacementTests.test_without_a_taskbar_centred_above_the_cursor",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PlacementTests.test_submenu_to_the_right_with_overlap_and_raised",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PlacementTests.test_submenu_to_the_left_without_room",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PlacementTests.test_submenu_scaled",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PlacementTests.test_submenu_stays_on_the_screen",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.TaskbarAreaTests.test_bottom_taskbar_is_cut_off",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.TaskbarAreaTests.test_top_left_and_right_taskbars",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.TaskbarAreaTests.test_a_work_area_without_the_taskbar_is_unchanged",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.TaskbarAreaTests.test_a_hidden_auto_hide_taskbar_leaves_its_visible_edge_out",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.TaskbarAreaTests.test_a_taskbar_on_another_monitor_is_ignored",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.TaskbarAreaTests.test_a_long_submenu_opens_above_the_taskbar",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.TaskbarAreaTests.test_the_menu_passes_the_area_without_the_taskbar_to_its_submenus",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.CounterTests.test_steps_through_the_choices",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.CounterTests.test_a_value_between_the_choices_counts_as_the_nearest",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.CounterTests.test_classic_menu_sees_a_radio_submenu",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.LayoutTests.test_rows_follow_the_visible_items",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.LayoutTests.test_sizes_at_100_percent",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.LayoutTests.test_everything_scales",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.LayoutTests.test_minimum_width",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.LayoutTests.test_a_long_text_widens_the_menu",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.HeaderTests.test_classic_menu_sees_one_disabled_item",
+    "status": "mapped",
+    "rust_test": "crates/app/src/ui.rs::popup_tests::selected_device_popup_reads_current_summary_and_exposes_accessible_actions",
+    "notes": "Actual HMENU inspection verifies one disabled selected-device summary and selectable Controls/History/Hide commands; rebuilding reflects changed summary. Native popup replaces custom Python header widgets."
+  },
+  {
+    "upstream_test": "test_flyout.HeaderTests.test_the_texts_are_read_each_time",
+    "status": "mapped",
+    "rust_test": "crates/app/src/ui.rs::popup_tests::selected_device_popup_reads_current_summary_and_exposes_accessible_actions",
+    "notes": "Actual HMENU inspection verifies one disabled selected-device summary and selectable Controls/History/Hide commands; rebuilding reflects changed summary. Native popup replaces custom Python header widgets."
+  },
+  {
+    "upstream_test": "test_flyout.HeaderTests.test_a_long_header_does_not_widen_the_menu",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.HeaderTests.test_the_state_goes_on_the_line_below_the_name",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.HeaderTests.test_a_separator_after_the_header_is_not_doubled",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.HeaderTests.test_without_a_detail_it_is_one_line",
+    "status": "mapped",
+    "rust_test": "crates/app/src/ui.rs::popup_tests::selected_device_popup_reads_current_summary_and_exposes_accessible_actions",
+    "notes": "Actual HMENU inspection verifies one disabled selected-device summary and selectable Controls/History/Hide commands; rebuilding reflects changed summary. Native popup replaces custom Python header widgets."
+  },
+  {
+    "upstream_test": "test_flyout.HeaderTests.test_other_items_still_set_the_width",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.HeaderTests.test_the_pencil_leaves_room_next_to_the_title",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.HeaderTests.test_only_a_header_with_a_pencil_can_be_chosen",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.HeaderTests.test_classic_only_items_are_left_out_of_the_flyout",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.HeaderTests.test_wrap",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.HighlightTests.test_a_shown_highlight_is_raised_over_the_panel",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.HighlightTests.test_the_same_box_again_is_raised_again",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.HighlightTests.test_a_hidden_highlight_is_not_raised",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.HighlightTests.test_no_win32_helper_is_not_an_error",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PencilTests.test_only_the_pencil_is_under_the_mouse",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PencilTests.test_the_highlight_covers_the_pencil",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PencilTests.test_the_pencil_brightens_under_the_mouse",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python custom translucent flyout, layout, hover and pencil widgets were replaced by a native TrackPopupMenu flyout and accessible dashboard controls. Windows owns popup sizing, placement, submenu clipping, theme and keyboard behavior; the previous rendering-specific assertion has no corresponding native widget."
+  },
+  {
+    "upstream_test": "test_flyout.PencilTests.test_the_keyboard_reaches_the_pencil",
+    "status": "mapped",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Completed native WinAPI smoke verifies Tab and Alt H/S, full charge checkbox persistence, automatic plus seven icon choices, rename and Bluetooth override persistence, automatic reset preserving name, hide/unhide and dashboard close/reopen ownership."
+  },
+  {
+    "upstream_test": "test_flyout.PencilTests.test_a_click_closes_the_menu_and_edits",
+    "status": "mapped",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Completed native WinAPI smoke verifies Tab and Alt H/S, full charge checkbox persistence, automatic plus seven icon choices, rename and Bluetooth override persistence, automatic reset preserving name, hide/unhide and dashboard close/reopen ownership."
+  },
+  {
+    "upstream_test": "test_tray_icons.PlaceholderTests.test_made_once_then_only_shown_or_hidden",
+    "status": "mapped",
+    "rust_test": "crates/app/src/ui.rs::behaviour_tests::placeholder_exists_only_without_visible_devices",
+    "notes": "Verifies one stable placeholder only for zero visible devices, and no placeholder while a device is visible. Native HWND readiness and close/reopen ownership are exercised by tools/validate-native.ps1; Python tray-thread startup sequencing is replaced by one UI thread."
+  },
+  {
+    "upstream_test": "test_tray_icons.PlaceholderTests.test_no_icon_made_while_devices_are_shown",
+    "status": "mapped",
+    "rust_test": "crates/app/src/ui.rs::behaviour_tests::placeholder_exists_only_without_visible_devices",
+    "notes": "Verifies one stable placeholder only for zero visible devices, and no placeholder while a device is visible. Native HWND readiness and close/reopen ownership are exercised by tools/validate-native.ps1; Python tray-thread startup sequencing is replaced by one UI thread."
+  },
+  {
+    "upstream_test": "test_tray_icons.PlaceholderTests.test_all_devices_hidden_shows_it",
+    "status": "mapped",
+    "rust_test": "crates/app/src/ui.rs::behaviour_tests::placeholder_exists_only_without_visible_devices",
+    "notes": "Verifies one stable placeholder only for zero visible devices, and no placeholder while a device is visible. Native HWND readiness and close/reopen ownership are exercised by tools/validate-native.ps1; Python tray-thread startup sequencing is replaced by one UI thread."
+  },
+  {
+    "upstream_test": "test_tray_icons.SlowStartTests.test_waits_for_the_window_before_showing",
+    "status": "obsolete",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Python asynchronous pystray startup/thread sequencing is retired: all HWND/HICON and popup operations execute on one owned UI thread after hidden monitor creation. Native smoke verifies real monitor/dashboard readiness and close/reopen."
+  },
+  {
+    "upstream_test": "test_tray_icons.SlowStartTests.test_quick_device_after_start_leaves_no_copy",
+    "status": "obsolete",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Python asynchronous pystray startup/thread sequencing is retired: all HWND/HICON and popup operations execute on one owned UI thread after hidden monitor creation. Native smoke verifies real monitor/dashboard readiness and close/reopen."
+  },
+  {
+    "upstream_test": "test_tray_icons.DeviceIconStartTests.test_show_waits_for_the_window",
+    "status": "obsolete",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Python asynchronous pystray startup/thread sequencing is retired: all HWND/HICON and popup operations execute on one owned UI thread after hidden monitor creation. Native smoke verifies real monitor/dashboard readiness and close/reopen."
+  },
+  {
+    "upstream_test": "test_tray_features.FullChargeTests.test_setting_is_in_preferences_and_toggles",
+    "status": "mapped",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Completed native WinAPI smoke verifies Tab and Alt H/S, full charge checkbox persistence, automatic plus seven icon choices, rename and Bluetooth override persistence, automatic reset preserving name, hide/unhide and dashboard close/reopen ownership."
+  },
+  {
+    "upstream_test": "test_tray_features.PictogramTests.test_menu_lists_the_choices_with_automatic_checked",
+    "status": "mapped",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Completed native WinAPI smoke verifies Tab and Alt H/S, full charge checkbox persistence, automatic plus seven icon choices, rename and Bluetooth override persistence, automatic reset preserving name, hide/unhide and dashboard close/reopen ownership."
+  },
+  {
+    "upstream_test": "test_tray_features.PictogramTests.test_pick_saves_redraws_and_checks",
+    "status": "mapped",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Completed native WinAPI smoke verifies Tab and Alt H/S, full charge checkbox persistence, automatic plus seven icon choices, rename and Bluetooth override persistence, automatic reset preserving name, hide/unhide and dashboard close/reopen ownership."
+  },
+  {
+    "upstream_test": "test_tray_features.PictogramTests.test_no_icon_menu_on_the_no_devices_icon",
+    "status": "mapped",
+    "rust_test": "crates/app/src/ui.rs::popup_tests::placeholder_popup_has_no_device_controls_or_icon_picker",
+    "notes": "Actual fallback HMENU has no device controls, history, hide or icon picker."
+  },
+  {
+    "upstream_test": "test_tray_features.PictogramDrawTests.test_the_real_icon_draws_the_picked_pictogram",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::pictogram_tests::selected_pictograms_have_distinct_native_pixels",
+    "notes": "Reads actual HICON color bitmap pixels and verifies mouse, keyboard, headset, gamepad and Bluetooth selections differ; controller styles use the gamepad pictogram."
+  },
+  {
+    "upstream_test": "test_hide_rename.HideTests.test_hide_removes_icon_and_is_saved",
+    "status": "mapped",
+    "rust_test": "tools/validate-ui.ps1; crates/app/src/ui.rs::behaviour_tests::placeholder_exists_only_without_visible_devices",
+    "notes": "Native smoke verifies hide/unhide persisted state; tray selection regression verifies hidden readings excluded and one fallback only when no visible devices."
+  },
+  {
+    "upstream_test": "test_hide_rename.HideTests.test_all_hidden_shows_the_no_devices_icon",
+    "status": "mapped",
+    "rust_test": "tools/validate-ui.ps1; crates/app/src/ui.rs::behaviour_tests::placeholder_exists_only_without_visible_devices",
+    "notes": "Native smoke verifies hide/unhide persisted state; tray selection regression verifies hidden readings excluded and one fallback only when no visible devices."
+  },
+  {
+    "upstream_test": "test_hide_rename.RenameTests.test_cancel_changes_nothing",
+    "status": "obsolete",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Native in-place edit/save replaces Python separate rename dialog and Cancel action; closing unsaved dashboard does not send Settings."
+  },
+  {
+    "upstream_test": "test_hide_rename.MenuTests.test_device_menu_has_rename_and_hide",
+    "status": "mapped",
+    "rust_test": "tools/validate-ui.ps1; crates/app/src/ui.rs::popup_tests::selected_device_popup_reads_current_summary_and_exposes_accessible_actions",
+    "notes": "Native popup offers selected-device Controls and Hide; dashboard includes hidden devices and an unhide checkbox. No separate hidden-device submenu remains."
+  },
+  {
+    "upstream_test": "test_hide_rename.MenuTests.test_hidden_devices_submenu",
+    "status": "mapped",
+    "rust_test": "tools/validate-ui.ps1; crates/app/src/ui.rs::popup_tests::selected_device_popup_reads_current_summary_and_exposes_accessible_actions",
+    "notes": "Native popup offers selected-device Controls and Hide; dashboard includes hidden devices and an unhide checkbox. No separate hidden-device submenu remains."
+  },
+  {
+    "upstream_test": "test_hide_rename.MenuTests.test_clicking_show_brings_the_device_back",
+    "status": "mapped",
+    "rust_test": "tools/validate-ui.ps1; crates/app/src/ui.rs::popup_tests::selected_device_popup_reads_current_summary_and_exposes_accessible_actions",
+    "notes": "Native popup offers selected-device Controls and Hide; dashboard includes hidden devices and an unhide checkbox. No separate hidden-device submenu remains."
+  },
+  {
+    "upstream_test": "test_hide_rename.MenuTests.test_clicking_hide_and_rename_in_the_device_menu",
+    "status": "mapped",
+    "rust_test": "tools/validate-ui.ps1; crates/app/src/ui.rs::popup_tests::selected_device_popup_reads_current_summary_and_exposes_accessible_actions",
+    "notes": "Native popup offers selected-device Controls and Hide; dashboard includes hidden devices and an unhide checkbox. No separate hidden-device submenu remains."
+  },
+  {
+    "upstream_test": "test_hide_rename.MenuLayoutTests.test_main_menu_is_short",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python nested preference-menu layout is replaced by Devices/History/Settings native dashboard pages. Screenshot and native control smoke verifies native settings layout."
+  },
+  {
+    "upstream_test": "test_hide_rename.MenuLayoutTests.test_hidden_devices_sits_with_preferences",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python nested preference-menu layout is replaced by Devices/History/Settings native dashboard pages. Screenshot and native control smoke verifies native settings layout."
+  },
+  {
+    "upstream_test": "test_hide_rename.MenuLayoutTests.test_preferences_holds_the_settings",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python nested preference-menu layout is replaced by Devices/History/Settings native dashboard pages. Screenshot and native control smoke verifies native settings layout."
+  },
+  {
+    "upstream_test": "test_hide_rename.MenuRefreshTests.test_menu_is_rebuilt_when_the_level_changes",
+    "status": "mapped",
+    "rust_test": "crates/app/src/ui.rs::popup_tests::selected_device_popup_reads_current_summary_and_exposes_accessible_actions",
+    "notes": "Actual HMENU summary is rebuilt from current selected-device data on every invocation."
+  },
+  {
+    "upstream_test": "test_hide_rename.AskNameTests.test_name_goes_in_the_environment_not_the_command",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python subprocess/environment-based name dialog is replaced by an in-process native EDIT control. Native rename persistence is exercised by tools/validate-ui.ps1."
+  },
+  {
+    "upstream_test": "test_hide_rename.AskNameTests.test_result",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Python subprocess/environment-based name dialog is replaced by an in-process native EDIT control. Native rename persistence is exercised by tools/validate-ui.ps1."
+  },
+  {
+    "upstream_test": "test_more_features.NumberRenderTests.test_number_is_drawn",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::number_tests::exact_percent_replaces_symbol_fits_ring_and_preserves_coarse_unknown_glyphs; crates/app/src/icons.rs::number_tests::charging_frames_preserve_percent_and_device_low_controls_ring_color",
+    "notes": "Reads actual HICON pixels: 100 fits within ring, numeric center differs from glyph, center persists across all30 charging frames, coarse/unknown retain glyph."
+  },
+  {
+    "upstream_test": "test_more_features.NumberRenderTests.test_even_100_stays_inside_the_ring",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::number_tests::exact_percent_replaces_symbol_fits_ring_and_preserves_coarse_unknown_glyphs; crates/app/src/icons.rs::number_tests::charging_frames_preserve_percent_and_device_low_controls_ring_color",
+    "notes": "Reads actual HICON pixels: 100 fits within ring, numeric center differs from glyph, center persists across all30 charging frames, coarse/unknown retain glyph."
+  },
+  {
+    "upstream_test": "test_more_features.NumberRenderTests.test_number_replaces_the_pictogram",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::number_tests::exact_percent_replaces_symbol_fits_ring_and_preserves_coarse_unknown_glyphs; crates/app/src/icons.rs::number_tests::charging_frames_preserve_percent_and_device_low_controls_ring_color",
+    "notes": "Reads actual HICON pixels: 100 fits within ring, numeric center differs from glyph, center persists across all30 charging frames, coarse/unknown retain glyph."
+  },
+  {
+    "upstream_test": "test_more_features.NumberRenderTests.test_charging_frames_carry_the_number",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::number_tests::exact_percent_replaces_symbol_fits_ring_and_preserves_coarse_unknown_glyphs; crates/app/src/icons.rs::number_tests::charging_frames_preserve_percent_and_device_low_controls_ring_color",
+    "notes": "Reads actual HICON pixels: 100 fits within ring, numeric center differs from glyph, center persists across all30 charging frames, coarse/unknown retain glyph."
+  },
+  {
+    "upstream_test": "test_more_features.NumberSettingTests.test_on",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::number_tests::exact_percent_replaces_symbol_fits_ring_and_preserves_coarse_unknown_glyphs; crates/app/src/icons.rs::tests::cached_animation_frames_release_all_native_handles",
+    "notes": "Native numeric setting, coarse/unknown glyph fallback and exact sleeping-state one-frame caching covered. Settings checkbox presence verified visually; toggle persistence uses generic Settings save logic."
+  },
+  {
+    "upstream_test": "test_more_features.NumberSettingTests.test_off_by_default",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::number_tests::exact_percent_replaces_symbol_fits_ring_and_preserves_coarse_unknown_glyphs; crates/app/src/icons.rs::tests::cached_animation_frames_release_all_native_handles",
+    "notes": "Native numeric setting, coarse/unknown glyph fallback and exact sleeping-state one-frame caching covered. Settings checkbox presence verified visually; toggle persistence uses generic Settings save logic."
+  },
+  {
+    "upstream_test": "test_more_features.NumberSettingTests.test_asleep_keeps_the_last_number",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::number_tests::exact_percent_replaces_symbol_fits_ring_and_preserves_coarse_unknown_glyphs; crates/app/src/icons.rs::tests::cached_animation_frames_release_all_native_handles",
+    "notes": "Native numeric setting, coarse/unknown glyph fallback and exact sleeping-state one-frame caching covered. Settings checkbox presence verified visually; toggle persistence uses generic Settings save logic."
+  },
+  {
+    "upstream_test": "test_more_features.NumberSettingTests.test_charging",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::number_tests::exact_percent_replaces_symbol_fits_ring_and_preserves_coarse_unknown_glyphs; crates/app/src/icons.rs::tests::cached_animation_frames_release_all_native_handles",
+    "notes": "Native numeric setting, coarse/unknown glyph fallback and exact sleeping-state one-frame caching covered. Settings checkbox presence verified visually; toggle persistence uses generic Settings save logic."
+  },
+  {
+    "upstream_test": "test_more_features.NumberSettingTests.test_rough_levels_and_no_level_keep_the_pictogram",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::number_tests::exact_percent_replaces_symbol_fits_ring_and_preserves_coarse_unknown_glyphs; crates/app/src/icons.rs::tests::cached_animation_frames_release_all_native_handles",
+    "notes": "Native numeric setting, coarse/unknown glyph fallback and exact sleeping-state one-frame caching covered. Settings checkbox presence verified visually; toggle persistence uses generic Settings save logic."
+  },
+  {
+    "upstream_test": "test_more_features.NumberSettingTests.test_menu_toggles",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::number_tests::exact_percent_replaces_symbol_fits_ring_and_preserves_coarse_unknown_glyphs; crates/app/src/icons.rs::tests::cached_animation_frames_release_all_native_handles",
+    "notes": "Native numeric setting, coarse/unknown glyph fallback and exact sleeping-state one-frame caching covered. Settings checkbox presence verified visually; toggle persistence uses generic Settings save logic."
+  },
+  {
+    "upstream_test": "test_more_features.QuietTests.test_polls_every_5_minutes_during_a_game",
+    "status": "partial",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Native Settings contains25 readable provider switches, PlayStation opt-in, quiet checkbox and per-device low editor; screenshots verify presence. Exact provider-toggle/full-mode/gaming dispatch case requires focused integration coverage."
+  },
+  {
+    "upstream_test": "test_more_features.QuietTests.test_wakes_when_the_game_is_closed",
+    "status": "partial",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Native Settings contains25 readable provider switches, PlayStation opt-in, quiet checkbox and per-device low editor; screenshots verify presence. Exact provider-toggle/full-mode/gaming dispatch case requires focused integration coverage."
+  },
+  {
+    "upstream_test": "test_more_features.QuietTests.test_detection_runs_on_this_machine",
+    "status": "partial",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Native Settings contains25 readable provider switches, PlayStation opt-in, quiet checkbox and per-device low editor; screenshots verify presence. Exact provider-toggle/full-mode/gaming dispatch case requires focused integration coverage."
+  },
+  {
+    "upstream_test": "test_more_features.QuietTests.test_menu_toggles",
+    "status": "partial",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Native Settings contains25 readable provider switches, PlayStation opt-in, quiet checkbox and per-device low editor; screenshots verify presence. Exact provider-toggle/full-mode/gaming dispatch case requires focused integration coverage."
+  },
+  {
+    "upstream_test": "test_more_features.StatusFileTests.test_written_when_on",
+    "status": "partial",
+    "rust_test": "",
+    "notes": "Native equivalent exists but this exact upstream semantic case has no focused automated assertion yet."
+  },
+  {
+    "upstream_test": "test_more_features.StatusFileTests.test_not_written_when_off",
+    "status": "partial",
+    "rust_test": "",
+    "notes": "Native equivalent exists but this exact upstream semantic case has no focused automated assertion yet."
+  },
+  {
+    "upstream_test": "test_more_features.StatusFileTests.test_hidden_devices_are_left_out",
+    "status": "partial",
+    "rust_test": "",
+    "notes": "Native equivalent exists but this exact upstream semantic case has no focused automated assertion yet."
+  },
+  {
+    "upstream_test": "test_more_features.StatusFileTests.test_turning_off_removes_the_file",
+    "status": "partial",
+    "rust_test": "",
+    "notes": "Native equivalent exists but this exact upstream semantic case has no focused automated assertion yet."
+  },
+  {
+    "upstream_test": "test_more_features.StatusFileTests.test_exit_leaves_running_false",
+    "status": "partial",
+    "rust_test": "",
+    "notes": "Native equivalent exists but this exact upstream semantic case has no focused automated assertion yet."
+  },
+  {
+    "upstream_test": "test_new_features.DeviceTypeTests.test_every_provider_has_a_label",
+    "status": "partial",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Native Settings contains25 readable provider switches, PlayStation opt-in, quiet checkbox and per-device low editor; screenshots verify presence. Exact provider-toggle/full-mode/gaming dispatch case requires focused integration coverage."
+  },
+  {
+    "upstream_test": "test_new_features.DeviceTypeTests.test_disabled_provider_is_not_polled",
+    "status": "partial",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Native Settings contains25 readable provider switches, PlayStation opt-in, quiet checkbox and per-device low editor; screenshots verify presence. Exact provider-toggle/full-mode/gaming dispatch case requires focused integration coverage."
+  },
+  {
+    "upstream_test": "test_new_features.DeviceTypeTests.test_menu_lists_every_type_and_toggles",
+    "status": "partial",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Native Settings contains25 readable provider switches, PlayStation opt-in, quiet checkbox and per-device low editor; screenshots verify presence. Exact provider-toggle/full-mode/gaming dispatch case requires focused integration coverage."
+  },
+  {
+    "upstream_test": "test_new_features.DeviceTypeTests.test_playstation_full_mode_stays_in_preferences",
+    "status": "partial",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Native Settings contains25 readable provider switches, PlayStation opt-in, quiet checkbox and per-device low editor; screenshots verify presence. Exact provider-toggle/full-mode/gaming dispatch case requires focused integration coverage."
+  },
+  {
+    "upstream_test": "test_new_features.DeviceTypeTests.test_full_mode_setting_reaches_the_playstation_provider",
+    "status": "partial",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Native Settings contains25 readable provider switches, PlayStation opt-in, quiet checkbox and per-device low editor; screenshots verify presence. Exact provider-toggle/full-mode/gaming dispatch case requires focused integration coverage."
+  },
+  {
+    "upstream_test": "test_new_features.DeviceTypeTests.test_disabled_playstation_is_not_polled_even_in_full_mode",
+    "status": "partial",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Native Settings contains25 readable provider switches, PlayStation opt-in, quiet checkbox and per-device low editor; screenshots verify presence. Exact provider-toggle/full-mode/gaming dispatch case requires focused integration coverage."
+  },
+  {
+    "upstream_test": "test_new_features.DeviceTypeTests.test_pending_of_a_disabled_provider_does_not_speed_up_polling",
+    "status": "partial",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Native Settings contains25 readable provider switches, PlayStation opt-in, quiet checkbox and per-device low editor; screenshots verify presence. Exact provider-toggle/full-mode/gaming dispatch case requires focused integration coverage."
+  },
+  {
+    "upstream_test": "test_new_features.DeviceLowTests.test_device_menu_sets_and_resets",
+    "status": "partial",
+    "rust_test": "tools/validate-ui.ps1",
+    "notes": "Native Settings contains25 readable provider switches, PlayStation opt-in, quiet checkbox and per-device low editor; screenshots verify presence. Exact provider-toggle/full-mode/gaming dispatch case requires focused integration coverage."
+  },
+  {
+    "upstream_test": "test_new_features.DeviceLowTests.test_icon_is_drawn_with_the_own_level",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::number_tests::charging_frames_preserve_percent_and_device_low_controls_ring_color",
+    "notes": "Native HICON pixels change ring color with per-device alert threshold."
+  },
+  {
+    "upstream_test": "test_notifications.AppIdTests.test_nothing_happens_off_windows",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Windows-only native application uses HICON bitmap assets and no Python notification PNG/non-Windows branch."
+  },
+  {
+    "upstream_test": "test_notifications.AppIdTests.test_registers_the_name_and_sets_the_id",
+    "status": "partial",
+    "rust_test": "crates/windows/src/system.rs::identify",
+    "notes": "Native explicit AppUserModelID is set. Original per-user notification DisplayName/IconUri registry registration is not separately implemented/tested."
+  },
+  {
+    "upstream_test": "test_notifications.AppIdTests.test_icon_png_is_drawn",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Windows-only native application uses HICON bitmap assets and no Python notification PNG/non-Windows branch."
+  },
+  {
+    "upstream_test": "test_robustness.TrayIconTests.test_animation_frames_are_loaded_once",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::tests::cached_animation_frames_release_all_native_handles",
+    "notes": "Ten batches of30 cached frames plus sleeping/static/percent modes return USER/GDI handle counts exactly to warmed baseline. Python pystray subclass itself is retired."
+  },
+  {
+    "upstream_test": "test_robustness.TrayIconTests.test_cache_is_bounded",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::tests::cached_animation_frames_release_all_native_handles",
+    "notes": "Ten batches of30 cached frames plus sleeping/static/percent modes return USER/GDI handle counts exactly to warmed baseline. Python pystray subclass itself is retired."
+  },
+  {
+    "upstream_test": "test_robustness.TrayIconTests.test_forget_handles_empties_the_cache",
+    "status": "mapped",
+    "rust_test": "crates/app/src/icons.rs::tests::cached_animation_frames_release_all_native_handles",
+    "notes": "Ten batches of30 cached frames plus sleeping/static/percent modes return USER/GDI handle counts exactly to warmed baseline. Python pystray subclass itself is retired."
+  },
+  {
+    "upstream_test": "test_robustness.TrayIconTests.test_the_class_follows_pystray_icon",
+    "status": "obsolete",
+    "rust_test": "",
+    "notes": "Native Rust owns HWND/HICON directly; no pystray subclass exists."
+  },
+  {
+    "upstream_test": "test_robustness.ConfigTests.test_damaged_file_is_kept_aside",
+    "status": "partial",
+    "rust_test": "",
+    "notes": "Native equivalent exists but this exact upstream semantic case has no focused automated assertion yet."
+  },
+  {
+    "upstream_test": "test_robustness.ConfigTests.test_save_is_atomic_and_round_trips",
+    "status": "partial",
+    "rust_test": "",
+    "notes": "Native equivalent exists but this exact upstream semantic case has no focused automated assertion yet."
+  },
+  {
+    "upstream_test": "test_robustness.ConfigTests.test_failed_save_keeps_the_old_file",
+    "status": "partial",
+    "rust_test": "",
+    "notes": "Native equivalent exists but this exact upstream semantic case has no focused automated assertion yet."
+  }
+]

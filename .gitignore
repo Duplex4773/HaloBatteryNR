@@ -27,3 +27,8 @@ release_notes.md
 
 # Generated version resource (tools/make_version.py)
 version_info.txt
+
+# Rust and local validation artifacts
+/target/
+/*-probe.json
+/validation-local/

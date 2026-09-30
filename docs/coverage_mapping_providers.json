@@ -1,0 +1,1602 @@
+[
+  {
+    "upstream_test": "test_am_infinity.PollTest.test_charge_is_clamped_to_100",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_am_infinity.PollTest.test_junk_frame_is_refused",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_am_infinity.PollTest.test_missing_collection_sends_nothing",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_am_infinity.PollTest.test_only_ffff_0002_gets_the_poll",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_am_infinity.PollTest.test_other_pids_are_ignored",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+  },
+  {
+    "upstream_test": "test_am_infinity.PollTest.test_receiver_reports_the_windows_frame",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_am_infinity.PollTest.test_second_buffer_length_is_tried",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_am_infinity.PollTest.test_silent_receiver_keeps_the_last_value_greyed",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_am_infinity.PollTest.test_unnumbered_frame_reads_byte_2",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_am_infinity.PollTest.test_zero_charge_is_unknown_not_0",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_asus.ParseTest.test_every_model_has_a_known_scale",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_asus.ParseTest.test_other_reports_are_not_levels",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_asus.ParseTest.test_percent",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_asus.ParseTest.test_report_id_in_front",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_asus.ParseTest.test_standby_is_not_empty",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_asus.ParseTest.test_steps",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_button_and_profile_reports_are_skipped",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_cable_and_receiver_share_one_icon",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_error_and_zeros_are_final_answers",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::asus_error_frame_stops_retries_on_optional_zero_prefix",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_error_zeros_and_silence_give_no_icon",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_gladius_iii_aimpoint_issue_81",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_older_model_shows_an_approximate_level",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_only_the_vendor_collection_of_interface_0_is_opened",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_second_request_is_answered",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_asus.PollTest.test_unknown_asus_devices_are_not_opened",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+  },
+  {
+    "upstream_test": "test_audeze_stuck.StuckDongleTests.test_a_headset_that_answers_is_not_stuck",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_audeze_stuck.StuckDongleTests.test_echo_only",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_audeze_stuck.StuckDongleTests.test_first_stuck_poll_shows_nothing",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_audeze_stuck.StuckDongleTests.test_replug_brings_the_level_back_under_the_same_key",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_audeze_stuck.StuckDongleTests.test_second_stuck_poll_shows_the_hint",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_audeze_stuck.StuckDongleTests.test_switched_off_headset_is_not_called_stuck",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_audeze_stuck.ZeroAtPowerOnTests.test_a_real_level_is_shown_at_once",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_audeze_stuck.ZeroAtPowerOnTests.test_switching_off_and_on_starts_a_new_grace_period",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_audeze_stuck.ZeroAtPowerOnTests.test_zero_after_the_grace_period_is_believed",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_audeze_stuck.ZeroAtPowerOnTests.test_zero_right_after_power_on_is_not_a_reading",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_barracuda.PollTest.test_headset_off_shows_the_offline_icon",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_barracuda.ReadBatteryTest.test_failed_query_write_stops_that_query",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_barracuda.ReadBatteryTest.test_failed_write_is_retried_for_remote_mode",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_barracuda.ReadBatteryTest.test_headset_off_costs_one_query_of_reads",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_barracuda.ReadBatteryTest.test_headset_off_skips_the_charging_query",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_barracuda.ReadBatteryTest.test_headset_on",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::barracuda_drains_and_disables_remote_after_matching_both_commands",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_barracuda.ReadBatteryTest.test_receiver_that_rejects_every_write_sends_no_queries",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_blackshark_pa.PollPaTest.test_a_nowake_collection_is_never_cached",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_blackshark_pa.PollPaTest.test_a_working_collection_is_still_reached_after_a_nowake_first",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_blackshark_pa.PollPaTest.test_the_collection_that_speaks_is_remembered_and_the_walk_stops",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_blackshark_pa.ReadBatteryTest.test_a_collection_that_accepts_and_stays_silent_is_offline",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_blackshark_pa.ReadBatteryTest.test_a_collection_that_never_accepts_a_command_is_nowake",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_blackshark_pa.ReadBatteryTest.test_a_path_that_cannot_be_opened_is_fail",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_blackshark_pa.ReadBatteryTest.test_a_reading_is_ok",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::blackshark_queries_wake_and_disable_remote_for_each_command",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_corsair.NxpParseTest.test_a_short_reply_is_refused",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_corsair.NxpParseTest.test_an_empty_reply_is_refused",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_corsair.NxpParseTest.test_an_index_past_the_table_is_refused",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_corsair.NxpParseTest.test_every_index_maps_through_the_five_step_table",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_corsair.NxpParseTest.test_the_label_says_about_and_the_level",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_corsair.NxpParseTest.test_the_report_id_is_tolerated_with_or_without",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_corsair.NxpParseTest.test_the_request_is_the_ckb_next_packet_behind_a_report_id",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::request_sizes_and_checksum",
+    "notes": "Related request checks exist, but this exact upstream request assertion has not been individually audited."
+  },
+  {
+    "upstream_test": "test_corsair.NxpPollTest.test_a_non_ff42_collection_is_not_substituted_when_ff42_exists",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_corsair.NxpPollTest.test_an_empty_dump_entry_set_is_tried_when_ff42_is_missing",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_corsair.NxpPollTest.test_an_index_past_the_table_gives_no_reading",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_corsair.NxpPollTest.test_both_vendor_collections_are_tried_and_the_first_that_answers_wins",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_corsair.NxpPollTest.test_the_dongle_is_shown_as_a_gauge",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_corsair.NxpPollTest.test_the_headset_family_is_untouched",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_corsair.NxpPollTest.test_the_iface_1_collection_is_tried_first",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_corsair.NxpPollTest.test_the_packet_goes_on_the_wire_unchanged",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_corsair.NxpPollTest.test_the_usage_1_collection_wins_on_one_interface",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_eightbitdo.ParseTest.test_level_and_charging_bit",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_eightbitdo.ParseTest.test_zero_and_out_of_range_are_not_levels",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_eightbitdo.ProviderTest.test_enhanced_bluetooth_report_is_read",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_eightbitdo.ProviderTest.test_idle_ordinary_mode_shows_no_level",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_eightbitdo.ProviderTest.test_nothing_is_ever_sent_to_the_controller",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::eightbitdo_is_passive_and_uses_distinct_usb_report_id",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_eightbitdo.ProviderTest.test_other_report_ids_are_ignored",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_eightbitdo.ProviderTest.test_unknown_pid_is_skipped",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+  },
+  {
+    "upstream_test": "test_eightbitdo.ProviderTest.test_unopenable_controller_still_shows_without_level",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_eightbitdo.ProviderTest.test_usb_uses_the_usb_enhanced_report",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::eightbitdo_is_passive_and_uses_distinct_usb_report_id",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_eightbitdo.ProviderTest.test_zero_padded_ordinary_report_is_not_zero_percent",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_gwolves.PollTest.test_charging",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_gwolves.PollTest.test_mouse_on_the_cable_names_the_model_and_wins",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_gwolves.PollTest.test_no_such_collection_sends_nothing",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_gwolves.PollTest.test_only_the_collection_with_the_64_byte_feature_report_gets_the_request",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_gwolves.PollTest.test_other_vendors_ids_are_ignored",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+  },
+  {
+    "upstream_test": "test_gwolves.PollTest.test_receiver_issue_82",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_gwolves.PollTest.test_reply_without_a1_is_not_a_level",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_gwolves.PollTest.test_sleeping_mouse_keeps_its_last_value_greyed",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_gwolves.PollTest.test_the_collection_is_remembered",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_gwolves.TableTest.test_warg_is_known",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture.",
+    "scope": "catalog"
+  },
+  {
+    "upstream_test": "test_hyperx_alpha2.Polling.test_drain_is_capped_and_the_reply_still_arrives",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_hyperx_alpha2.Polling.test_ignores_the_chat_half",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_hyperx_alpha2.Polling.test_missing_collection_writes_nothing",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+  },
+  {
+    "upstream_test": "test_hyperx_alpha2.Polling.test_only_keepalives_ends_in_no_reading",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_hyperx_alpha2.Polling.test_reads_the_level_from_the_controller_collection",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_hyperx_alpha2.Polling.test_survives_a_flooded_queue",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_hyperx_alpha2.ReplyParsing.test_level_above_100_is_refused",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_hyperx_alpha2.ReplyParsing.test_request_shape",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::request_sizes_and_checksum",
+    "notes": "Related request checks exist, but this exact upstream request assertion has not been individually audited."
+  },
+  {
+    "upstream_test": "test_hyperx_alpha2.ReplyParsing.test_short_reply_is_refused",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_hyperx_alpha2.ReplyParsing.test_the_constant_frame_is_not_a_reading",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_hyperx_alpha2.ReplyParsing.test_the_two_captured_levels",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_hyperx_cloud3.WritePath.test_write_accepted",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_hyperx_cloud3.WritePath.test_write_minus_one_and_feature_minus_one",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_hyperx_cloud3.WritePath.test_write_minus_one_other_error_no_fallback",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_hyperx_cloud3.WritePath.test_write_minus_one_then_feature_report_accepted",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_hyperx_cloud3.WritePath.test_write_raises_incorrect_function_then_feature_report",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_hyperx_cloud3.WritePath.test_write_raises_other_error_no_fallback",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lamzu.PollTest.test_cable_is_asked_first_and_wins",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lamzu.PollTest.test_charging",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lamzu.PollTest.test_dongle",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lamzu.PollTest.test_no_such_collection_sends_nothing",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lamzu.PollTest.test_only_interface_2_usage_page_ffff_gets_the_request",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lamzu.PollTest.test_other_pids_are_ignored",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+  },
+  {
+    "upstream_test": "test_lamzu.PollTest.test_sleeping_mouse_keeps_its_last_value_greyed",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_hyzen_on_the_dongle_issue_82",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::lofree_closes_both_transactions_and_requires_online_ack",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_level_out_of_range_is_refused",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_offline_keyboard_gives_no_icon_and_no_battery_request",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_on_the_cable_the_dongle_is_not_read",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_only_the_ff1c_collection_is_opened",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_other_reports_are_skipped",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_silent_keyboard_times_out",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_the_cable_pid_itself_is_not_read",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_lofree.PollTest.test_wrong_offset_is_not_a_level",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.HeadsetTests.test_g535_uses_consumer_collection",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.HeadsetTests.test_g935_charging",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.HeadsetTests.test_headset_inactive_error",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.HeadsetTests.test_headset_off",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.ParseTests.test_parse_battery",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_logitech.ParseTests.test_voltage_curve_ends",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_empty_slot_forgets_old_name",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_error_reply_for_another_app_is_ignored",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_failed_identity_read_is_not_cached",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_hidpp10_device_is_noted",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_late_reply_to_an_earlier_request_is_ignored",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::logitech_matches_tokens_reads_identity_and_reuses_complete_identity",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_mouse_in_slot_1",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_receiver_known_by_product_id",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_silent_device_is_asleep",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_switched_off_keeps_grey_icon",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.ReceiverTests.test_unified_battery_without_percentage",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.SafetyTests.test_ff00_wins_over_ff43_in_any_order",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.SafetyTests.test_ff43_is_used_only_for_known_headsets",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::logitech_unknown_headset_collections_are_never_opened",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_logitech.SafetyTests.test_no_write_to_other_consumer_collections",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.TwoReceiverTests.test_short_and_long_collection_are_one_receiver",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_logitech.TwoReceiverTests.test_two_identical_receivers_get_two_icons",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_nintendo.ParseTest.test_every_battery_byte",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_nintendo.ParseTest.test_level_names",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_nintendo.ParseTest.test_subcommand_packet",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::request_sizes_and_checksum",
+    "notes": "Related request checks exist, but this exact upstream request assertion has not been individually audited."
+  },
+  {
+    "upstream_test": "test_nintendo.ParseTest.test_the_connection_nibble_does_not_change_the_level",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_nintendo.PathTest.test_bluetooth_and_usb_paths",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_full_mode_writes_nothing",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_other_nintendo_devices_are_not_opened",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_packet_counter_counts_up_and_wraps",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_second_try",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_silent_after_a_reading_keeps_the_last_value_greyed_for_a_while",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_silent_controller_gives_no_icon_and_at_most_two_writes",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::nintendo_listens_then_sends_only_two_subcommands_with_wrapping_counter",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_simple_mode_issue_63",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_two_joycons_are_two_icons",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_undefined_level_is_refused",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_nintendo.PollTest.test_usb_is_not_opened",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_bluetooth_already_full_is_read_without_switching",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_bluetooth_and_two_usb_controllers_keep_every_controller",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_bluetooth_basic_mode_does_not_start_the_fast_recheck",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_bluetooth_basic_mode_is_not_switched_by_default",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::playstation_basic_bluetooth_returns_immediately_and_usb_feature_is_read",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_bluetooth_basic_mode_returns_at_once",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::playstation_basic_bluetooth_returns_immediately_and_usb_feature_is_read",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_bluetooth_dualshock4_is_not_switched_either",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_cable_reading_wins_over_basic_bluetooth",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_collections_of_one_usb_controller_stay_one_icon",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_diagnostics_say_why",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_full_mode_setting_switches_and_reads",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_one_usb_controller_keeps_its_old_key",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_two_usb_controller_keys_stay_the_same_between_polls",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_two_usb_controllers_get_two_icons",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_playstation.ProviderTest.test_usb_still_reads_the_feature_report",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::playstation_basic_bluetooth_returns_immediately_and_usb_feature_is_read",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_a_collection_that_cannot_take_the_frame_is_skipped",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::candidate_fallback_and_positive_capacity_selection_are_reference_policies",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_a_device_that_is_not_in_the_table_is_not_queried",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_a_level_above_100_is_refused",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_a_short_reply_is_ignored",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_a_sleeping_dongle_gives_no_device",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_a_wrong_checksum_is_refused",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_an_event_frame_is_skipped_and_the_reply_after_it_is_used",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::pulsar_drains_then_accepts_only_checksum_valid_power_reports",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_an_interface_1_collection_is_used_when_the_control_one_is_absent",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_an_unknown_length_still_qualifies_when_the_control_collection_is_wrong",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::candidate_fallback_and_positive_capacity_selection_are_reference_policies",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_an_unknown_output_length_never_disqualifies_a_collection",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_every_claimed_id_answers_the_same_request",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_captured_hitscan_frames_parse",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_control_collection_is_used_when_its_output_report_fits",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_diagnostic_names_the_output_length",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_hitscan_on_its_cable_is_read",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_hitscan_receiver_is_read",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_power_flag_means_charging",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_r1_pro_max_on_its_cable_is_read",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_r1_pro_max_receiver_is_read",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_request_goes_to_the_first_collection_that_fits_when_there_is_no_control_one",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_request_is_the_17_byte_power_query",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_pulsar.PulsarTest.test_the_vendor_control_collection_is_the_one_that_gets_the_request",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_another_model_keeps_its_greyed_icon",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_cable_hides_the_greyed_receiver_icon",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_devices_not_in_the_table_are_left_alone",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_greyed_icons_alone_are_not_merged",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_receiver_alone_still_keeps_its_greyed_icon",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_second_receiver_of_one_model_keeps_its_greyed_icon",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_the_blackwidow_answers_through_its_own_collection",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.CableTest.test_two_live_mice_of_one_model_keep_two_icons",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.PollRazerTest.test_basilisk_x_hyperspeed_asks_with_ff_first",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.PollRazerTest.test_naga_v2_pro_is_polled",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.PollRazerTest.test_pro_click_v2_vertical_is_not_skipped",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.PollRazerTest.test_pro_click_v2_vertical_issue_58",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.PollRazerTest.test_the_blackwidow_answers_through_its_own_collection",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.PollRazerTest.test_wired_viper_gets_no_request",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+  },
+  {
+    "upstream_test": "test_razer.PollTest.test_the_blackwidow_answers_through_its_own_collection",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer.TableTest.test_every_openrazer_mouse_is_in_the_table",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture.",
+    "scope": "catalog"
+  },
+  {
+    "upstream_test": "test_razer.TableTest.test_every_preferred_tid_is_also_tried_as_a_fallback",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "notes": "Catalog assertions are verified; fallback-list and discovery predicate assertions still need an equivalent Rust scenario.",
+    "scope": "catalog"
+  },
+  {
+    "upstream_test": "test_razer.TableTest.test_left_out_pids_stay_out",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture.",
+    "scope": "catalog"
+  },
+  {
+    "upstream_test": "test_razer.TableTest.test_naga_pro_and_naga_v2_pro_are_different_mice",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "catalog"
+  },
+  {
+    "upstream_test": "test_razer.TableTest.test_the_blackwidow_pro_pair_is_known",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture.",
+    "scope": "catalog"
+  },
+  {
+    "upstream_test": "test_razer.TableTest.test_the_wireless_blackwidow_is_in_the_table",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "notes": "Catalog assertions are verified; fallback-list and discovery predicate assertions still need an equivalent Rust scenario.",
+    "scope": "catalog"
+  },
+  {
+    "upstream_test": "test_razer.TableTest.test_transaction_ids_agree_with_openrazer",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture.",
+    "scope": "catalog"
+  },
+  {
+    "upstream_test": "test_razer.TableTest.test_wired_viper_is_not_in_the_table",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "notes": "Catalog assertions are verified; fallback-list and discovery predicate assertions still need an equivalent Rust scenario.",
+    "scope": "catalog"
+  },
+  {
+    "upstream_test": "test_razer_foreign.ForeignRepliesTest.test_a_normal_mouse_is_asked_once",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer_foreign.ForeignRepliesTest.test_a_second_busy_poll_costs_one_request_round_not_two",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::razer_foreign_responses_cost_three_sends_and_cached_collection_is_reused",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_razer_foreign.ForeignRepliesTest.test_an_answer_to_a_repeated_request_is_read",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer_foreign.ForeignRepliesTest.test_issue_108_is_not_an_online_mouse_without_a_level",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::razer_foreign_responses_cost_three_sends_and_cached_collection_is_reused",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_razer_foreign.ForeignRepliesTest.test_last_level_stays_greyed_while_another_app_holds_the_mouse",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_razer_foreign.ForeignRepliesTest.test_one_collection_one_transaction_id_three_sends",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::razer_foreign_responses_cost_three_sends_and_cached_collection_is_reused",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_razer_foreign.ForeignRepliesTest.test_the_collection_is_kept_for_the_next_poll",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::razer_foreign_responses_cost_three_sends_and_cached_collection_is_reused",
+    "notes": "Corresponding transport/channel/timing/state assertion simulated by a strict fake HID script."
+  },
+  {
+    "upstream_test": "test_steelseries.B0ParserTests.test_new_models_in_table",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::complete_generated_catalog_matches_python_tables",
+    "notes": "Complete generated catalog equality, including every model and preferred transaction ID; original source-table assertions also pass during capture.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_steelseries.B0ParserTests.test_parsers",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Exact upstream pure-parser calls replayed; levels, charging and supplied approximate labels compared.",
+    "scope": "parser"
+  },
+  {
+    "upstream_test": "test_steelseries.ClassicTests.test_arctis1",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.ClassicTests.test_arctis1_off",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.ClassicTests.test_arctis7_2018_connected",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.ClassicTests.test_arctis7_2018_off_does_not_ask_level",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.ClassicTests.test_arctis7_zero_level_is_no_reading",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.ClassicTests.test_arctis9",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.ClassicTests.test_arctis9_off",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.ClassicTests.test_pro_wireless",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.ClassicTests.test_pro_wireless_off",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.ClassicTests.test_remembers_the_collection_that_answered",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.ClassicTests.test_wrong_reply_is_never_a_level",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.Nova7HardwareTests.test_charging",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.Nova7HardwareTests.test_headset_off",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.Nova7HardwareTests.test_headset_switching_on_shows_nothing",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.Nova7HardwareTests.test_on_battery",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.Nova7HardwareTests.test_other_report_first",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.NovaProTests.test_a_stray_report_before_the_reply_is_ignored",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.NovaProTests.test_cable_charging",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.NovaProTests.test_every_step_of_the_nine_step_scale",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.NovaProTests.test_headset_off_gives_no_reading",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.NovaProTests.test_interface_3_is_accepted_too",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.NovaProTests.test_level_code_above_8_is_refused",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.NovaProTests.test_only_vendor_collections_get_the_request",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+  },
+  {
+    "upstream_test": "test_steelseries.NovaProTests.test_short_reply_is_refused",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.NovaProTests.test_the_nova_7_path_is_untouched_beside_it",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.NovaProTests.test_the_request_is_06_b0",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.NovaProTests.test_the_state_byte_is_the_gate",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.NovaProTests.test_the_x_station_is_recognised",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.SafetyTests.test_arctis1_needs_its_documented_collection",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.SafetyTests.test_classic_never_writes_to_standard_collections",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.SafetyTests.test_gamedac_is_not_polled",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.SafetyTests.test_nova_needs_ffc0",
+    "status": "partial",
+    "rust_test": null,
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries.SafetyTests.test_unknown_product_gets_nothing",
+    "status": "mapped",
+    "rust_test": "crates/providers/tests/provider_io.rs::unknown_product_ids_and_wrong_strict_collections_never_get_commands",
+    "notes": "All HID families reject unknown products; strict collection families reject invalid collections before opening or sending."
+  },
+  {
+    "upstream_test": "test_steelseries_aerox.AeroxTest.test_aerox_9_issue_79",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries_aerox.AeroxTest.test_charging_bit",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries_aerox.AeroxTest.test_every_aerox_5_and_9_model_uses_the_d2_exchange",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries_aerox.AeroxTest.test_level_zero_is_off_not_empty",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries_aerox.AeroxTest.test_real_aerox_9_reply_issue_79",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  },
+  {
+    "upstream_test": "test_steelseries_aerox.AeroxTest.test_rivalcfg_level_formula_for_all_steps",
+    "status": "partial",
+    "rust_test": "crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures",
+    "notes": "Pure parser evidence alone does not establish this upstream polling/state/diagnostic assertion. Additional scenario audit remains."
+  }
+]

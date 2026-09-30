@@ -1,0 +1,152 @@
+[
+  {
+    "upstream_test": "test_robustness.TempFolderTests.test_copy_in_temp_is_detected",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/system.rs::tests::temporary_executable_copy_and_directory_boundaries",
+    "notes": "Startup rejects canonical exe paths under TEMP/TMP before registry access; test exercises temp and non-temp path boundaries without registry writes."
+  },
+  {
+    "upstream_test": "test_robustness.TempFolderTests.test_copy_elsewhere_is_not",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/system.rs::tests::temporary_executable_copy_and_directory_boundaries",
+    "notes": "Startup rejects canonical exe paths under TEMP/TMP before registry access; test exercises temp and non-temp path boundaries without registry writes."
+  },
+  {
+    "upstream_test": "test_robustness.TempFolderTests.test_autostart_is_not_set_from_temp",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/system.rs::tests::temporary_executable_copy_and_directory_boundaries",
+    "notes": "Startup rejects canonical exe paths under TEMP/TMP before registry access; test exercises temp and non-temp path boundaries without registry writes."
+  },
+  {
+    "upstream_test": "test_hidlist.HidlistTest.test_a_short_list_is_re_read_and_the_missing_collection_comes_back",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/transport.rs::cache_tests::short_list_immediate_retry_recovers_missing_collection",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_hidlist.HidlistTest.test_a_permanently_short_list_is_re_read_once_then_rate_limited",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/transport.rs::cache_tests::permanently_short_list_retries_once_then_rate_limited",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_hidlist.HidlistTest.test_a_complete_list_is_still_cached",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/transport.rs::cache_tests::complete_list_is_cached_then_ttl_expires",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_hidlist.HidlistTest.test_paths_for_counts_the_vendors_present_interfaces",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/transport.rs::cache_tests::vendor_path_census_keeps_usb_and_bluetooth_vendor_boundaries",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_hidlist.HidlistTest.test_the_short_retry_is_well_clear_of_the_poll_interval",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/transport.rs::cache_tests::permanently_short_list_retries_once_then_rate_limited",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_bluetooth_watcher.WatcherTest.test_a_wedged_child_is_killed_and_counted",
+    "status": "intentional_difference",
+    "rust_test": "crates/windows/src/platform.rs::native_query_tests::native_stalled_query_is_cancelled_within_three_seconds",
+    "notes": "PowerShell watcher is retired. Native async waits cancel within three seconds or poll deadline, surface failures distinctly, and retry via native provider schedule/events. Arrival 0/3/8/15-second and minute refresh tested in scheduling_tests::arrival_retries_and_minute_refresh."
+  },
+  {
+    "upstream_test": "test_bluetooth_watcher.WatcherTest.test_a_stall_limit_of_one_gives_up_so_the_app_falls_back",
+    "status": "intentional_difference",
+    "rust_test": "crates/windows/src/platform.rs::native_query_tests::native_query_failure_is_not_an_empty_success",
+    "notes": "PowerShell watcher is retired. Native async waits cancel within three seconds or poll deadline, surface failures distinctly, and retry via native provider schedule/events. Arrival 0/3/8/15-second and minute refresh tested in scheduling_tests::arrival_retries_and_minute_refresh."
+  },
+  {
+    "upstream_test": "test_bluetooth_watcher.WatcherTest.test_a_healthy_child_is_neither_killed_nor_counted",
+    "status": "intentional_difference",
+    "rust_test": "crates/windows/src/platform.rs::native_query_tests::healthy_native_query_completes_without_restart_or_cancel",
+    "notes": "PowerShell watcher is retired. Native async waits cancel within three seconds or poll deadline, surface failures distinctly, and retry via native provider schedule/events. Arrival 0/3/8/15-second and minute refresh tested in scheduling_tests::arrival_retries_and_minute_refresh."
+  },
+  {
+    "upstream_test": "test_bluetooth_watcher.WatcherTest.test_the_timeout_clears_the_scripts_own_cadence",
+    "status": "intentional_difference",
+    "rust_test": "crates/windows/src/platform.rs::native_query_tests::native_query_honors_shorter_deadline_and_suspend_cancel",
+    "notes": "PowerShell watcher is retired. Native async waits cancel within three seconds or poll deadline, surface failures distinctly, and retry via native provider schedule/events. Arrival 0/3/8/15-second and minute refresh tested in scheduling_tests::arrival_retries_and_minute_refresh."
+  },
+  {
+    "upstream_test": "test_xinput.XboxBluetoothTest.test_issue_108_no_ten_percent",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/platform.rs::controller_tests::xbox_bluetooth_capacity_is_not_false_ten_percent",
+    "notes": "Native WGI report interpretation covered; physical GameSir/Xbox hardware not attached or verified."
+  },
+  {
+    "upstream_test": "test_xinput.XboxBluetoothTest.test_every_bluetooth_id",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/platform.rs::controller_tests::every_xbox_bluetooth_pid_ignores_unreliable_capacity",
+    "notes": "Native WGI report interpretation covered; physical GameSir/Xbox hardware not attached or verified."
+  },
+  {
+    "upstream_test": "test_xinput.XboxBluetoothTest.test_usb_and_adapter_ids_keep_their_level",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/platform.rs::controller_tests::xbox_usb_and_adapter_capacity_remains_exact",
+    "notes": "Native WGI report interpretation covered; physical GameSir/Xbox hardware not attached or verified."
+  },
+  {
+    "upstream_test": "test_xinput.XboxBluetoothTest.test_another_vendor_with_a_bluetooth_id_number_keeps_its_level",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/platform.rs::controller_tests::gamesir_same_pid_number_is_not_xbox_bluetooth",
+    "notes": "Native WGI report interpretation covered; physical GameSir/Xbox hardware not attached or verified."
+  },
+  {
+    "upstream_test": "test_xinput.XboxBluetoothTest.test_bluetooth_entry_is_dropped_when_the_bluetooth_reading_is_on",
+    "status": "intentional_difference",
+    "rust_test": "crates/core/tests/ported_behaviour.rs::controller_bluetooth_preferred_only_with_proven_live_identity",
+    "notes": "Controller entries merge only with proven serial/container identity and a live known Bluetooth percentage; names/count/list positions never prove identity."
+  },
+  {
+    "upstream_test": "test_xinput_wired.WiredButDischargingTest.test_issue_110_not_on_cable",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/platform.rs::controller_tests::discharging_dongle_cannot_invent_full_or_charging",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_xinput_wired.WiredButDischargingTest.test_genuine_wired_xbox_with_charging_report_unchanged",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/platform.rs::controller_tests::genuine_wgi_wired_charging_uses_reported_percentage",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_xinput_wired.WiredButDischargingTest.test_wireless_xinput_level_unchanged",
+    "status": "mapped",
+    "rust_test": "crates/windows/src/platform.rs::controller_tests::wireless_coarse_steps_and_unknown_types_are_explicit",
+    "notes": ""
+  },
+  {
+    "upstream_test": "test_xinput_wired.WiredButDischargingTest.test_wired_without_wgi_report_unchanged",
+    "status": "intentional_difference",
+    "rust_test": "crates/windows/src/platform.rs::controller_tests::wired_without_wgi_does_not_invent_full_or_charging",
+    "notes": "XInput wired type can describe a wireless receiver; preserve connected slot with unknown battery/charging instead of inventing 100% and charging."
+  },
+  {
+    "upstream_test": "test_xinput_wired.WiredButDischargingTest.test_wired_when_wgi_unavailable_unchanged",
+    "status": "intentional_difference",
+    "rust_test": "crates/windows/src/platform.rs::controller_tests::wired_without_wgi_does_not_invent_full_or_charging",
+    "notes": "XInput wired type can describe a wireless receiver; preserve connected slot with unknown battery/charging instead of inventing 100% and charging."
+  },
+  {
+    "upstream_test": "test_xinput_wired.WiredButDischargingTest.test_other_vendor_wgi_without_battery_report_unchanged",
+    "status": "intentional_difference",
+    "rust_test": "crates/windows/src/platform.rs::controller_tests::wired_without_wgi_does_not_invent_full_or_charging",
+    "notes": "XInput wired type can describe a wireless receiver; preserve connected slot with unknown battery/charging instead of inventing 100% and charging."
+  },
+  {
+    "upstream_test": "test_xinput_wired.WiredButDischargingTest.test_other_vendor_wgi_charging_unchanged",
+    "status": "intentional_difference",
+    "rust_test": "crates/windows/src/platform.rs::controller_tests::untrusted_vendor_can_report_charging_without_fake_level",
+    "notes": "WGI charging status remains usable for untrusted capacity vendors; do not invent a percentage or pair report to an XInput slot by position/count."
+  },
+  {
+    "upstream_test": "test_xinput_wired.WiredButDischargingTest.test_report_count_mismatch_unchanged",
+    "status": "intentional_difference",
+    "rust_test": "crates/windows/src/platform.rs::controller_tests::all_xinput_slots_keep_distinct_keys_and_unknown_reports",
+    "notes": "Keep every XInput slot identity; never infer cable charging from slot battery type or use count equality to pair unrelated WGI reports."
+  }
+]
