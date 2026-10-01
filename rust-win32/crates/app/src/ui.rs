@@ -881,9 +881,27 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 s.sync_trays(TrayUpdate::Redraw);
                 LRESULT(0)
             }
+            WM_PRINTCLIENT => {
+                if Some(hwnd) == s.dashboard
+                    && let Some(theme) = &s.theme
+                {
+                    let mut rect = RECT::default();
+                    let _ = GetClientRect(hwnd, &mut rect);
+                    FillRect(HDC(wp.0 as *mut _), &rect, theme.background_brush());
+                }
+                LRESULT(0)
+            }
             WM_PAINT => {
                 let mut ps = PAINTSTRUCT::default();
-                BeginPaint(hwnd, &mut ps);
+                let hdc = BeginPaint(hwnd, &mut ps);
+                // BeginPaint can synchronously request background erasure while
+                // State is borrowed. Paint the palette ourselves rather than
+                // leaving the class's default system brush on screen.
+                if Some(hwnd) == s.dashboard
+                    && let Some(theme) = &s.theme
+                {
+                    FillRect(hdc, &ps.rcPaint, theme.background_brush());
+                }
                 if Some(hwnd) == s.dashboard && s.page == 2 {
                     let mut r = RECT::default();
                     let _ = GetClientRect(hwnd, &mut r);
@@ -3084,6 +3102,7 @@ mod dashboard_lifecycle_tests {
                 hInstance: instance.into(),
                 lpszClassName: class,
                 hCursor: LoadCursorW(None, IDC_ARROW).unwrap(),
+                hbrBackground: HBRUSH((COLOR_WINDOW.0 + 1) as usize as *mut _),
                 ..Default::default()
             };
             assert_ne!(RegisterClassW(&wc), 0);
@@ -3208,6 +3227,15 @@ mod dashboard_lifecycle_tests {
                         GetPixel(dc, width - 8, height - 8),
                         expected,
                         "page {page}, dark={dark}"
+                    );
+                    // Exercise the real print/client paint route, not only an
+                    // explicit erase message with a forced palette.
+                    FillRect(dc, &client, HBRUSH((COLOR_WINDOW.0 + 1) as usize as *mut _));
+                    send(reopened, WM_PRINTCLIENT, WPARAM(dc.0 as usize), LPARAM(0));
+                    assert_eq!(
+                        GetPixel(dc, 0, 0),
+                        expected,
+                        "client paint page {page}, dark={dark}"
                     );
                     if std::env::var_os("HALO_CAPTURE_DASHBOARD_TEST").is_some() {
                         send(

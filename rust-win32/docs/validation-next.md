@@ -4,7 +4,35 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
-## Dashboard lifecycle, appearance and warning checkpoint, 1 October 2026
+## Automatic appearance correction, 1 October 2026
+
+The user's report exposed two gaps in the earlier appearance validation: the
+dashboard read the nonexistent `AppsUsesLightTheme` instead of Windows
+`AppsUseLightTheme`, and the native class's white brush could overwrite its
+background during nested `BeginPaint` erasure. Both are corrected. High-contrast
+detection also now supplies the documented structure size to the native query.
+
+Formatting, strict workspace Clippy, the release build and **380 Rust tests**
+pass; one optional timing test remains ignored. A volatile, isolated registry
+fixture verifies all four combinations of app/system appearance and missing
+values/keys. Fixture value names are independent of production selectors, so
+the original spelling error fails the regression. Native palette tests now
+exercise client painting with the production class brush, as well as explicit
+erasure. These tests never change Windows appearance preferences.
+
+The native dashboard's rendered background matches the machine's actual Windows
+app preference at opening and after a settings-change message. Visual inspection
+confirms the dark titlebar, background, controls and text. Existing keyboard,
+history, settings, simulated polling and repeated titlebar-close checks pass.
+Forty dark dashboard close/reopen cycles retained **43 USER / 107 GDI** handles
+at cycles 1, 20 and 40; forty Insights cycles retained **14 / 20**. Samples now
+wait for child-window teardown after the parent disappears from enumeration,
+then synchronize with the monitor. The resource-growth assertion is unchanged.
+The portable executable remains **2,705,408 bytes (2.58 MiB)**, SHA256
+`556E7E29D72CA2E477BBE1FCC54176E991B750595367B81713557D409D4C69A6`.
+Production API/import restrictions and source/release privacy checks pass.
+
+## Earlier dashboard lifecycle, appearance and warning checkpoint, 1 October 2026
 
 Formatting, strict workspace Clippy, the optimized release build and **379 Rust
 tests** pass locally; one existing optional timing test remains ignored. The

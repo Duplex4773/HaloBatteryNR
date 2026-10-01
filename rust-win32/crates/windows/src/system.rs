@@ -159,11 +159,13 @@ pub fn is_startup() -> bool {
     }) == ERROR_SUCCESS
 }
 pub fn dark_theme() -> bool {
-    theme_value(w!("SystemUsesLightTheme"))
+    theme_value(SYSTEM_LIGHT_THEME)
 }
+const SYSTEM_LIGHT_THEME: windows::core::PCWSTR = w!("SystemUsesLightTheme");
+const APPS_LIGHT_THEME: windows::core::PCWSTR = w!("AppsUseLightTheme");
 /// Windows app appearance can differ from the taskbar/system appearance.
 pub fn dashboard_dark_theme() -> bool {
-    !high_contrast() && theme_value(w!("AppsUsesLightTheme"))
+    !high_contrast() && theme_value(APPS_LIGHT_THEME)
 }
 pub fn high_contrast() -> bool {
     let mut contrast = HIGHCONTRASTW {
@@ -173,7 +175,7 @@ pub fn high_contrast() -> bool {
     unsafe {
         SystemParametersInfoW(
             SPI_GETHIGHCONTRAST,
-            0,
+            size_of::<HIGHCONTRASTW>() as u32,
             Some((&mut contrast as *mut HIGHCONTRASTW).cast()),
             SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
         )
@@ -182,20 +184,26 @@ pub fn high_contrast() -> bool {
     }
 }
 fn theme_value(name: windows::core::PCWSTR) -> bool {
+    theme_value_at(
+        w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
+        name,
+    )
+}
+fn theme_value_at(subkey: windows::core::PCWSTR, name: windows::core::PCWSTR) -> bool {
     let mut data = 1u32;
     let mut size = 4;
-    unsafe {
-        let _ = RegGetValueW(
+    let result = unsafe {
+        RegGetValueW(
             HKEY_CURRENT_USER,
-            w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
+            subkey,
             name,
             RRF_RT_REG_DWORD,
             None,
             Some((&mut data as *mut u32).cast()),
             Some(&mut size),
-        );
-    }
-    data == 0
+        )
+    };
+    result == ERROR_SUCCESS && data == 0
 }
 fn gaming_notification_state(state: QUERY_USER_NOTIFICATION_STATE) -> bool {
     matches!(
@@ -369,6 +377,78 @@ fn is_mydockfinder(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn app_and_system_theme_preferences_are_independent_and_default_light() {
+        use windows::core::PCWSTR;
+        struct TestKey(Vec<u16>);
+        impl Drop for TestKey {
+            fn drop(&mut self) {
+                unsafe {
+                    let _ = RegDeleteTreeW(HKEY_CURRENT_USER, PCWSTR(self.0.as_ptr()));
+                }
+            }
+        }
+        let cleanup = TestKey(wide(&format!(
+            "Software\\HaloBatteryNext.Tests\\Theme.{}.{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        )));
+        let subkey = PCWSTR(cleanup.0.as_ptr());
+        let mut handle = HKEY::default();
+        assert_eq!(
+            unsafe {
+                RegCreateKeyExW(
+                    HKEY_CURRENT_USER,
+                    subkey,
+                    None,
+                    None,
+                    REG_OPTION_VOLATILE,
+                    KEY_SET_VALUE,
+                    None,
+                    &mut handle,
+                    None,
+                )
+            },
+            ERROR_SUCCESS
+        );
+        let key = RegistryKey(handle);
+        assert!(!theme_value_at(subkey, APPS_LIGHT_THEME));
+        assert!(!theme_value_at(subkey, SYSTEM_LIGHT_THEME));
+        for (apps, system) in [(0u32, 1u32), (1, 0), (0, 0), (1, 1)] {
+            // Fixture names are independent of the production selectors, so a
+            // spelling mistake cannot silently pass by writing the same typo.
+            for (name, value) in [
+                (w!("AppsUseLightTheme"), apps),
+                (w!("SystemUsesLightTheme"), system),
+            ] {
+                assert_eq!(
+                    unsafe {
+                        RegSetKeyValueW(
+                            key.0,
+                            None,
+                            name,
+                            REG_DWORD.0,
+                            Some((&value as *const u32).cast()),
+                            size_of::<u32>() as u32,
+                        )
+                    },
+                    ERROR_SUCCESS
+                );
+            }
+            assert_eq!(theme_value_at(subkey, APPS_LIGHT_THEME), apps == 0);
+            assert_eq!(theme_value_at(subkey, SYSTEM_LIGHT_THEME), system == 0);
+        }
+        drop(key);
+        assert_eq!(
+            unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, subkey) },
+            ERROR_SUCCESS
+        );
+        assert!(!theme_value_at(subkey, APPS_LIGHT_THEME));
+        assert!(!theme_value_at(subkey, SYSTEM_LIGHT_THEME));
+    }
     #[test]
     fn singleton_reports_already_running_and_releases_owned_handle() {
         use windows::core::PCWSTR;

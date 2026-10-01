@@ -35,10 +35,13 @@ exiting monitoring; stale destruction notifications cannot retire a recreated
 dashboard. See the documented [default window procedure](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-defwindowprocw)
 and [window-handle validity](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-iswindow).
 
-Dashboard appearance reads Windows `AppsUsesLightTheme`, separately from the
+Dashboard appearance reads Windows `AppsUseLightTheme`, separately from the
 taskbar's `SystemUsesLightTheme`. Settings/theme/system-color messages update
 owned GDI brushes, native controls and Direct2D colors without rebuilding unsaved
 edits. High contrast uses Windows system colors and native contrast behavior.
+Failed preference reads default to light. Background painting explicitly fills
+the dirty rectangle after `BeginPaint`, whose nested erase request can occur
+while UI state is borrowed. Client printing uses the same owned palette brush.
 The titlebar uses documented [DWM attributes](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwmwindowattribute);
 native control painting uses documented subclass, owner-draw and control-color
 messages, retaining Windows keyboard, focus and accessibility behavior. No

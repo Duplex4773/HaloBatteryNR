@@ -13,6 +13,10 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 public static class HaloShot {
+ [StructLayout(LayoutKind.Sequential)] public struct Contrast { public uint size; public uint flags; public IntPtr scheme; }
+ [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint action,uint size,ref Contrast value,uint flags);
+ public static bool HighContrast(){var c=new Contrast();c.size=(uint)Marshal.SizeOf<Contrast>();return SystemParametersInfo(66,c.size,ref c,0)&&(c.flags&1)!=0;}
+ public static int Background(IntPtr window){using(var bitmap=new Bitmap(16,16)){using(var g=Graphics.FromImage(bitmap)){var dc=g.GetHdc();try{if(!PrintWindow(window,dc,1))throw new InvalidOperationException("Client print failed");}finally{g.ReleaseHdc(dc);}}return bitmap.GetPixel(0,0).ToArgb()&0xffffff;}}
  [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpi);
  [DllImport("user32.dll")] public static extern uint GetGuiResources(IntPtr p,uint kind);
  public static int TargetPid;
@@ -54,6 +58,14 @@ $p.Refresh();$cold=@{user=[HaloShot]::GetGuiResources($p.Handle,1);gdi=[HaloShot
 Start-Sleep -Seconds 2
 $dashboard=[HaloShot]::FindWindow($null,'Halo Battery Next')
 if($dashboard -eq [IntPtr]::Zero){throw 'Missing dashboard'}
+$appsLight=(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' -ErrorAction SilentlyContinue).AppsUseLightTheme
+if(![HaloShot]::HighContrast()){
+ $expected=if($null-ne$appsLight-and$appsLight-eq0){0x202020}else{0xfafafa}
+ if([HaloShot]::Background($dashboard)-ne$expected){throw 'Automatic dashboard palette does not match the Windows app preference'}
+ [HaloShot]::PostMessage($dashboard,26,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 200
+ if([HaloShot]::Background($dashboard)-ne$expected){throw 'Settings change did not retain the automatic app palette'}
+ Write-Output 'Automatic native dashboard palette matches the live Windows app preference on open and settings change; system preferences were read only.'
+}
 foreach($page in 1..3){[HaloShot]::PostMessage($dashboard,273,[UIntPtr]$page,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 350;[HaloShot]::Save($dashboard,(Join-Path $folder "$page.png"))}
 # Native history defaults to awake usage; both modes preserve their own ranges.
 [HaloShot]::PostMessage($dashboard,273,[UIntPtr]2,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 250
@@ -194,7 +206,26 @@ Write-Output 'Visual orange warning threshold persists independently of low-aler
 [HaloShot]::PostMessage($monitor,32777,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 200
 if([HaloShot]::FindWindow($null,'Halo Battery Next')-ne[IntPtr]::Zero){throw 'Dashboard did not close'}
 if([HaloShot]::FindWindow($null,'Halo Battery Next monitor')-eq[IntPtr]::Zero){throw 'Monitor lost on dashboard close'}
- $samples=@{};foreach($cycle in 1..40){[HaloShot]::PostMessage($monitor,32776,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 80;$d=[HaloShot]::FindWindow($null,'Halo Battery Next');[HaloShot]::PostMessage($d,273,[UIntPtr]2,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 80;[HaloShot]::PostMessage($d,273,[UIntPtr]3,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 60;[HaloShot]::PostMessage($d,274,[UIntPtr]61536,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 80;if([HaloShot]::FindWindow($null,'Halo Battery Next')-ne[IntPtr]::Zero){throw 'Titlebar close did not release dashboard'};if($cycle -in 1,20,40){$p.Refresh();$samples["$cycle"]=@{user=[HaloShot]::GetGuiResources($p.Handle,1);gdi=[HaloShot]::GetGuiResources($p.Handle,0);private=$p.PrivateMemorySize64}}}
+$samples=@{}
+foreach($cycle in 1..40){
+ [HaloShot]::PostMessage($monitor,32776,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
+ $deadline=[DateTime]::UtcNow.AddSeconds(5)
+ do{Start-Sleep -Milliseconds 20;$d=[HaloShot]::FindWindow($null,'Halo Battery Next')}while($d-eq[IntPtr]::Zero-and[DateTime]::UtcNow-lt$deadline)
+ if($d-eq[IntPtr]::Zero){throw "Dashboard did not reopen at cycle $cycle"}
+ [HaloShot]::PostMessage($d,273,[UIntPtr]2,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 80
+ [HaloShot]::PostMessage($d,273,[UIntPtr]3,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 60
+ [HaloShot]::PostMessage($d,274,[UIntPtr]61536,[IntPtr]::Zero)|Out-Null
+ $deadline=[DateTime]::UtcNow.AddSeconds(5)
+ do{Start-Sleep -Milliseconds 20;$d=[HaloShot]::FindWindow($null,'Halo Battery Next')}while($d-ne[IntPtr]::Zero-and[DateTime]::UtcNow-lt$deadline)
+ if($d-ne[IntPtr]::Zero){throw "Titlebar close did not release dashboard at cycle $cycle"}
+ if($cycle -in 1,20,40){
+  # Enumeration can stop seeing the parent while DestroyWindow still retires
+  # its children. Measure after teardown, not during that intermediate state.
+  Start-Sleep -Milliseconds 300
+  [HaloShot]::SendMessage($monitor,0,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
+  $p.Refresh();$samples["$cycle"]=@{user=[HaloShot]::GetGuiResources($p.Handle,1);gdi=[HaloShot]::GetGuiResources($p.Handle,0);private=$p.PrivateMemorySize64}
+ }
+}
 @{cold=$cold;cycles=$samples}|ConvertTo-Json -Depth 5|Set-Content (Join-Path $folder 'resource-cycles.json')
 if($samples['40'].gdi-gt$samples['1'].gdi-or$samples['40'].user-gt($samples['1'].user+2)){throw 'Native resources grew after the warm dashboard lifecycle baseline'}
 Write-Output ($samples|ConvertTo-Json -Depth 5)
