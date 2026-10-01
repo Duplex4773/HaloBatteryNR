@@ -226,9 +226,17 @@ foreach($cycle in 1..40){
   $p.Refresh();$samples["$cycle"]=@{user=[HaloShot]::GetGuiResources($p.Handle,1);gdi=[HaloShot]::GetGuiResources($p.Handle,0);private=$p.PrivateMemorySize64}
  }
 }
-@{cold=$cold;cycles=$samples}|ConvertTo-Json -Depth 5|Set-Content (Join-Path $folder 'resource-cycles.json')
+$settled=@()
+$closedSeconds=0
+foreach($pause in 5,5,10){
+ Start-Sleep -Seconds $pause;$closedSeconds+=$pause
+ $p.Refresh();$settled+=@{closed_seconds=$closedSeconds;user=[HaloShot]::GetGuiResources($p.Handle,1);gdi=[HaloShot]::GetGuiResources($p.Handle,0);private=$p.PrivateMemorySize64}
+}
+@{cold=$cold;cycles=$samples;settled=$settled}|ConvertTo-Json -Depth 5|Set-Content (Join-Path $folder 'resource-cycles.json')
 if($samples['40'].gdi-gt$samples['1'].gdi-or$samples['40'].user-gt($samples['1'].user+2)){throw 'Native resources grew after the warm dashboard lifecycle baseline'}
 Write-Output ($samples|ConvertTo-Json -Depth 5)
+Write-Output 'Closed-dashboard private memory after 5,10,20 seconds (includes native renderer/COM cache settling):'
+Write-Output ($settled|ConvertTo-Json -Depth 5)
 # A duplicate background launch is quiet; a normal launch opens the same monitor.
 $quietLaunch=Start-Process $exe -ArgumentList @('--background','--simulate','--data-dir',"`"$folder`"") -PassThru -WindowStyle Hidden
 if(!$quietLaunch.WaitForExit(10000)-or$quietLaunch.ExitCode-ne0){throw 'Background duplicate launch did not exit cleanly'}

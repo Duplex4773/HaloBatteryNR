@@ -304,6 +304,8 @@ impl BluetoothProvider {
             }
         }
         self.links.retain(|mac, _| nodes.contains_key(mac));
+        self.link_status
+            .retain(|mac, _| self.links.contains_key(mac));
         let mut out = Vec::new();
         self.diagnostics.clear();
         for (mac, node) in nodes {
@@ -388,11 +390,15 @@ impl BatteryProvider for BluetoothProvider {
         let now = c.clock.monotonic();
         for (mac, link) in &self.links {
             let status = link.connected().ok();
-            if self
-                .link_status
-                .insert(mac.clone(), status)
-                .is_some_and(|old| old != status)
-            {
+            let changed = if let Some(previous) = self.link_status.get_mut(mac) {
+                let changed = *previous != status;
+                *previous = status;
+                changed
+            } else {
+                self.link_status.insert(mac.clone(), status);
+                false
+            };
+            if changed {
                 self.changed.store(true, Ordering::Relaxed);
             }
         }

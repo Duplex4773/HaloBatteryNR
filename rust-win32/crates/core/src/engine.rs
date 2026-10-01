@@ -84,7 +84,10 @@ impl Engine {
             .filter(|r| {
                 r.key == key
                     || serial.as_ref().is_some_and(|s| {
-                        r.serial.as_deref().and_then(trusted_identity).as_ref() == Some(s)
+                        r.serial
+                            .as_deref()
+                            .and_then(trusted_identity)
+                            .is_some_and(|other| other.eq_ignore_ascii_case(s))
                     })
             })
             .map(|r| r.key.clone())
@@ -320,31 +323,36 @@ impl Engine {
         ready
     }
     pub fn readings(&self) -> Vec<Reading> {
-        let all: Vec<_> = self
+        let all = self
             .by_provider
             .iter()
             .filter(|(p, _)| self.settings.enabled(p))
-            .flat_map(|(_, r)| r.iter().cloned())
-            .collect();
-        let mut kept: Vec<Reading> = Vec::new();
-        for r in &all {
+            .flat_map(|(_, r)| r.iter());
+        let mut kept: Vec<&Reading> = Vec::new();
+        for r in all.clone() {
             let identity = |a: &Reading, b: &Reading| {
                 (a.container
                     .as_deref()
                     .and_then(trusted_identity)
                     .is_some_and(|id| {
-                        b.container.as_deref().and_then(trusted_identity).as_ref() == Some(&id)
+                        b.container
+                            .as_deref()
+                            .and_then(trusted_identity)
+                            .is_some_and(|other| other.eq_ignore_ascii_case(id))
                     }))
                     || (a
                         .serial
                         .as_deref()
                         .and_then(trusted_identity)
                         .is_some_and(|id| {
-                            b.serial.as_deref().and_then(trusted_identity).as_ref() == Some(&id)
+                            b.serial
+                                .as_deref()
+                                .and_then(trusted_identity)
+                                .is_some_and(|other| other.eq_ignore_ascii_case(id))
                         }))
             };
             if r.source == "bluetooth"
-                && all.iter().any(|o| {
+                && all.clone().any(|o| {
                     o.source != "bluetooth"
                         && o.source != "xinput"
                         && o.online()
@@ -356,7 +364,7 @@ impl Engine {
             }
             if r.source == "xinput"
                 && r.via == "bluetooth"
-                && all.iter().any(|o| {
+                && all.clone().any(|o| {
                     o.source == "bluetooth"
                         && o.kind == "gamepad"
                         && o.online()
@@ -371,14 +379,14 @@ impl Engine {
                     && (!kept[i].online()
                         || (r.level.is_some() && (kept[i].level.is_none() || r.via == "usb")))
                 {
-                    kept[i] = r.clone();
+                    kept[i] = r;
                 }
             } else {
-                kept.push(r.clone());
+                kept.push(r);
             }
         }
         kept.sort_by(|a, b| a.key.cmp(&b.key));
-        kept
+        kept.into_iter().cloned().collect()
     }
     pub fn snapshot(&self, timestamp: i64) -> Snapshot {
         Snapshot {
@@ -449,10 +457,12 @@ impl Engine {
     }
 }
 
-fn trusted_identity(value: &str) -> Option<String> {
-    let normalized = value.trim().to_ascii_uppercase();
+fn trusted_identity(value: &str) -> Option<&str> {
+    let normalized = value.trim();
     if normalized.is_empty()
-        || matches!(normalized.as_str(), "UNKNOWN" | "NONE" | "N/A" | "NULL")
+        || ["UNKNOWN", "NONE", "N/A", "NULL"]
+            .iter()
+            .any(|placeholder| normalized.eq_ignore_ascii_case(placeholder))
         || normalized
             .chars()
             .filter(|c| c.is_ascii_alphanumeric())

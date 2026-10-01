@@ -183,6 +183,32 @@ impl Events {
         r
     }
 }
+fn update_diagnostics(
+    diagnostics: &mut BTreeMap<String, Vec<String>>,
+    key: String,
+    value: Vec<String>,
+) -> bool {
+    if diagnostics.get(&key) == Some(&value) {
+        return false;
+    }
+    diagnostics.insert(key, value);
+    true
+}
+fn publish_diagnostics(
+    events: &Events,
+    diagnostics: &BTreeMap<String, Vec<String>>,
+    dirty: &mut bool,
+) {
+    // Keep the pending update on backpressure; a later pass retries it.
+    if *dirty
+        && !events.tx.is_full()
+        && events
+            .try_send(Event::Diagnostics(diagnostics.clone()))
+            .is_ok()
+    {
+        *dirty = false;
+    }
+}
 pub(crate) struct ControlPermission {
     enabled: AtomicBool,
     epoch: AtomicU64,
@@ -887,6 +913,7 @@ fn run(
         providers.keys().map(|id| (*id, Instant::now())).collect();
     let mut invalidated = BTreeSet::new();
     let mut diagnostics = BTreeMap::new();
+    let mut diagnostics_dirty = true;
     let mut control_cancel = Arc::new(AtomicBool::new(!engine.settings.polling_controls));
     let mut simulated_rate = PollingRate::try_from(1000).unwrap();
     let mut observed_rates = BTreeMap::new();
@@ -1152,7 +1179,8 @@ fn run(
             Work::Completed(Ok(WorkerCompleted::Battery(r))) => {
                 inflight = inflight.saturating_sub(1);
                 let id = r.provider.id();
-                diagnostics.insert(id.to_string(), r.provider.diagnostics());
+                diagnostics_dirty |=
+                    update_diagnostics(&mut diagnostics, id.to_string(), r.provider.diagnostics());
                 for n in engine.apply(id, r.result, clock.monotonic().as_secs_f64(), quiet) {
                     let _ = events.send(Event::Alert(n));
                 }
@@ -1241,7 +1269,8 @@ fn run(
                     engine.reset_estimate(&outcome.key);
                     let _ = storage.send(Storage::State(engine.estimator.clone()));
                 }
-                diagnostics.insert(
+                diagnostics_dirty |= update_diagnostics(
+                    &mut diagnostics,
                     "polling_controls".into(),
                     vec![format!(
                         "request {}: {}",
@@ -1270,11 +1299,13 @@ fn run(
             Work::Completed(Err(_)) | Work::Idle => {}
         }
         let snapshot = engine.snapshot(clock.unix());
-        let _ = events.try_send(Event::Snapshot(snapshot.clone()));
-        let _ = events.try_send(Event::Diagnostics(diagnostics.clone()));
         if engine.settings.status_file {
+            let _ = events.try_send(Event::Snapshot(snapshot.clone()));
             let _ = storage.send(Storage::Status(snapshot, true));
+        } else {
+            let _ = events.try_send(Event::Snapshot(snapshot));
         }
+        publish_diagnostics(&events, &diagnostics, &mut diagnostics_dirty);
         let retry = failed_delivery
             .iter()
             .filter(|(_, v)| v.0 <= Instant::now())
@@ -1306,6 +1337,40 @@ fn run(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn diagnostics_publish_only_changes_and_retry_after_backpressure() {
+        let (tx, rx) = bounded(1);
+        let events = Events {
+            tx,
+            window: Arc::new(AtomicUsize::new(0)),
+        };
+        let mut diagnostics = BTreeMap::new();
+        let mut dirty = update_diagnostics(&mut diagnostics, "test".into(), vec!["ready".into()]);
+        publish_diagnostics(&events, &diagnostics, &mut dirty);
+        assert!(!dirty);
+        assert!(!update_diagnostics(
+            &mut diagnostics,
+            "test".into(),
+            vec!["ready".into()]
+        ));
+        publish_diagnostics(&events, &diagnostics, &mut dirty);
+        assert_eq!(rx.len(), 1);
+        dirty |= update_diagnostics(&mut diagnostics, "test".into(), vec!["changed".into()]);
+        publish_diagnostics(&events, &diagnostics, &mut dirty);
+        assert!(dirty);
+        let Event::Diagnostics(first) = rx.recv().unwrap() else {
+            panic!("diagnostics expected")
+        };
+        assert_eq!(first["test"], ["ready"]);
+        publish_diagnostics(&events, &diagnostics, &mut dirty);
+        assert!(!dirty);
+        let Event::Diagnostics(second) = rx.recv().unwrap() else {
+            panic!("diagnostics expected")
+        };
+        assert_eq!(second["test"], ["changed"]);
+        publish_diagnostics(&events, &diagnostics, &mut dirty);
+        assert!(rx.is_empty());
+    }
     use super::*;
     #[test]
     fn usage_learning_requires_fresh_readback_and_matching_connection() {

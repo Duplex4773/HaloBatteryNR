@@ -41,6 +41,8 @@ pub fn providers() -> Vec<Box<dyn BatteryProvider>> {
 }
 pub struct HidProvider {
     id: &'static str,
+    // The catalog is static; retain its ordered vendor set across polls.
+    vendors: Box<[u16]>,
     diagnostics: Vec<String>,
     last: BTreeMap<String, Reading>,
     first_seen: BTreeMap<String, Duration>,
@@ -72,6 +74,13 @@ impl HidProvider {
     pub fn new(id: &'static str) -> Self {
         Self {
             id,
+            vendors: DEVICES
+                .iter()
+                .filter(|d| d.provider == id)
+                .map(|d| d.vid)
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
             diagnostics: Vec::new(),
             last: BTreeMap::new(),
             first_seen: BTreeMap::new(),
@@ -1679,14 +1688,9 @@ impl BatteryProvider for HidProvider {
         self.audeze_pending = false;
         self.playstation_pending = false;
         self.playstation_budget.clear();
-        let vendors: BTreeSet<_> = DEVICES
-            .iter()
-            .filter(|d| d.provider == self.id)
-            .map(|d| d.vid)
-            .collect();
         let mut infos = Vec::new();
-        for v in vendors {
-            infos.extend(hid.enumerate(v)?);
+        for &vendor in &self.vendors {
+            infos.extend(hid.enumerate(vendor)?);
         }
         if self.id == "pulsar" {
             for info in &infos {

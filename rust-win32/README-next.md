@@ -2,6 +2,32 @@
 
 A Windows 11 x64 Rust/Win32 port of [HaloBattery](https://github.com/HeyOkay/HaloBattery), based on upstream 1.13.0 (`a566a046`). The Rust workspace lives in `rust-win32/` on `main`; the Python implementation remains at the repository root as the protocol reference. The `port/rust-win32` branch also retains the port checkpoint.
 
+Thanks to [HeyOkay](https://github.com/HeyOkay) and all
+[original HaloBattery contributors](https://github.com/HeyOkay/HaloBattery/graphs/contributors)
+for the original application, protocol research, tests and hardware reports.
+The port retains upstream MIT notices and credits to the device-protocol projects.
+
+## Performance compared with upstream
+
+Three-minute Windows measurements, with 60-second battery polling, status export
+enabled and dashboards/menus closed:
+
+| Measurement | Original Halo Battery 1.13.0 | Rust port 0.1.0 |
+| --- | ---: | ---: |
+| Wireless DeathAdder V4 Pro: average private memory | 138.18 MiB | 6.27 MiB |
+| Wireless DeathAdder V4 Pro: CPU, one logical core | 0.269% | 0.130% |
+| One simulated charging mouse: average private memory | 33.10 MiB | 5.71 MiB |
+| One simulated charging mouse: CPU, one logical core | 0.226% | 0.208% |
+| Portable executable size | Not measured | 2.60 MiB |
+
+Original figures include observed helper processes. This is unchanged upstream
+Python source versus optimized Rust release builds on one machine; a packaged
+original release was unavailable. Animated CPU use is similar. The hardware
+comparison includes native/PowerShell discovery costs, and short-run differences
+are not guarantees. The fork also retains 30-day raw history and a native
+dashboard. See [`docs/resource-audit.md`](docs/resource-audit.md) for exact builds,
+peak memory, optimizations, compiler experiments and reproduction commands.
+
 ## Run and build
 
 Run `HaloBatteryNext.exe` to open the dashboard. Closing the window keeps monitoring active. Click a device tray icon, choose Open dashboard, or launch the executable again to reopen it. A duplicate `--background` launch stays quiet. The tray menu offers refresh, device controls and Exit. Settings include Windows startup registration, which starts the executable with `--background`.
@@ -92,7 +118,7 @@ vendor; see `docs/anti-cheat.md`.
 
 See `docs/provider-parity.md` for provider/test coverage and limitations, and `docs/validation-next.md` for measured size, memory, CPU and native lifecycle checks. Original verified/unverified support labels remain in the upstream README and protocol documentation. Simulated tests do not establish hardware verification. The connected DeathAdder V4 Pro is the initial hardware validation device.
 
-Engineering targets are an executable at most 10 MiB, background private memory at most 30 MiB with one device, and five-minute average CPU at most 0.5% of one logical core without animation or 1% with one animated charging icon. Measurements, rather than the choice of language alone, determine whether these targets are met.
+Engineering targets are an executable at most 10 MiB, background private memory at most 30 MiB with one device, and average CPU at most 0.5% of one logical core without animation or 1% with one animated charging icon. Current resource audits use three-minute measurement windows. See [`docs/resource-audit.md`](docs/resource-audit.md) for the optimization audit, compiler comparison and measured comparison with upstream. Measurements, rather than the choice of language alone, determine whether these targets are met.
 
 The upstream MIT license is retained in `LICENSE`. Protocol authors and captures are credited in `docs/protocols.md`; portable packages also include third-party notices.
 

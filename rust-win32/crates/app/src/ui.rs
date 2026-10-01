@@ -11,6 +11,7 @@ use std::{
     collections::BTreeMap,
     path::PathBuf,
     rc::Rc,
+    time::{Duration, Instant},
 };
 use windows::{
     Win32::{
@@ -55,6 +56,54 @@ enum TrayUpdate {
     Changed,
     Redraw,
     ExplorerRecovery,
+}
+#[derive(Default)]
+struct TrayThemeCache {
+    value: Option<(Instant, String, bool)>,
+}
+#[cfg(test)]
+mod tray_theme_cache_tests {
+    use super::*;
+    #[test]
+    fn caches_short_snapshot_bursts_but_rechecks_settings_recovery_and_expiry() {
+        let mut cache = TrayThemeCache::default();
+        let now = Instant::now();
+        let calls = Cell::new(0);
+        let sample = || {
+            calls.set(calls.get() + 1);
+            true
+        };
+        assert!(cache.read(now, "auto", false, sample));
+        assert!(
+            cache.read(now + Duration::from_millis(500), "auto", false, || panic!(
+                "cached"
+            ))
+        );
+        assert!(cache.read(now + Duration::from_secs(2), "auto", false, sample));
+        assert!(cache.read(now + Duration::from_secs(2), "auto", true, sample));
+        assert!(cache.read(now + Duration::from_secs(2), "black", false, sample));
+        assert_eq!(calls.get(), 4);
+    }
+}
+impl TrayThemeCache {
+    fn read(
+        &mut self,
+        now: Instant,
+        icon_theme: &str,
+        force: bool,
+        query: impl FnOnce() -> bool,
+    ) -> bool {
+        if !force
+            && let Some((sampled, key, value)) = &self.value
+            && key == icon_theme
+            && now.saturating_duration_since(*sampled) < Duration::from_secs(2)
+        {
+            return *value;
+        }
+        let value = query();
+        self.value = Some((now, icon_theme.to_owned(), value));
+        value
+    }
 }
 fn tray_message_update(message: u32, taskbar_created: u32) -> Option<TrayUpdate> {
     if taskbar_created != 0 && message == taskbar_created {
@@ -502,6 +551,7 @@ struct State {
     taskbar: u32,
     notify: Option<HDEVNOTIFY>,
     animating: bool,
+    tray_theme: TrayThemeCache,
     error: String,
     font: HFONT,
     polling: PollingUi,
@@ -580,6 +630,7 @@ pub fn run(
                 taskbar: RegisterWindowMessageW(w!("TaskbarCreated")),
                 notify: None,
                 animating: false,
+                tray_theme: TrayThemeCache::default(),
                 error: initial_error.unwrap_or_default(),
                 font,
                 polling: PollingUi::default(),
@@ -999,10 +1050,20 @@ impl Drop for DashboardRedraw {
 }
 impl State {
     fn refresh_theme(&mut self) {
-        self.apply_theme(DashboardTheme::new(
-            hb_windows::system::dashboard_dark_theme(),
-            hb_windows::system::high_contrast(),
-        ));
+        if self.dashboard.is_none() {
+            return;
+        }
+        let dark = hb_windows::system::dashboard_dark_theme();
+        let high_contrast = hb_windows::system::high_contrast();
+        let palette = crate::dashboard_theme::Palette::new(dark, high_contrast);
+        if self
+            .theme
+            .as_ref()
+            .is_some_and(|theme| theme.palette == palette)
+        {
+            return;
+        }
+        self.apply_theme(DashboardTheme::new(dark, high_contrast));
     }
     fn apply_theme(&mut self, theme: DashboardTheme) {
         let Some(hwnd) = self.dashboard else {
@@ -1031,6 +1092,7 @@ impl State {
         }
         self.dashboard = None;
         self.chart = None;
+        self.release_history();
         self.theme = None;
         unsafe {
             (*self.context).paint.take();
@@ -1223,6 +1285,9 @@ impl State {
         };
         let _redraw = DashboardRedraw::new(hwnd);
         self.chart = None;
+        if self.page != 2 {
+            self.release_history();
+        }
         let controls = std::mem::take(&mut self.controls);
         unsafe {
             for h in controls.values() {
@@ -1443,6 +1508,9 @@ impl State {
     }
     fn set_control_text(&self, id: u16, text: &str) {
         if let Some(h) = self.controls.get(&id) {
+            if self.text(id) == text {
+                return;
+            }
             let text = wide(text);
             unsafe {
                 let _ = SetWindowTextW(*h, PCWSTR(text.as_ptr()));
@@ -2039,6 +2107,27 @@ impl State {
             self.polling_controls();
         }
     }
+    fn release_history(&mut self) {
+        self.request = self.request.wrapping_add(1);
+        self.series = HistorySeries {
+            axis: self.history.axis,
+            ..Default::default()
+        };
+    }
+    fn history_outcome(&mut self, id: u64, result: Result<HistorySeries, ProviderError>) {
+        if self.dashboard.is_none() || self.page != 2 || id != self.request {
+            return;
+        }
+        match result {
+            Ok(series) => self.series = series,
+            Err(e) => self.error = e.to_string(),
+        }
+        unsafe {
+            if let Some(h) = self.dashboard {
+                let _ = InvalidateRect(Some(h), None, false);
+            }
+        }
+    }
     fn query(&mut self) {
         self.request = self.request.wrapping_add(1);
         self.series = HistorySeries {
@@ -2097,21 +2186,25 @@ impl State {
                         self.render_insights();
                     }
                 }
-                Event::History(id, result) if id == self.request => {
-                    match result {
-                        Ok(series) => self.series = series,
-                        Err(e) => self.error = e.to_string(),
-                    }
-                    unsafe {
-                        if let Some(h) = self.dashboard {
-                            let _ = InvalidateRect(Some(h), None, false);
-                        }
-                    }
-                }
+                Event::History(id, result) => self.history_outcome(id, result),
                 _ => {}
             }
         }
         if let Some(s) = latest {
+            let changed_labels: Vec<_> = s
+                .devices
+                .iter()
+                .enumerate()
+                .filter_map(|(index, next)| {
+                    (self
+                        .snapshot
+                        .devices
+                        .get(index)
+                        .map(|previous| &previous.text)
+                        != Some(&next.text))
+                    .then_some(index)
+                })
+                .collect();
             let identity: Vec<_> = self
                 .snapshot
                 .devices
@@ -2150,18 +2243,16 @@ impl State {
             }
             if self.page == 1
                 && let Some(d) = self.snapshot.devices.get(self.selected)
-                && let Some(h) = self.controls.get(&91)
+                && self.controls.contains_key(&91)
             {
-                let text = wide(&device_detail(d));
-                unsafe {
-                    let _ = SetWindowTextW(*h, PCWSTR(text.as_ptr()));
-                }
+                self.set_control_text(91, &device_detail(d));
             }
             self.sync_trays(TrayUpdate::Changed);
             if identity != next {
                 self.build()
             } else if let Some(h) = self.controls.get(&10) {
-                for (i, d) in self.snapshot.devices.iter().enumerate() {
+                for i in changed_labels {
+                    let d = &self.snapshot.devices[i];
                     let text = wide(&d.text);
                     unsafe {
                         send(*h, CB_DELETESTRING, WPARAM(i), LPARAM(0));
@@ -2174,7 +2265,9 @@ impl State {
                     }
                 }
                 unsafe {
-                    send(*h, CB_SETCURSEL, WPARAM(self.selected), LPARAM(0));
+                    if send(*h, CB_GETCURSEL, WPARAM(0), LPARAM(0)).0 != self.selected as isize {
+                        send(*h, CB_SETCURSEL, WPARAM(self.selected), LPARAM(0));
+                    }
                 }
             }
         }
@@ -2184,7 +2277,12 @@ impl State {
         }
     }
     fn sync_trays(&mut self, update: TrayUpdate) {
-        let dark = tray_dark(&self.settings);
+        let dark = self.tray_theme.read(
+            Instant::now(),
+            &self.settings.icon_theme,
+            update != TrayUpdate::Changed,
+            || tray_dark(&self.settings),
+        );
         let settings = &self.settings;
         let devices = tray_devices(&self.snapshot, settings);
         self.trays.retain(|key, _| {
@@ -3179,6 +3277,7 @@ mod dashboard_lifecycle_tests {
                     taskbar: RegisterWindowMessageW(w!("TaskbarCreated")),
                     notify: None,
                     animating: false,
+                    tray_theme: TrayThemeCache::default(),
                     error: String::new(),
                     font: HFONT::default(),
                     polling: PollingUi::default(),
@@ -3210,6 +3309,9 @@ mod dashboard_lifecycle_tests {
                 context.monitor.set(state.monitor);
                 state.open();
                 let dashboard = state.dashboard.unwrap();
+                state.series =
+                    HistorySeries::calendar(vec![Reading::new("test", "Test", "test", 0)], 0, 10);
+                assert!(!state.series.samples.is_empty());
                 // Synchronous close enters proc while State is borrowed: it
                 // must defer rather than silently use DefWindowProc's destroy.
                 send(dashboard, WM_CLOSE, WPARAM(0), LPARAM(0));
@@ -3222,9 +3324,52 @@ mod dashboard_lifecycle_tests {
             assert!(context.state.borrow().theme.is_none());
             assert!(context.paint.borrow().is_none());
             assert!(context.state.borrow().font.is_invalid());
+            {
+                let mut state = context.state.borrow_mut();
+                assert!(state.series.samples.is_empty());
+                let request = state.request;
+                state.history_outcome(
+                    request,
+                    Ok(HistorySeries::calendar(
+                        vec![Reading::new("test", "Test", "test", 0)],
+                        0,
+                        10,
+                    )),
+                );
+                assert!(state.series.samples.is_empty());
+            }
             send(monitor, WM_APP + 8, WPARAM(0), LPARAM(0));
             let first = context.state.borrow().dashboard.unwrap();
             assert!(IsWindowVisible(first).as_bool());
+            {
+                let mut state = context.state.borrow_mut();
+                state.command(2, 0);
+                let request = state.request;
+                let populated = || {
+                    HistorySeries::calendar(vec![Reading::new("test", "Test", "test", 0)], 0, 10)
+                };
+                state.history_outcome(request.wrapping_sub(1), Ok(populated()));
+                assert!(state.series.samples.is_empty());
+                state.history_outcome(request, Ok(populated()));
+                assert!(!state.series.samples.is_empty());
+                state.command(1, 0);
+                assert!(state.series.samples.is_empty());
+                state.history_outcome(request, Ok(populated()));
+                assert!(state.series.samples.is_empty());
+                let current = state.request;
+                state.history_outcome(current, Err(ProviderError::new("Inactive history error")));
+                assert_ne!(state.error, "Inactive history error");
+                state.command(2, 0);
+                let reopened_request = state.request;
+                state.history_outcome(reopened_request, Ok(populated()));
+                assert!(!state.series.samples.is_empty());
+                state.history_outcome(
+                    reopened_request,
+                    Err(ProviderError::new("Active history error")),
+                );
+                assert_eq!(state.error, "Active history error");
+                state.command(1, 0);
+            }
             for mode in [SW_MINIMIZE, SW_HIDE] {
                 let _ = ShowWindow(first, mode);
                 send(monitor, WM_APP + 8, WPARAM(0), LPARAM(0));

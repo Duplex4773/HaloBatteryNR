@@ -95,6 +95,9 @@ pub struct Chart {
     target: ID2D1HwndRenderTarget,
     font: IDWriteTextFormat,
     scale: f32,
+    grid: ID2D1SolidColorBrush,
+    line: ID2D1SolidColorBrush,
+    label: ID2D1SolidColorBrush,
 }
 impl Chart {
     pub fn new(hwnd: HWND, width: u32, height: u32) -> windows::core::Result<Self> {
@@ -124,10 +127,17 @@ impl Chart {
                 13. * scale,
                 w!("en-US"),
             )?;
+            let palette = Palette::new(false, false);
+            let grid = target.CreateSolidColorBrush(&Palette::d2d(palette.border), None)?;
+            let line = target.CreateSolidColorBrush(&Palette::d2d(palette.accent), None)?;
+            let label = target.CreateSolidColorBrush(&Palette::d2d(palette.text), None)?;
             Ok(Self {
                 target,
                 font,
                 scale,
+                grid,
+                line,
+                label,
             })
         }
     }
@@ -150,15 +160,17 @@ impl Chart {
         let since = series.since;
         let until = series.until;
         unsafe {
-            self.target.Resize(&D2D_SIZE_U { width, height })?;
+            let size = self.target.GetPixelSize();
+            if size.width != width || size.height != height {
+                self.target.Resize(&D2D_SIZE_U { width, height })?;
+            }
+            self.grid.SetColor(&Palette::d2d(palette.border));
+            self.line.SetColor(&Palette::d2d(palette.accent));
+            self.label.SetColor(&Palette::d2d(palette.text));
             self.target.BeginDraw();
             self.target.Clear(Some(&Palette::d2d(palette.background)));
-            let grid = self
-                .target
-                .CreateSolidColorBrush(&Palette::d2d(palette.border), None)?;
-            let line = self
-                .target
-                .CreateSolidColorBrush(&Palette::d2d(palette.accent), None)?;
+            let grid = &self.grid;
+            let line = &self.line;
             let left = 60. * self.scale;
             let right = width as f32 - 25. * self.scale;
             let top = 140. * self.scale;
@@ -168,14 +180,12 @@ impl Chart {
                 self.target.DrawLine(
                     Vector2 { X: left, Y: y },
                     Vector2 { X: right, Y: y },
-                    &grid,
+                    grid,
                     1.,
                     None,
                 );
             }
-            let label = self
-                .target
-                .CreateSolidColorBrush(&Palette::d2d(palette.text), None)?;
+            let label = &self.label;
             let text = |text: &str, x: f32, y: f32, w: f32| {
                 let chars: Vec<u16> = text.encode_utf16().collect();
                 self.target.DrawText(
@@ -187,7 +197,7 @@ impl Chart {
                         right: x + w,
                         bottom: y + 24. * self.scale,
                     },
-                    &label,
+                    label,
                     D2D1_DRAW_TEXT_OPTIONS_NONE,
                     DWRITE_MEASURING_MODE_NATURAL,
                 );
@@ -239,7 +249,7 @@ impl Chart {
                     Y: bottom - (bottom - top) * point.level as f32 / 100.,
                 };
                 if let Some(a) = previous {
-                    self.target.DrawLine(a, p, &line, 2., None);
+                    self.target.DrawLine(a, p, line, 2., None);
                 }
                 if point.measured {
                     self.target.FillEllipse(
@@ -248,7 +258,7 @@ impl Chart {
                             radiusX: 2. * self.scale,
                             radiusY: 2. * self.scale,
                         },
-                        &line,
+                        line,
                     );
                 }
                 previous = Some(p);
@@ -407,6 +417,9 @@ mod tests {
                         .paint_with_palette(840, 820, &HistorySeries::default(), &palette)
                         .unwrap();
                 }
+                chart.paint(960, 900, &HistorySeries::default()).unwrap();
+                let size = chart.target.GetPixelSize();
+                assert_eq!((size.width, size.height), (960, 900));
                 chart
                     .paint(
                         840,

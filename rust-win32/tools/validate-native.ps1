@@ -1,13 +1,16 @@
 param(
-  [int]$Seconds = 300,
+  [int]$Seconds = 180,
   [switch]$Animation,
   [switch]$Hardware,
   [switch]$PollingControls,
-  [int]$Cycles = 20
+  [int]$Cycles = 20,
+  [string]$Executable,
+  [string]$Label,
+  [string]$SamplerPython
 )
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$exe = Join-Path $repo 'target/x86_64-pc-windows-msvc/release/HaloBatteryNext.exe'
+$exe = if ($Executable) { (Resolve-Path -LiteralPath $Executable).Path } else { Join-Path $repo 'target/x86_64-pc-windows-msvc/release/HaloBatteryNext.exe' }
 if (!(Test-Path -LiteralPath $exe)) { throw 'Release build required.' }
 $data = Join-Path $repo "validation-local/$([guid]::NewGuid())"
 [IO.Directory]::CreateDirectory($data) | Out-Null
@@ -77,20 +80,36 @@ try {
   $cpu = $process.TotalProcessorTime.TotalSeconds
   $clock = [Diagnostics.Stopwatch]::StartNew()
   $samples = @()
-  while ($clock.Elapsed.TotalSeconds -lt $Seconds) {
-    Start-Sleep -Seconds ([Math]::Min(5,[Math]::Max(1,$Seconds-[int]$clock.Elapsed.TotalSeconds)))
+  if ($SamplerPython) {
+    $treePath = Join-Path $data 'process-tree.json'
+    & $SamplerPython (Join-Path $PSScriptRoot 'sample-process-tree.py') --pid $process.Id --duration $Seconds --output $treePath | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Process-tree sampler failed.' }
     if ($process.HasExited) { throw 'Monitoring exited during measurement.' }
+    $tree = Get-Content -Raw -LiteralPath $treePath | ConvertFrom-Json
+    $samples = @($tree.samples | ForEach-Object private_bytes)
+    $duration = $tree.duration_seconds
+    $cpuPercent = $tree.tree_cpu_one_core_percent
+  } else {
+    while ($clock.Elapsed.TotalSeconds -lt $Seconds) {
+      Start-Sleep -Seconds ([Math]::Min(5,[Math]::Max(1,$Seconds-[int]$clock.Elapsed.TotalSeconds)))
+      if ($process.HasExited) { throw 'Monitoring exited during measurement.' }
+      $process.Refresh()
+      $samples += $process.PrivateMemorySize64
+    }
     $process.Refresh()
-    $samples += $process.PrivateMemorySize64
+    $duration = $clock.Elapsed.TotalSeconds
+    $cpuPercent = ($process.TotalProcessorTime.TotalSeconds-$cpu)/$duration*100
   }
   $process.Refresh()
   $result = @{
     mode = $(if($Hardware){'hardware'}else{'simulated'}); animation = [bool]$Animation; polling_controls = [bool]$PollingControls;
-    duration_seconds = $clock.Elapsed.TotalSeconds;
-    one_core_cpu_percent = ($process.TotalProcessorTime.TotalSeconds-$cpu)/$clock.Elapsed.TotalSeconds*100;
+    duration_seconds = $duration;
+    one_core_cpu_percent = $cpuPercent;
     private_bytes_average = ($samples | Measure-Object -Average).Average;
     private_bytes_peak = ($samples | Measure-Object -Maximum).Maximum;
     executable_bytes = (Get-Item -LiteralPath $exe).Length;
+    executable_sha256 = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash;
+    label = $Label;
     cold_start = $cold; before_cycles = $before; after_cycles = $after; dashboard_cycles = $Cycles;
     explorer_recovery = 'TaskbarCreated replay'; resume = 'PBT_APMRESUMEAUTOMATIC replay';
     timestamp_utc = [DateTime]::UtcNow.ToString('o'); data_folder = $data

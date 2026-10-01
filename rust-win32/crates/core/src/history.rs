@@ -111,25 +111,26 @@ impl Estimator {
     pub fn seconds_left(&self, key: &str, level: Option<u8>) -> Option<f64> {
         let level = level.filter(|l| *l <= 100)?;
         let d = self.devices.get(key)?;
-        let mut samples = d.samples.clone();
-        let &(last_time, last_level) = samples.last()?;
-        if d.usage > last_time {
-            samples.push((d.usage, last_level));
-        }
-        if samples.len() < 2
-            || samples.last()?.0 - samples.first()?.0 < 1800.0
-            || samples.first()?.1.saturating_sub(last_level) < 3
+        let &(last_time, last_level) = d.samples.last()?;
+        let &(first_time, first_level) = d.samples.first()?;
+        let endpoint = (d.usage > last_time).then_some((d.usage, last_level));
+        let count = d.samples.len() + usize::from(endpoint.is_some());
+        if count < 2
+            || endpoint.map_or(last_time, |sample| sample.0) - first_time < 1800.0
+            || first_level.saturating_sub(last_level) < 3
         {
             return None;
         }
-        let n = samples.len() as f64;
-        let mt = samples.iter().map(|s| s.0).sum::<f64>() / n;
-        let ml = samples.iter().map(|s| f64::from(s.1)).sum::<f64>() / n;
+        // Keep the synthetic stalled-level endpoint without copying the history.
+        let samples = d.samples.iter().copied().chain(endpoint);
+        let n = count as f64;
+        let mt = samples.clone().map(|s| s.0).sum::<f64>() / n;
+        let ml = samples.clone().map(|s| f64::from(s.1)).sum::<f64>() / n;
         let numerator = samples
-            .iter()
+            .clone()
             .map(|s| (s.0 - mt) * (f64::from(s.1) - ml))
             .sum::<f64>();
-        let denominator = samples.iter().map(|s| (s.0 - mt).powi(2)).sum::<f64>();
+        let denominator = samples.map(|s| (s.0 - mt).powi(2)).sum::<f64>();
         if denominator <= 0.0 {
             return None;
         }

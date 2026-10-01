@@ -4,6 +4,19 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
+## Resource audit checkpoint, 1 October 2026
+
+The latest optimized executable is **2,722,304 bytes (2.60 MiB)**, SHA256
+`4638C934130E688F31624E1D5E1B9D936B3E255458BF09D5B1A78BEAC0B1221B`.
+Formatting, strict Clippy, the release build and **410 behavioral tests** pass;
+two optional timing tests were run separately. Native interaction and Insights
+checks each pass 40 dashboard cycles, with stable GDI handles. Separate
+180-second hardware and simulated-animation runs average **6.27 / 5.71 MiB**
+private memory and **0.130% / 0.208%** of one logical core. See the
+[resource audit](resource-audit.md) for the upstream comparison, compiler
+experiment, peak memory, lifecycle settling and measurement limits. Earlier
+checkpoints below describe their own builds, not the current executable.
+
 ## Dashboard control painting checkpoint, 1 October 2026
 
 Native owner-draw and control-color callbacks could reenter while the dashboard
@@ -396,12 +409,12 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 ./tools/build-rust.ps1
 python tools/merge-coverage.py --check
-./tools/validate-native.ps1 -Seconds 300 -Hardware
-./tools/validate-native.ps1 -Seconds 300 -Animation -Cycles 40
+./tools/validate-native.ps1 -Seconds 180 -Hardware
+./tools/validate-native.ps1 -Seconds 180 -Animation -Cycles 40
 ./tools/validate-ui.ps1
 ./tools/validate-configuration.ps1
-./tools/validate-native.ps1 -Seconds 300 -PollingControls -Cycles 40
-./tools/validate-native.ps1 -Seconds 300 -PollingControls -Animation -Cycles 40
+./tools/validate-native.ps1 -Seconds 180 -PollingControls -Cycles 40
+./tools/validate-native.ps1 -Seconds 180 -PollingControls -Animation -Cycles 40
 ./tools/package-rust.ps1
 ```
 

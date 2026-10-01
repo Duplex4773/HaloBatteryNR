@@ -4,6 +4,70 @@ This checkout also contains **Halo Battery Next**, the independent Rust/Win32 po
 See [the Rust port README](rust-win32/README-next.md) for building, running and validation. The Python
 implementation below remains available as the migration reference.
 
+## Halo Battery Next — Rust/Win32 port
+
+The Windows 11 x64 port keeps the original's 25 battery providers and familiar
+per-device tray rings, with a native interface and one portable executable.
+It needs no Python, .NET or webview runtime. Bounded workers, native connection
+events and cached graphics keep background memory low; the measurements below
+show the practical benefit on the tested machine.
+
+Added features include:
+
+- A Devices, History, Settings and Insights dashboard with system light/dark
+  appearance, keyboard navigation and per-monitor DPI support.
+- Thirty-day battery history, with **Time used** as the default view and calendar
+  views available. Sleeping periods pause estimated use time; calendar charts
+  carry the last known level through unavailable readings.
+- Estimated use remaining, charge summaries and observed drain comparisons by
+  confirmed polling rate, with evidence requirements for estimates.
+- Optional read/apply/restore polling-rate controls for supported Razer, Logitech
+  and MCHOSE mice, including supported 8000 Hz routes. Controls use ordinary
+  user-mode HID, default off and never apply saved rates automatically. See
+  [supported models and limits](rust-win32/docs/polling-controls.md).
+- A configurable orange battery warning (30% by default), separate low-alert
+  thresholds, stable tray placement through mouse sleep, and dashboard reopening
+  while monitoring remains active.
+
+The port has separate settings, startup registration and notification identity.
+The Python reference stays at the repository root and Rust stays in `rust-win32/`
+to support future upstream merges. New protocols still need a reviewed port;
+recompiling alone does not add device support. Builds and validation run locally;
+GitHub workflows are disabled for this fork.
+
+### Performance
+
+Local Windows measurements used **three-minute windows**, a 60-second battery
+refresh interval and status export enabled, with dashboards and menus closed.
+The hardware workload used a wireless Razer DeathAdder V4 Pro and normal
+provider discovery; the charging workload used one simulated animated mouse.
+Original figures include observed Python and PowerShell helper processes.
+
+| Measurement | Original Halo Battery 1.13.0 | Halo Battery Next Rust port |
+| --- | ---: | ---: |
+| Hardware: average private memory | 138.18 MiB | 6.27 MiB |
+| Hardware: CPU, one logical core | 0.269% | 0.130% |
+| Animated charging: average private memory | 33.10 MiB | 5.71 MiB |
+| Animated charging: CPU, one logical core | 0.226% | 0.208% |
+| Portable executable size | Not measured | 2.60 MiB |
+
+These compare unchanged upstream Python source with optimized Rust release
+builds on one machine, rather than two packaged releases. Animated CPU use is
+similar; the hardware run shows substantially lower memory and CPU use for the
+Rust port. Small timing differences need repeated measurements. See the
+[full resource audit](rust-win32/docs/resource-audit.md) for build identities,
+peak memory, compiler settings, lifecycle checks and measurement limits.
+
+Thank you to [HeyOkay](https://github.com/HeyOkay) and all
+[original HaloBattery contributors](https://github.com/HeyOkay/HaloBattery/graphs/contributors)
+for the application, device protocols, tests, diagnostics and hardware reports
+that made this port possible. The upstream MIT license and the protocol credits
+below and in [docs/protocols.md](docs/protocols.md) are retained.
+
+## Original Python application
+
+The original application's documentation follows below.
+
 Battery levels for wireless mice, keyboards, headsets and controllers in the Windows system tray - one icon per device, no vendor software.
 
 ![All icon states](docs/icons.png)

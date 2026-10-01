@@ -141,7 +141,10 @@ impl Store {
         transaction
             .execute("DELETE FROM readings WHERE ts < ?1", [cutoff])
             .map_err(sql_error)?;
-        transaction.execute("DELETE FROM usage_metadata WHERE ts < ?1 OR NOT EXISTS(SELECT 1 FROM readings r WHERE r.device=usage_metadata.device AND r.ts=usage_metadata.ts)", [cutoff]).map_err(sql_error)?;
+        // Ordered EXCEPT merges the existing covering key indexes instead of
+        // performing one readings lookup per retained metadata row. Subtract
+        // only retained readings so expired keys and arbitrary orphans both go.
+        transaction.execute("DELETE FROM usage_metadata WHERE (device,ts) IN (SELECT device,ts FROM usage_metadata EXCEPT SELECT device,ts FROM readings WHERE ts >= ?1 ORDER BY device,ts)", [cutoff]).map_err(sql_error)?;
         transaction.commit().map_err(sql_error)?;
         self.last
             .retain(|_, observation| observation.reading.timestamp >= cutoff);
@@ -343,7 +346,9 @@ impl Store {
         let mut rows = query
             .query(params![key, until.saturating_sub(30 * 86400), until])
             .map_err(sql_error)?;
-        let mut previous: Option<Reading> = None;
+        // Continuity needs only time and awake state, not another owned copy
+        // of every reading and its strings during both chart passes.
+        let mut previous: Option<(i64, bool)> = None;
         let mut total = 0i64;
         while let Some(row) = rows.next().map_err(sql_error)? {
             let timestamp: i64 = row.get(0).map_err(sql_error)?;
@@ -359,19 +364,15 @@ impl Store {
             let awake = |r: &Reading| {
                 r.online() && r.level.is_some_and(|level| level <= 100) && r.charging != Some(true)
             };
-            if let Some(before) = &previous
-                && awake(before)
-                && awake(&reading)
+            let reading_awake = awake(&reading);
+            if let Some((timestamp, true)) = previous
+                && reading_awake
             {
-                total = total.saturating_add(
-                    reading
-                        .timestamp
-                        .saturating_sub(before.timestamp)
-                        .clamp(0, 600),
-                );
+                total =
+                    total.saturating_add(reading.timestamp.saturating_sub(timestamp).clamp(0, 600));
             }
-            visit(reading.clone(), total);
-            previous = Some(reading);
+            previous = Some((reading.timestamp, reading_awake));
+            visit(reading, total);
         }
         Ok(total)
     }
@@ -479,23 +480,32 @@ impl HistoryStore for Store {
             return Ok(());
         }
         let transaction = self.db.transaction().map_err(sql_error)?;
-        for observation in &self.pending {
-            let r = &observation.reading;
-            transaction
-                .execute(
+        {
+            let mut readings = transaction
+                .prepare(
                     "INSERT OR REPLACE INTO readings(device,ts,level,payload) VALUES(?1,?2,?3,?4)",
-                    params![
+                )
+                .map_err(sql_error)?;
+            let mut metadata = transaction.prepare("INSERT OR REPLACE INTO usage_metadata(device,ts,polling_rate,session) VALUES(?1,?2,?3,?4)").map_err(sql_error)?;
+            for observation in &self.pending {
+                let r = &observation.reading;
+                readings
+                    .execute(params![
                         r.key,
                         r.timestamp,
                         r.level,
                         serde_json::to_string(r).map_err(|e| ProviderError::new(e.to_string()))?
-                    ],
-                )
-                .map_err(sql_error)?;
-            transaction.execute(
-                "INSERT OR REPLACE INTO usage_metadata(device,ts,polling_rate,session) VALUES(?1,?2,?3,?4)",
-                params![r.key, r.timestamp, observation.polling_rate.map(PollingRate::hz), observation.session.map(|session| session.to_string())],
-            ).map_err(sql_error)?;
+                    ])
+                    .map_err(sql_error)?;
+                metadata
+                    .execute(params![
+                        r.key,
+                        r.timestamp,
+                        observation.polling_rate.map(PollingRate::hz),
+                        observation.session.map(|session| session.to_string())
+                    ])
+                    .map_err(sql_error)?;
+            }
         }
         transaction.commit().map_err(sql_error)?;
         self.pending.clear();
@@ -935,6 +945,101 @@ mod tests {
                 .iter()
                 .all(|s| s.reading.level.is_some_and(|level| level <= 100))
         );
+    }
+    #[test]
+    fn prune_repairs_arbitrary_orphans_and_keeps_inclusive_retention_boundary() {
+        let (_dir, mut store) = baseline_store();
+        for timestamp in [99, 100, 101] {
+            usage_seed(
+                &mut store,
+                timestamp,
+                Some(50 + (timestamp % 3) as u8),
+                hb_core::Connection::Online,
+                None,
+            );
+        }
+        store.flush().unwrap();
+        // An external deletion and metadata-only rows must still be repaired,
+        // including an orphan whose timestamp lies after the pruning boundary.
+        store
+            .db
+            .execute("DELETE FROM readings WHERE ts=101", [])
+            .unwrap();
+        for timestamp in [50, 150] {
+            store
+                .db
+                .execute(
+                    "INSERT INTO usage_metadata VALUES('orphan',?1,1000,'1')",
+                    [timestamp],
+                )
+                .unwrap();
+        }
+        store.prune(30 * 86400 + 100).unwrap();
+        let keys: Vec<(String, i64)> = store
+            .db
+            .prepare("SELECT device,ts FROM usage_metadata ORDER BY device,ts")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(keys, vec![("usage".into(), 100)]);
+    }
+    #[test]
+    #[ignore = "explicit synthetic 30-day prune timing; no hardware"]
+    fn prune_thirty_day_sql_timing() {
+        let (_dir, mut store) = baseline_store();
+        let transaction = store.db.transaction().unwrap();
+        {
+            let mut reading = transaction
+                .prepare("INSERT INTO readings VALUES(?1,?2,50,'{}')")
+                .unwrap();
+            let mut metadata = transaction
+                .prepare("INSERT INTO usage_metadata VALUES(?1,?2,1000,'123456789')")
+                .unwrap();
+            for device in 0..10 {
+                for sample in 0..43200i64 {
+                    reading
+                        .execute(params![device.to_string(), sample * 60])
+                        .unwrap();
+                    metadata
+                        .execute(params![device.to_string(), sample * 60])
+                        .unwrap();
+                }
+            }
+        }
+        transaction.commit().unwrap();
+        for (name, sql) in [
+            (
+                "original",
+                "DELETE FROM usage_metadata WHERE ts < ?1 OR NOT EXISTS(SELECT 1 FROM readings r WHERE r.device=usage_metadata.device AND r.ts=usage_metadata.ts)",
+            ),
+            (
+                "merged",
+                "DELETE FROM usage_metadata WHERE (device,ts) IN (SELECT device,ts FROM usage_metadata EXCEPT SELECT device,ts FROM readings WHERE ts >= ?1 ORDER BY device,ts)",
+            ),
+        ] {
+            let plan: Vec<String> = store
+                .db
+                .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+                .unwrap()
+                .query_map([-1], |row| row.get(3))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            println!("{name} plan: {plan:?}");
+            let mut timings = vec![];
+            for _ in 0..7 {
+                let start = std::time::Instant::now();
+                assert_eq!(store.db.execute(sql, [-1]).unwrap(), 0);
+                timings.push(start.elapsed());
+            }
+            timings.sort();
+            println!(
+                "{name}: 432000 retained rows, median {:?}, samples {timings:?}",
+                timings[3]
+            );
+        }
     }
     #[test]
     #[ignore = "explicit synthetic 30-day query timing; no hardware"]

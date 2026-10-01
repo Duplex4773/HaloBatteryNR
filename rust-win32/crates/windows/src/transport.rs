@@ -133,15 +133,23 @@ impl Drop for DeviceSet {
     }
 }
 fn path_vendor(path: &str) -> Option<u16> {
-    let path = path.to_ascii_lowercase();
-    for marker in ["vid_", "vid&"] {
-        if let Some(at) = path.find(marker) {
-            let digits = path[at + 4..]
-                .chars()
-                .take_while(char::is_ascii_hexdigit)
-                .collect::<String>();
+    let bytes = path.as_bytes();
+    for marker in [b"vid_", b"vid&"] {
+        if let Some(at) = bytes
+            .windows(4)
+            .position(|part| part.eq_ignore_ascii_case(marker))
+        {
+            let digits = &bytes[at + 4..];
+            let end = digits.iter().take_while(|b| b.is_ascii_hexdigit()).count();
+            let digits = &digits[..end];
             if digits.len() >= 4 {
-                return u16::from_str_radix(&digits[digits.len() - 4..], 16).ok();
+                // Only ASCII hex bytes reached this slice; no allocation or
+                // Unicode conversion is needed for a USB/Bluetooth vendor ID.
+                return u16::from_str_radix(
+                    std::str::from_utf8(&digits[digits.len() - 4..]).ok()?,
+                    16,
+                )
+                .ok();
             }
         }
     }
@@ -163,6 +171,8 @@ fn present_paths(vendor: u16) -> Result<BTreeSet<String>, ProviderError> {
         .map_err(|e| ProviderError::new(e.to_string()))?,
     );
     let mut paths = BTreeSet::new();
+    // The census only needs one variable-length native detail buffer at a time.
+    let mut storage = Vec::<u64>::new();
     for index in 0..65536 {
         let mut interface = SP_DEVICE_INTERFACE_DATA {
             cbSize: std::mem::size_of::<SP_DEVICE_INTERFACE_DATA>() as u32,
@@ -186,7 +196,7 @@ fn present_paths(vendor: u16) -> Result<BTreeSet<String>, ProviderError> {
         }
         // u64 storage provides the alignment required by the variable-length
         // native structure. DevicePath begins at the documented member offset.
-        let mut storage = vec![0u64; (size as usize).div_ceil(8)];
+        storage.resize((size as usize).div_ceil(8), 0);
         let detail = storage
             .as_mut_ptr()
             .cast::<SP_DEVICE_INTERFACE_DETAIL_DATA_W>();
@@ -208,7 +218,8 @@ fn present_paths(vendor: u16) -> Result<BTreeSet<String>, ProviderError> {
             )
         };
         let end = wide.iter().position(|v| *v == 0).unwrap_or(wide.len());
-        let path = String::from_utf16_lossy(&wide[..end]).to_ascii_lowercase();
+        let mut path = String::from_utf16_lossy(&wide[..end]);
+        path.make_ascii_lowercase();
         if path_vendor(&path) == Some(vendor) {
             paths.insert(path);
         }
@@ -469,6 +480,10 @@ mod cache_tests {
         );
         assert_eq!(path_vendor(paths[3]), Some(0x045e));
         assert_eq!(path_vendor(paths[4]), None);
+        assert_eq!(path_vendor("µHID#ViD_1532&pid_0000"), Some(0x1532));
+        assert_eq!(path_vendor("BTH#VID&0002045E_PID&02FD"), Some(0x045e));
+        assert_eq!(path_vendor("hid#vid_153&vid&0002045e"), Some(0x045e));
+        assert_eq!(path_vendor("hid#vid_1532FFFF&pid_0000"), Some(0xffff));
     }
     #[test]
     fn device_event_or_open_failure_generation_forces_rediscovery() {
