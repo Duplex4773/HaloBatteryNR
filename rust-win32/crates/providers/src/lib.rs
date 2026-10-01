@@ -1,4 +1,5 @@
 pub mod catalog;
+pub mod configuration;
 pub mod controls;
 mod logitech_adapter;
 pub mod logitech_controls;

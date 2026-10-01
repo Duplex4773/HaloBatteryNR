@@ -1,7 +1,7 @@
 # Optional hardware polling-rate controls
 
 Enable **Settings → Enable polling-rate controls**, then open Devices and select
-an online supported mouse. **Refresh rate** reads its configuration. Choose a rate
+an online supported mouse or wired Razer keyboard. **Refresh rate** reads its configuration. Choose a rate
 and press **Apply rate** for a read–write–read transaction. Success requires the
 required acknowledgments and matching fresh device readback. This is a configured
 rate, not an independent measurement of effective USB reporting frequency.
@@ -23,6 +23,23 @@ error even if readback matches; refresh before deciding whether to restore.
 | PRO X Superlight 2 / DEX, legacy receiver `046D:C53A` | Advertised subset up to 1000 | Conservative ceiling; no verified high-rate receiver route |
 | PRO X Superlight 2 / DEX / Superstrike, direct USB | Advertised subset up to 1000 | Conservative wired limits from cited hardware evidence |
 | MCHOSE A7 V2 Ultra+, receiver `3837:100B`, paired model `4021` | 125, 500, 1000, 2000, 4000, 8000 | Only verified protocol schema for firmware 5.46.2.4; configuration preservation checks |
+| Huntsman V2 Tenkeyless / V2, `1532:026B/026C` | 125, 250, 500, 1000, 2000, 4000, 8000 | Interface 3, 91-byte feature collection; one acknowledged SET; hardware unverified locally |
+| BlackWidow V4 / Pro / 75%, `1532:0287/028D/02A5` | 125, 250, 500, 1000, 2000, 4000, 8000 | Same keyboard transaction; hardware unverified locally |
+| Known Corsair high-rate wired keyboards, including K70 RGB Pro | None | Recognition only; maintained software session disabled by design |
+
+Wired keyboards without a battery appear only on Devices. Rename remains
+available; battery hide, low-alert threshold and tray-icon controls do not apply.
+They create no per-device tray icon, battery history, alerts, Insights estimates
+or status battery entry. The app's existing fallback tray icon is retained.
+Passive inventory enumeration runs at most every 30 seconds while Devices is
+visible, independently of the polling-control setting. It sends no configuration
+queries and stops when Devices is not visible. Explicit Razer Read/Apply/Restore
+uses the same opt-in and worker guards as mouse controls.
+
+Corsair recognition never opens a command session or sends a rate query, mode
+change, SET or heartbeat. Its controls display exactly: **Polling changes
+unavailable: this model requires a maintained software session, which is disabled
+by design.** See [keyboard identities and evidence](polling-keyboard-evidence.md).
 
 DeathAdder V4 Pro wireless configuration changes have **user-reported working**
 evidence from 1 October 2026: **1000 → 8000 → 125 → 2000 Hz**. This report does
@@ -70,6 +87,8 @@ does not detect every game and is not anti-cheat certification. See
 [Razer evidence](polling-razer-evidence.md),
 [Logitech evidence](polling-logitech-evidence.md) and
 [MCHOSE evidence](polling-mchose-evidence.md) for the exact support boundaries.
+Keyboard-specific protocol and recognition limits are in
+[keyboard evidence](polling-keyboard-evidence.md).
 
 ## Diagnostic access
 
@@ -79,6 +98,14 @@ for a read-only diagnostic session. A change additionally requires an exact
 the application's singleton mutex and refuses a concurrent monitoring instance.
 Outputs belong in a private data directory; never commit live device keys,
 serials, names or captures. Synthetic tests use invented identities.
+
+Add `--device-kind keyboard` with `--provider razer|corsair` for passive keyboard
+metadata discovery independent of battery providers. Supplying an exact keyboard
+`--device-key` permits the guarded explicit Razer configured-rate GET; adding
+`--polling-hz` requests its one-time Apply. Corsair returns its unavailable reason
+before any configuration packet. Keyboard metadata discovery alone sends no
+configuration GET. The `--simulate-keyboards` fixture flag requires `--simulate`
+and adds invented Huntsman V2 and K70 RGB Pro records to the existing mouse.
 
 The original project's verified/unverified labels remain unchanged. Reference
 captures support protocol implementation, and synthetic tests exercise behavior;

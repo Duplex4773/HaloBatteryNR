@@ -21,7 +21,7 @@ product; no such compatibility claim is made.
 | 00C1, Viper V3 Pro dedicated receiver | extended, 60-ms settle | 125, 500, 1000, 2000, 4000, 8000 | direct upstream protocol and rate list, corroborating OpenMouse hardware report; hardware unverified locally |
 | 00B6 / 00B7, DeathAdder V3 Pro wired / stock receiver | legacy | 125, 500, 1000 | third-party physical test evidence; hardware unverified by Halo Battery |
 
-Every entry requires USB interface 0 and a 91-byte Windows feature collection.
+Every mouse entry requires USB interface 0 and a 91-byte Windows feature collection.
 Missing descriptor information is rejected, as are other collections and PIDs.
 That conservative Windows gate can exclude hardware accessible through WebHID.
 No Bluetooth, generic dongle, inferred model, or legacy fallback is enabled.
@@ -70,7 +70,7 @@ and its firmware/rate ceiling. 00A4 does not have the same verified polling rout
 Stock and wired PIDs do not acquire the accessory's capability. No generic
 receiver write, pairing change, firmware update or speculative probe is added.
 The non-battery Viper 8K (0091) and DeathAdder V3 (00B2) are outside the current
-app catalog. No additional PIDs or 250-Hz encoding are enabled by this audit.
+app catalog. This mouse audit enables no additional mouse PIDs or 250-Hz encoding.
 
 [OpenMouse's hardware test report](https://github.com/OpenMouse-Project/mouse-protocol/blob/main/docs/razer-testing.md)
 documents DeathAdder V3 Pro firmware 2.1 using MI_00, actual polling measurement,
@@ -94,7 +94,30 @@ command byte 7; arguments from byte 8; XOR of bytes 2–87 at byte 88.
 [Polling builders](https://github.com/Ar4ikov/openrazer-win/blob/6a626b2/openrazer_win/protocol/chroma.py)
 use class 00, extended read C0, write 40, and legacy read 85/write 05.
 Extended codes are divisors of 8000, legacy codes divisors of 1000. No 250-Hz
-encoding, default substitution, or clamping is accepted.
+encoding is accepted for mice; no default substitution or clamping is accepted.
+
+## Wired keyboard extension
+
+Exact keyboard PIDs `026B` (Huntsman V2 Tenkeyless), `026C` (Huntsman V2),
+`0287` (BlackWidow V4), `028D` (BlackWidow V4 Pro) and `02A5` (BlackWidow V4
+75%) use USB interface **3** and a **91-byte Windows feature collection**.
+They offer 125/250/500/1000/2000/4000/8000 Hz. This separate keyboard allowlist
+does not change mouse rate sets, interfaces, waits or write sequences.
+
+The pinned Windows [device identities](https://github.com/Ar4ikov/openrazer-win/blob/6a626b2d11069ec8be6a7eda6e0dd8ee3ece0998/openrazer_win/devices/data/devices.json),
+[recipes](https://github.com/Ar4ikov/openrazer-win/blob/6a626b2d11069ec8be6a7eda6e0dd8ee3ece0998/openrazer_win/devices/data/recipes.json)
+and [polling builders](https://github.com/Ar4ikov/openrazer-win/blob/6a626b2d11069ec8be6a7eda6e0dd8ee3ece0998/openrazer_win/protocol/chroma.py)
+provide the narrow wire evidence: TID `1F`, class `00`, GET `C0`, SET `40`,
+arguments `[0, 8000/hz]`, and 1-ms settling. A changed rate sends **exactly one
+SET**, then GET readback. The keyboard path must not inherit a mouse receiver's
+two-step SET. The getter sends once and decodes extended argument 1, excluding
+the generated recipe's legacy fallthrough. Already matching rates send no SET.
+
+The implementation uses independently written protocol builders and synthetic
+fixtures, retaining the existing upstream and protocol credits. These keyboards
+have no local hardware validation; synthetic readback proves application behavior,
+not effective frequency, persistence or anti-cheat approval. Full inventory and
+Corsair exclusion evidence is in [keyboard evidence](polling-keyboard-evidence.md).
 
 [Per-PID generated recipes](https://github.com/Ar4ikov/openrazer-win/blob/6a626b2/openrazer_win/devices/data/recipes.json)
 identify BE/BF TID 1F, read argument 1, and two write packets with argument 0

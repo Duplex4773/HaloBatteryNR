@@ -101,7 +101,7 @@ fn request(action: ControlAction) -> ControlRequest {
     ControlRequest {
         request: 9,
         target: ControlTarget {
-            reading,
+            device: ConfigurationDevice::from_reading(&reading),
             generation: 3,
         },
         action,
@@ -148,7 +148,7 @@ fn dedicated_high_rate_razer_receivers_use_exact_device_keys() {
         let mut hid = transport();
         hid.devices[0].product_id = pid;
         let mut request = request(apply());
-        request.target.reading.key = format!("razer:{pid:04x}:MOUSE-1");
+        request.target.device.key = format!("razer:{pid:04x}:MOUSE-1");
         let result = run(&request, &hid, false);
         assert!(result.failure.is_none(), "{result:?}");
         assert!(result.confirmed_change());
@@ -213,7 +213,7 @@ fn wrong_pid_key_container_or_serial_never_opens() {
     }
     let hid = transport();
     let mut r = request(apply());
-    r.target.reading.key = "razer:00be:wrong".into();
+    r.target.device.key = "razer:00be:wrong".into();
     assert!(run(&r, &hid, false).failure.is_some());
     assert_eq!(hid.state.opens.load(Ordering::Relaxed), 0);
 }
@@ -224,9 +224,9 @@ fn cancellation_unsupported_provider_offline_and_nonmouse_never_open() {
     for change in [0, 1, 2] {
         let mut r = request(apply());
         match change {
-            0 => r.target.reading.source = "other".into(),
-            1 => r.target.reading.connection = Connection::Sleeping,
-            _ => r.target.reading.kind = "headset".into(),
+            0 => r.target.device.source = "other".into(),
+            1 => r.target.device.connection = Connection::Sleeping,
+            _ => r.target.device.kind = "headset".into(),
         };
         assert!(run(&r, &hid, false).failure.is_some());
     }
@@ -247,7 +247,7 @@ fn epoch_change_after_first_set_prevents_second_set_and_keeps_battery() {
     let hid = transport();
     hid.state.change_on_set.store(true, Ordering::Relaxed);
     let r = request(apply());
-    let original = r.target.reading.clone();
+    let original = r.target.device.clone();
     let o = run(&r, &hid, false);
     assert!(o.failure.unwrap().contains("connection changed"));
     assert!(o.may_have_changed);
@@ -255,8 +255,7 @@ fn epoch_change_after_first_set_prevents_second_set_and_keeps_battery() {
     assert!(o.observation.is_none());
     let sent = hid.state.sent.lock().unwrap();
     assert_eq!(sent.iter().map(|s| s[8]).collect::<Vec<_>>(), [0xc0, 0x40]);
-    assert_eq!(r.target.reading, original);
-    assert_eq!(r.target.reading.level, Some(84));
+    assert_eq!(r.target.device, original);
 }
 #[test]
 fn verified_apply_has_previous_and_actual_rate() {
@@ -288,4 +287,100 @@ fn epoch_changed_during_get_discards_late_observation_and_sends_no_set() {
             .collect::<Vec<_>>(),
         [0xc0]
     );
+}
+
+#[test]
+fn keyboard_controller_uses_single_set_and_rejects_mouse_kind_mismatch() {
+    for pid in [0x026b, 0x026c, 0x0287, 0x028d, 0x02a5] {
+        let mut hid = transport();
+        hid.devices[0].product_id = pid;
+        hid.devices[0].interface = 3;
+        let mut r = request(apply());
+        r.target.device.key = format!("razer:{pid:04x}:MOUSE-1");
+        r.target.device.kind = "keyboard".into();
+        r.target.device.via = "usb".into();
+        let result = run(&r, &hid, false);
+        assert!(result.failure.is_none(), "{result:?}");
+        assert!(result.confirmed_change());
+        assert_eq!(
+            hid.state
+                .sent
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|p| p[8])
+                .collect::<Vec<_>>(),
+            [0xc0, 0x40, 0xc0]
+        );
+        let mut hid = transport();
+        hid.devices[0].product_id = pid;
+        hid.devices[0].interface = 3;
+        r.target.device.kind = "mouse".into();
+        assert!(run(&r, &hid, false).failure.is_some());
+        assert_eq!(hid.state.opens.load(Ordering::Relaxed), 0);
+    }
+    let hid = transport();
+    let mut r = request(apply());
+    r.target.device.kind = "keyboard".into();
+    r.target.device.via = "usb".into();
+    assert!(run(&r, &hid, false).failure.is_some());
+    assert_eq!(hid.state.opens.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn keyboard_revalidates_epoch_and_physical_identity_before_any_control_open() {
+    let mut hid = transport();
+    hid.devices[0].product_id = 0x026b;
+    hid.devices[0].interface = 3;
+    let mut r = request(apply());
+    r.target.device.key = "razer:026b:MOUSE-1".into();
+    r.target.device.kind = "keyboard".into();
+    r.target.device.via = "usb".into();
+    r.target.generation = 2;
+    assert!(run(&r, &hid, false).failure.is_some());
+    assert_eq!(hid.state.opens.load(Ordering::Relaxed), 0);
+    r.target.generation = 3;
+    let mut other = hid.devices[0].clone();
+    other.interface = 0;
+    other.container = Some("ANOTHER-SYNTHETIC-CONTAINER".into());
+    hid.devices.push(other);
+    assert!(run(&r, &hid, false).failure.is_some());
+    assert_eq!(hid.state.opens.load(Ordering::Relaxed), 0);
+    hid.devices.pop();
+    hid.state.change_on_read.store(true, Ordering::Relaxed);
+    let result = run(&r, &hid, false);
+    assert!(result.failure.is_some());
+    assert!(result.observation.is_none());
+    assert!(!result.may_have_changed);
+    assert_eq!(
+        hid.state
+            .sent
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|p| p[8])
+            .collect::<Vec<_>>(),
+        [0xc0]
+    );
+}
+
+#[test]
+fn keyboard_controller_rejects_bluetooth_path_and_non_usb_descriptor_before_open() {
+    let mut r = request(apply());
+    r.target.device.key = "razer:026b:MOUSE-1".into();
+    r.target.device.kind = "keyboard".into();
+    r.target.device.via = "usb".into();
+    let mut hid = transport();
+    hid.devices[0].product_id = 0x026b;
+    hid.devices[0].interface = 3;
+    hid.devices[0].path = "synthetic-bluetooth-vid&1532".into();
+    assert!(run(&r, &hid, false).failure.is_some());
+    assert_eq!(hid.state.opens.load(Ordering::Relaxed), 0);
+    assert!(hid.state.sent.lock().unwrap().is_empty());
+    hid.devices[0].path = "synthetic-usb".into();
+    for via in ["bluetooth", "", "unknown"] {
+        r.target.device.via = via.into();
+        assert!(run(&r, &hid, false).failure.is_some());
+        assert_eq!(hid.state.opens.load(Ordering::Relaxed), 0);
+    }
 }

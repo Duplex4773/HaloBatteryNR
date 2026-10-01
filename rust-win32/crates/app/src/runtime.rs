@@ -20,6 +20,8 @@ use windows::{
 };
 pub enum Command {
     Refresh,
+    ConfigurationVisible(bool),
+    ConfigurationRefresh,
     Suspend,
     Resume,
     NotificationFailed(Notification),
@@ -43,13 +45,18 @@ pub enum Command {
         until: i64,
         request: u64,
     },
-    Polling(ControlRequest, u64),
+    Polling(ControlRequest, u64, Option<u64>),
     SettingsChanged,
     EpochSuspend(u64),
     EpochResume(u64),
     Quit,
 }
 pub enum Event {
+    ConfigurationInventory {
+        generation: u64,
+        devices: Vec<ConfigurationDevice>,
+        failure: Option<String>,
+    },
     Polling(Box<ControlOutcome>),
     PollingInvalidated(u64),
     Snapshot(Snapshot),
@@ -103,11 +110,13 @@ struct Completed {
 }
 enum WorkerJob {
     Battery(Job),
-    Polling(Box<ControlRequest>, Arc<AtomicBool>, u64),
+    Polling(Box<ControlRequest>, Arc<AtomicBool>, u64, Option<u64>),
+    Configuration(Arc<ConfigurationWatch>, u64, u64),
 }
 enum WorkerCompleted {
     Battery(Completed),
     Polling(Box<ControlOutcome>),
+    Configuration(u64, u64, Result<Vec<ConfigurationDevice>, ProviderError>),
 }
 enum Work {
     Command(Result<Command, crossbeam_channel::RecvError>),
@@ -232,10 +241,27 @@ impl ControlPermission {
 struct Lifecycle {
     cancel: Arc<AtomicBool>,
     permission: Arc<ControlPermission>,
+    configuration: Arc<ConfigurationWatch>,
+}
+#[derive(Default)]
+struct ConfigurationWatch {
+    visible: AtomicBool,
+    epoch: AtomicU64,
+}
+impl ConfigurationWatch {
+    fn set_visible(&self, visible: bool) {
+        if self.visible.swap(visible, Ordering::AcqRel) != visible {
+            self.epoch.fetch_add(1, Ordering::AcqRel);
+        }
+    }
+    fn active(&self, epoch: u64) -> bool {
+        self.visible.load(Ordering::Acquire) && self.epoch.load(Ordering::Acquire) == epoch
+    }
 }
 struct WorkerAccess {
     gates: BTreeMap<u16, Mutex<()>>,
     permission: Arc<ControlPermission>,
+    configuration: Arc<ConfigurationWatch>,
 }
 pub struct Runtime {
     commands: Sender<Command>,
@@ -245,6 +271,7 @@ pub struct Runtime {
     sink: Events,
     cancel: Arc<AtomicBool>,
     window: Arc<AtomicUsize>,
+    configuration: Arc<ConfigurationWatch>,
 }
 impl Runtime {
     pub fn start(dir: PathBuf, settings: Settings, simulate: bool) -> Result<Self, ProviderError> {
@@ -254,9 +281,11 @@ impl Runtime {
         let (events, events_rx) = bounded(64);
         let cancelled = cancel.clone();
         let permission = Arc::new(ControlPermission::new(settings.polling_controls));
+        let configuration = Arc::new(ConfigurationWatch::default());
         let lifecycle = Lifecycle {
             cancel: cancelled,
             permission: permission.clone(),
+            configuration: configuration.clone(),
         };
         let window = Arc::new(AtomicUsize::new(0));
         let sink = Events {
@@ -276,6 +305,7 @@ impl Runtime {
             sink,
             cancel,
             window,
+            configuration,
         })
     }
     pub fn attach_window(&self, hwnd: usize) {
@@ -293,6 +323,10 @@ impl Runtime {
     }
     pub fn send(&self, command: Command) {
         let command = match command {
+            Command::ConfigurationVisible(visible) => {
+                self.configuration.set_visible(visible);
+                Command::ConfigurationVisible(visible)
+            }
             Command::Settings(settings) => {
                 self.permission.enabled.store(false, Ordering::Release);
                 let epoch = self.permission.epoch.fetch_add(1, Ordering::AcqRel) + 1;
@@ -335,8 +369,15 @@ impl Runtime {
                 "Polling controls are disabled or awaiting settings/resume acknowledgment; retry Refresh",
             ));
         }
+        let configuration_epoch = (request.target.device.kind == "keyboard")
+            .then(|| self.configuration.epoch.load(Ordering::Acquire));
+        if configuration_epoch.is_some_and(|epoch| !self.configuration.active(epoch)) {
+            return Err(ProviderError::new(
+                "Open Devices before reading or configuring a keyboard",
+            ));
+        }
         self.commands
-            .try_send(Command::Polling(request, epoch))
+            .try_send(Command::Polling(request, epoch, configuration_epoch))
             .map_err(|e| ProviderError::new(format!("Configuration request rejected: {e}")))
     }
     pub fn stop(&mut self) {
@@ -344,6 +385,7 @@ impl Runtime {
             return;
         }
         self.cancel.store(true, Ordering::Relaxed);
+        self.configuration.set_visible(false);
         let _ = self.commands.try_send(Command::Quit);
         if let Some(t) = self.thread.take() {
             while !t.is_finished() {
@@ -485,17 +527,24 @@ fn worker(
                 // used by a protocol family, including multi-collection sessions.
                 // It prevents interleaving shared-vendor protocols without locking
                 // individual opens (Logitech opens both long and short channels).
-                let vendors = hb_providers::catalog::DEVICES
-                    .iter()
-                    .filter(|d| {
-                        d.provider
-                            == match &job {
-                                WorkerJob::Battery(job) => job.provider.id(),
-                                WorkerJob::Polling(request, _, _) => &request.target.reading.source,
-                            }
-                    })
-                    .map(|d| d.vid)
-                    .collect::<BTreeSet<_>>();
+                let vendors: BTreeSet<_> = match &job {
+                    WorkerJob::Battery(job) => hb_providers::catalog::DEVICES
+                        .iter()
+                        .filter(|d| d.provider == job.provider.id())
+                        .map(|d| d.vid)
+                        .collect(),
+                    WorkerJob::Polling(request, _, _, _) => {
+                        control_vendors(&request.target.device.source)
+                            .into_iter()
+                            .collect()
+                    }
+                    WorkerJob::Configuration(_, _, _) => {
+                        hb_providers::configuration::CONFIGURATION_VENDORS
+                            .iter()
+                            .copied()
+                            .collect()
+                    }
+                };
                 let _guards = vendors
                     .iter()
                     .filter_map(|v| access.gates.get(v))
@@ -505,16 +554,29 @@ fn worker(
                     WorkerJob::Battery(job) => {
                         WorkerCompleted::Battery(execute_job(job, &*hid, &clock, &cancel))
                     }
-                    WorkerJob::Polling(request, request_cancel, epoch) => {
-                        WorkerCompleted::Polling(Box::new(execute_control(
+                    WorkerJob::Polling(request, request_cancel, epoch, configuration_epoch) => {
+                        WorkerCompleted::Polling(Box::new(execute_control_inner(
                             &request,
                             &*hid,
                             &clock,
                             &cancel,
                             &request_cancel,
                             hb_windows::system::polling_apply_blocked(),
-                            Some((access.permission.clone(), epoch)),
+                            ControlGuards {
+                                permission: Some((access.permission.clone(), epoch)),
+                                configuration: configuration_epoch
+                                    .map(|epoch| (access.configuration.clone(), epoch)),
+                            },
                         )))
+                    }
+                    WorkerJob::Configuration(watch, epoch, generation) => {
+                        WorkerCompleted::Configuration(
+                            epoch,
+                            generation,
+                            discover_configuration(
+                                &*hid, &clock, &cancel, &watch, epoch, generation,
+                            ),
+                        )
                     }
                 };
                 if results.send(completed).is_err() {
@@ -529,6 +591,122 @@ fn worker(
             }
         })
         .expect("create I/O worker")
+}
+fn control_vendors(source: &str) -> Vec<u16> {
+    match source {
+        "razer" => vec![0x1532],
+        "logitech" => vec![0x046d],
+        "mchose" => vec![0x3837],
+        "corsair" => vec![0x1b1c],
+        _ => Vec::new(),
+    }
+}
+struct InventoryTransport<'a> {
+    hid: &'a dyn HidTransport,
+    watch: &'a ConfigurationWatch,
+    epoch: u64,
+    generation: u64,
+    context: &'a PollContext<'a>,
+}
+impl InventoryTransport<'_> {
+    fn active(&self) -> Result<(), ProviderError> {
+        if self.watch.active(self.epoch)
+            && self.context.active()
+            && self.hid.generation() == self.generation
+        {
+            Ok(())
+        } else {
+            Err(ProviderError::new(
+                "configuration inventory cancelled or connection changed",
+            ))
+        }
+    }
+}
+impl HidTransport for InventoryTransport<'_> {
+    fn generation(&self) -> u64 {
+        self.hid.generation()
+    }
+    fn enumerate(&self, vendor: u16) -> Result<Vec<HidInfo>, ProviderError> {
+        self.active()?;
+        let result = self.hid.enumerate(vendor);
+        self.active()?;
+        result
+    }
+    fn open(&self, _: &HidInfo) -> Result<Box<dyn HidSession>, ProviderError> {
+        Err(ProviderError::new(
+            "configuration discovery cannot open device sessions",
+        ))
+    }
+}
+fn discover_configuration(
+    hid: &dyn HidTransport,
+    clock: &dyn Clock,
+    cancel: &AtomicBool,
+    watch: &ConfigurationWatch,
+    epoch: u64,
+    generation: u64,
+) -> Result<Vec<ConfigurationDevice>, ProviderError> {
+    let context = PollContext {
+        clock,
+        cancelled: cancel,
+        deadline: clock.monotonic() + Duration::from_secs(12),
+        playstation_full_mode: false,
+    };
+    let transport = InventoryTransport {
+        hid,
+        watch,
+        epoch,
+        generation,
+        context: &context,
+    };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        transport.active()?;
+        hb_providers::configuration::discover_keyboards(&transport, &context)
+    }))
+    .unwrap_or_else(|_| {
+        Err(ProviderError::new(
+            "configuration discovery failed; refresh to retry",
+        ))
+    })
+}
+fn configuration_matches(target: &ConfigurationDevice, observed: &ConfigurationDevice) -> bool {
+    target.key == observed.key
+        && target.source == observed.source
+        && target.kind == observed.kind
+        && target.via == observed.via
+        && target.serial == observed.serial
+        && target.container == observed.container
+        && target.capability == observed.capability
+        && observed.online()
+}
+fn simulated_keyboards() -> Vec<ConfigurationDevice> {
+    [
+        (
+            "razer:026c:SIMULATED-KEYBOARD",
+            "Razer Huntsman V2",
+            "razer",
+            PollingCapability::ReadWrite,
+        ),
+        (
+            "corsair:1bb3:SIMULATED-CORSAIR",
+            "Corsair K70 RGB Pro",
+            "corsair",
+            PollingCapability::Unavailable(hb_providers::configuration::CORSAIR_UNAVAILABLE.into()),
+        ),
+    ]
+    .into_iter()
+    .map(|(key, name, source, capability)| ConfigurationDevice {
+        key: key.into(),
+        name: name.into(),
+        kind: "keyboard".into(),
+        source: source.into(),
+        via: "usb".into(),
+        connection: Connection::Online,
+        serial: Some(key.into()),
+        container: Some(format!("simulation:{source}")),
+        capability,
+    })
+    .collect()
 }
 fn execute_job(
     mut job: Job,
@@ -566,6 +744,7 @@ struct ControlTransport<'a> {
     shutdown: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
     permission: Option<(Arc<ControlPermission>, u64)>,
+    configuration: Option<(Arc<ConfigurationWatch>, u64)>,
     block_while_gaming: bool,
 }
 struct ControlSession {
@@ -573,6 +752,7 @@ struct ControlSession {
     shutdown: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
     permission: Option<(Arc<ControlPermission>, u64)>,
+    configuration: Option<(Arc<ConfigurationWatch>, u64)>,
     block_while_gaming: bool,
     notification_state: fn() -> bool,
 }
@@ -580,6 +760,14 @@ impl ControlSession {
     fn active(&self) -> Result<(), ProviderError> {
         if self.shutdown.load(Ordering::Relaxed) || self.cancelled.load(Ordering::Relaxed) {
             Err(ProviderError::new("configuration cancelled"))
+        } else if self
+            .configuration
+            .as_ref()
+            .is_some_and(|(watch, epoch)| !watch.active(*epoch))
+        {
+            Err(ProviderError::new(
+                "Keyboard configuration cancelled: Devices is no longer visible",
+            ))
         } else if self.permission.as_ref().is_some_and(|(p, epoch)| {
             !p.enabled.load(Ordering::Acquire)
                 || p.suspended.load(Ordering::Acquire)
@@ -623,17 +811,36 @@ impl HidTransport for ControlTransport<'_> {
         if self.shutdown.load(Ordering::Relaxed) || self.cancelled.load(Ordering::Relaxed) {
             return Err(ProviderError::new("configuration cancelled"));
         }
+        if self
+            .configuration
+            .as_ref()
+            .is_some_and(|(watch, epoch)| !watch.active(*epoch))
+        {
+            return Err(ProviderError::new(
+                "Keyboard configuration cancelled: Devices is no longer visible",
+            ));
+        }
         self.hid.enumerate(vendor)
     }
     fn open(&self, info: &HidInfo) -> Result<Box<dyn HidSession>, ProviderError> {
         if self.shutdown.load(Ordering::Relaxed) || self.cancelled.load(Ordering::Relaxed) {
             return Err(ProviderError::new("configuration cancelled"));
         }
+        if self
+            .configuration
+            .as_ref()
+            .is_some_and(|(watch, epoch)| !watch.active(*epoch))
+        {
+            return Err(ProviderError::new(
+                "Keyboard configuration cancelled: Devices is no longer visible",
+            ));
+        }
         Ok(Box::new(ControlSession {
             inner: self.hid.open(info)?,
             shutdown: self.shutdown.clone(),
             cancelled: self.cancelled.clone(),
             permission: self.permission.clone(),
+            configuration: self.configuration.clone(),
             block_while_gaming: self.block_while_gaming,
             notification_state: hb_windows::system::polling_apply_blocked,
         }))
@@ -647,6 +854,33 @@ pub(crate) fn execute_control(
     cancelled: &Arc<AtomicBool>,
     gaming: bool,
     permission: Option<(Arc<ControlPermission>, u64)>,
+) -> ControlOutcome {
+    execute_control_inner(
+        request,
+        hid,
+        clock,
+        shutdown,
+        cancelled,
+        gaming,
+        ControlGuards {
+            permission,
+            configuration: None,
+        },
+    )
+}
+#[derive(Default)]
+struct ControlGuards {
+    permission: Option<(Arc<ControlPermission>, u64)>,
+    configuration: Option<(Arc<ConfigurationWatch>, u64)>,
+}
+fn execute_control_inner(
+    request: &ControlRequest,
+    hid: &dyn HidTransport,
+    clock: &dyn Clock,
+    shutdown: &Arc<AtomicBool>,
+    cancelled: &Arc<AtomicBool>,
+    gaming: bool,
+    guards: ControlGuards,
 ) -> ControlOutcome {
     if shutdown.load(Ordering::Relaxed) || cancelled.load(Ordering::Relaxed) {
         return ControlOutcome::failed(request, "Configuration cancelled");
@@ -668,7 +902,8 @@ pub(crate) fn execute_control(
         hid,
         shutdown: shutdown.clone(),
         cancelled: cancelled.clone(),
-        permission,
+        permission: guards.permission,
+        configuration: guards.configuration,
         block_while_gaming: matches!(request.action, ControlAction::Apply(_)),
     };
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -687,14 +922,22 @@ fn simulate_control(
     generation: u64,
     timestamp: i64,
 ) -> ControlOutcome {
+    if let PollingCapability::Unavailable(reason) = &request.target.device.capability {
+        return ControlOutcome::failed(request, reason.clone());
+    }
     if matches!(request.action, ControlAction::Apply(_)) && request.target.generation != generation
     {
         return ControlOutcome::failed(request, "Connection changed; refresh before applying");
     }
+    let supported = if request.target.device.kind == "keyboard" {
+        vec![125, 250, 500, 1000, 2000, 4000, 8000]
+    } else {
+        vec![125, 500, 1000, 2000, 4000, 8000]
+    };
     let previous = *current;
     if let ControlAction::Apply(rate) = request.action {
-        if ![125, 500, 1000, 2000, 4000, 8000].contains(&rate.hz()) {
-            return ControlOutcome::failed(request, "Unsupported rate for simulated mouse");
+        if !supported.contains(&rate.hz()) {
+            return ControlOutcome::failed(request, "Unsupported rate for simulated device");
         }
         *current = rate;
     }
@@ -702,10 +945,10 @@ fn simulate_control(
     target.generation = generation;
     ControlOutcome {
         request: request.request,
-        key: target.reading.key.clone(),
+        key: target.device.key.clone(),
         observation: Some(PollingObservation {
             target,
-            supported: [125, 500, 1000, 2000, 4000, 8000]
+            supported: supported
                 .into_iter()
                 .map(|r| PollingRate::try_from(r).unwrap())
                 .collect(),
@@ -786,7 +1029,7 @@ impl UsageTracker {
             && let Some(observation) = &outcome.observation
             && observation.target.generation == self.generation
             && observation.rate.is_some()
-            && observation.target.reading.key == outcome.key
+            && observation.target.device.key == outcome.key
         {
             if self.rates.len() >= 512 {
                 self.rates.pop_first();
@@ -810,7 +1053,7 @@ impl UsageTracker {
                     .rates
                     .get(&reading.key)
                     .filter(|o| {
-                        let target = &o.target.reading;
+                        let target = &o.target.device;
                         reading.timestamp >= o.timestamp
                             && reading.source == target.source
                             && reading.via == target.via
@@ -851,7 +1094,12 @@ fn run(
     commands: Receiver<Command>,
     events: Events,
 ) {
-    let Lifecycle { cancel, permission } = lifecycle;
+    let Lifecycle {
+        cancel,
+        permission,
+        configuration,
+    } = lifecycle;
+    let simulate_keyboards = simulate && std::env::args().any(|a| a == "--simulate-keyboards");
     let (storage, store_rx) = bounded(32);
     let (boot, boot_rx) = bounded(1);
     let store_events = events.clone();
@@ -873,9 +1121,16 @@ fn run(
     let mut workers = Vec::new();
     let gates = Arc::new(WorkerAccess {
         permission: permission.clone(),
+        configuration: configuration.clone(),
         gates: hb_providers::catalog::DEVICES
             .iter()
             .map(|d| d.vid)
+            .chain(
+                hb_providers::configuration::CONFIGURATION_VENDORS
+                    .iter()
+                    .copied(),
+            )
+            .chain([0x1532, 0x046d, 0x3837, 0x1b1c])
             .collect::<BTreeSet<_>>()
             .into_iter()
             .map(|v| (v, Mutex::new(())))
@@ -915,7 +1170,15 @@ fn run(
     let mut diagnostics = BTreeMap::new();
     let mut diagnostics_dirty = true;
     let mut control_cancel = Arc::new(AtomicBool::new(!engine.settings.polling_controls));
-    let mut simulated_rate = PollingRate::try_from(1000).unwrap();
+    let mut simulated_rates = BTreeMap::new();
+    let mut configuration_devices: Vec<ConfigurationDevice> = Vec::new();
+    let mut configuration_generation = hid.generation();
+    let mut configuration_valid = false;
+    let mut configuration_failure = None;
+    let mut configuration_visible = false;
+    let mut configuration_inflight = false;
+    let mut configuration_due = Instant::now();
+    let mut configuration_dirty = false;
     let mut observed_rates = BTreeMap::new();
     let mut usage_tracker = UsageTracker::new(hid.generation(), engine.settings.polling_controls);
     let _ = events.send(Event::PollingInvalidated(hid.generation()));
@@ -989,6 +1252,61 @@ fn run(
             Instant::now(),
         );
         was_quiet = quiet;
+        let visible = configuration.visible.load(Ordering::Acquire) && !suspended && !stop;
+        if visible && !configuration_visible {
+            configuration_due = Instant::now();
+            configuration_dirty = true;
+        }
+        configuration_visible = visible;
+        if configuration_generation != hid.generation() {
+            configuration_generation = hid.generation();
+            configuration_valid = false;
+            for device in &mut configuration_devices {
+                device.connection = Connection::Stale;
+            }
+            configuration_due = Instant::now();
+            configuration_dirty = true;
+        }
+        if visible && !configuration_inflight && Instant::now() >= configuration_due {
+            if simulate {
+                let devices = if simulate_keyboards {
+                    simulated_keyboards()
+                } else {
+                    Vec::new()
+                };
+                configuration_dirty |= configuration_devices != devices
+                    || !configuration_valid
+                    || configuration_failure.is_some();
+                configuration_devices = devices;
+                configuration_valid = true;
+                configuration_failure = None;
+                configuration_due = Instant::now() + Duration::from_secs(30);
+            } else if jobs
+                .try_send(WorkerJob::Configuration(
+                    configuration.clone(),
+                    configuration.epoch.load(Ordering::Acquire),
+                    hid.generation(),
+                ))
+                .is_ok()
+            {
+                configuration_inflight = true;
+                inflight += 1;
+                configuration_due = Instant::now() + Duration::from_secs(30);
+            }
+        }
+        if visible
+            && configuration_dirty
+            && !events.tx.is_full()
+            && events
+                .try_send(Event::ConfigurationInventory {
+                    generation: configuration_generation,
+                    devices: configuration_devices.clone(),
+                    failure: configuration_failure.clone(),
+                })
+                .is_ok()
+        {
+            configuration_dirty = false;
+        }
         let ready = providers
             .keys()
             .filter(|id| {
@@ -1139,6 +1457,10 @@ fn run(
                     due.insert(id, Instant::now());
                 }
             }
+            Work::Command(Ok(Command::ConfigurationVisible(_))) => {}
+            Work::Command(Ok(Command::ConfigurationRefresh)) => {
+                configuration_due = Instant::now();
+            }
             Work::Command(Ok(Command::History {
                 key,
                 since,
@@ -1199,7 +1521,38 @@ fn run(
                     usage_tracker.samples(engine.readings()),
                 ));
             }
-            Work::Command(Ok(Command::Polling(request, epoch))) => {
+            Work::Completed(Ok(WorkerCompleted::Configuration(epoch, generation, result))) => {
+                inflight = inflight.saturating_sub(1);
+                configuration_inflight = false;
+                if configuration.active(epoch)
+                    && generation == hid.generation()
+                    && !suspended
+                    && !stop
+                {
+                    configuration_generation = generation;
+                    match result {
+                        Ok(devices) => {
+                            configuration_dirty |= configuration_devices != devices
+                                || !configuration_valid
+                                || configuration_failure.is_some();
+                            configuration_devices = devices;
+                            configuration_valid = true;
+                            configuration_failure = None;
+                        }
+                        Err(error) => {
+                            configuration_dirty = true;
+                            configuration_valid = false;
+                            for device in &mut configuration_devices {
+                                device.connection = Connection::Stale;
+                            }
+                            configuration_failure = Some(error.to_string());
+                        }
+                    }
+                } else {
+                    configuration_due = Instant::now();
+                }
+            }
+            Work::Command(Ok(Command::Polling(request, epoch, configuration_epoch))) => {
                 let allowed = epoch == permission.epoch.load(Ordering::Acquire)
                     && permission.enabled.load(Ordering::Acquire)
                     && permission.desired_enabled.load(Ordering::Acquire)
@@ -1207,14 +1560,17 @@ fn run(
                     && engine.settings.polling_controls
                     && !suspended
                     && !stop
-                    && engine.settings.enabled(&request.target.reading.source)
-                    && engine.readings().iter().any(|r| {
-                        r.key == request.target.reading.key
-                            && r.source == request.target.reading.source
-                            && r.online()
-                            && r.serial == request.target.reading.serial
-                            && r.container == request.target.reading.container
-                    });
+                    && (request.target.device.kind != "keyboard"
+                        || configuration_epoch.is_some_and(|epoch| configuration.active(epoch)))
+                    && (engine
+                        .readings()
+                        .iter()
+                        .any(|r| request.target.device.matches_reading(r) && r.online())
+                        || (configuration_valid
+                            && configuration_generation == hid.generation()
+                            && configuration_devices
+                                .iter()
+                                .any(|d| configuration_matches(&request.target.device, d))));
                 if !allowed {
                     let _ = events.send(Event::Polling(Box::new(ControlOutcome::failed(
                         &request,
@@ -1223,11 +1579,15 @@ fn run(
                 } else if simulate {
                     let outcome = simulate_control(
                         &request,
-                        &mut simulated_rate,
+                        simulated_rates
+                            .entry(request.target.device.key.clone())
+                            .or_insert_with(|| PollingRate::try_from(1000).unwrap()),
                         hid.generation(),
                         clock.unix(),
                     );
-                    if changed_configuration(&outcome, &mut observed_rates) {
+                    if changed_configuration(&outcome, &mut observed_rates)
+                        && engine.readings().iter().any(|r| r.key == outcome.key)
+                    {
                         engine.reset_estimate(&outcome.key);
                         let _ = storage.send(Storage::State(engine.estimator.clone()));
                     }
@@ -1242,6 +1602,7 @@ fn run(
                         Box::new(request.clone()),
                         control_cancel.clone(),
                         epoch,
+                        configuration_epoch,
                     )) {
                         Ok(()) => inflight += 1,
                         Err(_) => {
@@ -1265,7 +1626,9 @@ fn run(
                         "Connection changed during configuration; refresh before retrying".into(),
                     );
                 }
-                if changed_configuration(&outcome, &mut observed_rates) {
+                if changed_configuration(&outcome, &mut observed_rates)
+                    && engine.readings().iter().any(|r| r.key == outcome.key)
+                {
                     engine.reset_estimate(&outcome.key);
                     let _ = storage.send(Storage::State(engine.estimator.clone()));
                 }
@@ -1337,6 +1700,218 @@ fn run(
 
 #[cfg(test)]
 mod tests {
+    #[derive(Default)]
+    struct PassiveHid {
+        enumerations: AtomicU64,
+        generation: AtomicU64,
+        close_after_enumeration: Option<Arc<ConfigurationWatch>>,
+    }
+    impl HidTransport for PassiveHid {
+        fn generation(&self) -> u64 {
+            self.generation.load(Ordering::Relaxed)
+        }
+        fn enumerate(&self, vendor: u16) -> Result<Vec<HidInfo>, ProviderError> {
+            self.enumerations.fetch_add(1, Ordering::Relaxed);
+            if let Some(watch) = &self.close_after_enumeration {
+                watch.set_visible(false);
+            }
+            Ok(if vendor == 0x1532 {
+                vec![HidInfo {
+                    vendor_id: vendor,
+                    product_id: 0x026c,
+                    interface: 3,
+                    feature_length: Some(91),
+                    path: "hid#test-keyboard".into(),
+                    serial: "TEST-KEYBOARD".into(),
+                    container: Some("test-container".into()),
+                    ..Default::default()
+                }]
+            } else {
+                Vec::new()
+            })
+        }
+        fn open(&self, _: &HidInfo) -> Result<Box<dyn HidSession>, ProviderError> {
+            panic!("passive discovery cannot open")
+        }
+    }
+    #[test]
+    fn configuration_discovery_stops_when_closed_and_rejects_old_visibility_and_connection_epochs()
+    {
+        let hid = PassiveHid::default();
+        let watch = ConfigurationWatch::default();
+        let clock = SystemClock::default();
+        let cancel = AtomicBool::new(false);
+        assert!(discover_configuration(&hid, &clock, &cancel, &watch, 0, 0).is_err());
+        assert_eq!(hid.enumerations.load(Ordering::Relaxed), 0);
+        watch.set_visible(true);
+        let epoch = watch.epoch.load(Ordering::Acquire);
+        assert_eq!(
+            discover_configuration(&hid, &clock, &cancel, &watch, epoch, 0)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(hid.enumerations.load(Ordering::Relaxed), 2);
+        watch.set_visible(false);
+        watch.set_visible(true);
+        assert!(discover_configuration(&hid, &clock, &cancel, &watch, epoch, 0).is_err());
+        assert_eq!(hid.enumerations.load(Ordering::Relaxed), 2);
+        hid.generation.store(1, Ordering::Relaxed);
+        assert!(
+            discover_configuration(
+                &hid,
+                &clock,
+                &cancel,
+                &watch,
+                watch.epoch.load(Ordering::Acquire),
+                0
+            )
+            .is_err()
+        );
+        assert_eq!(hid.enumerations.load(Ordering::Relaxed), 2);
+        let watch = Arc::new(ConfigurationWatch::default());
+        watch.set_visible(true);
+        let hid = PassiveHid {
+            close_after_enumeration: Some(watch.clone()),
+            ..Default::default()
+        };
+        assert!(discover_configuration(&hid, &clock, &cancel, &watch, 1, 0).is_err());
+        assert_eq!(hid.enumerations.load(Ordering::Relaxed), 1);
+    }
+    #[test]
+    fn keyboard_requests_do_not_access_hid_after_dashboard_closes_or_reopens() {
+        let hid = PassiveHid::default();
+        let watch = Arc::new(ConfigurationWatch::default());
+        watch.set_visible(true);
+        let epoch = watch.epoch.load(Ordering::Acquire);
+        watch.set_visible(false);
+        watch.set_visible(true);
+        let clock = SystemClock::default();
+        let cancel = Arc::new(AtomicBool::new(false));
+        for action in [
+            ControlAction::Read,
+            ControlAction::Apply(PollingRate::try_from(250).unwrap()),
+        ] {
+            let request = ControlRequest {
+                request: 1,
+                target: ControlTarget {
+                    device: simulated_keyboards().remove(0),
+                    generation: 0,
+                },
+                action,
+            };
+            let outcome = execute_control_inner(
+                &request,
+                &hid,
+                &clock,
+                &cancel,
+                &cancel,
+                false,
+                ControlGuards {
+                    permission: None,
+                    configuration: Some((watch.clone(), epoch)),
+                },
+            );
+            assert!(outcome.failure.unwrap().contains("no longer visible"));
+            assert!(!outcome.may_have_changed);
+        }
+        assert_eq!(hid.enumerations.load(Ordering::Relaxed), 0);
+    }
+    #[test]
+    fn queued_keyboard_commands_keep_submission_epoch_even_when_close_notifications_cannot_enqueue()
+    {
+        for action in [
+            ControlAction::Read,
+            ControlAction::Apply(PollingRate::try_from(250).unwrap()),
+        ] {
+            let (commands, rx) = bounded(1);
+            let (tx, events) = bounded(4);
+            let configuration = Arc::new(ConfigurationWatch::default());
+            configuration.set_visible(true);
+            let runtime = Runtime {
+                commands,
+                events,
+                thread: None,
+                permission: Arc::new(ControlPermission::new(true)),
+                sink: Events {
+                    tx,
+                    window: Arc::new(AtomicUsize::new(0)),
+                },
+                cancel: Arc::new(AtomicBool::new(false)),
+                window: Arc::new(AtomicUsize::new(0)),
+                configuration,
+            };
+            runtime
+                .submit_control(ControlRequest {
+                    request: 1,
+                    target: ControlTarget {
+                        device: simulated_keyboards().remove(0),
+                        generation: 0,
+                    },
+                    action,
+                })
+                .unwrap();
+            runtime.send(Command::ConfigurationVisible(false));
+            runtime.send(Command::ConfigurationVisible(true));
+            let Command::Polling(_, _, Some(submitted_epoch)) = rx.recv().unwrap() else {
+                panic!("keyboard command missing submission epoch")
+            };
+            assert_eq!(submitted_epoch, 1);
+            assert!(!runtime.configuration.active(submitted_epoch));
+            assert!(runtime.configuration.visible.load(Ordering::Acquire));
+        }
+    }
+    #[test]
+    fn batteryless_configuration_never_creates_battery_samples_and_has_independent_rates() {
+        let mut devices = simulated_keyboards();
+        let keyboard = devices.remove(0);
+        let unavailable = devices.remove(0);
+        let mut rate = PollingRate::try_from(1000).unwrap();
+        let request = ControlRequest {
+            request: 1,
+            target: ControlTarget {
+                device: keyboard.clone(),
+                generation: 0,
+            },
+            action: ControlAction::Apply(PollingRate::try_from(250).unwrap()),
+        };
+        let outcome = simulate_control(&request, &mut rate, 0, 10);
+        assert_eq!(rate.hz(), 250);
+        let mut tracker = UsageTracker::new(0, true);
+        tracker.observe(&outcome);
+        assert!(tracker.samples(Vec::new()).is_empty());
+        assert!(tracker.rates.is_empty());
+        let mut changed = keyboard.clone();
+        changed.container = Some("different".into());
+        assert!(!configuration_matches(&keyboard, &changed));
+        changed = keyboard.clone();
+        changed.capability = PollingCapability::Unavailable("refused".into());
+        assert!(!configuration_matches(&keyboard, &changed));
+        let mut engine = Engine::new(
+            Settings {
+                disabled_providers: BTreeSet::from(["razer".into()]),
+                ..Default::default()
+            },
+            Estimator::default(),
+        );
+        assert!(engine.readings().is_empty());
+        assert!(configuration_matches(&keyboard, &keyboard));
+        assert!(engine.snapshot(10).devices.is_empty());
+        assert!(engine.flush_held().is_empty());
+        let request = ControlRequest {
+            target: ControlTarget {
+                device: unavailable,
+                generation: 0,
+            },
+            ..request
+        };
+        assert!(
+            simulate_control(&request, &mut rate, 0, 11)
+                .failure
+                .is_some()
+        );
+        assert_eq!(rate.hz(), 250);
+    }
     #[test]
     fn diagnostics_publish_only_changes_and_retry_after_backpressure() {
         let (tx, rx) = bounded(1);
@@ -1376,7 +1951,7 @@ mod tests {
     fn usage_learning_requires_fresh_readback_and_matching_connection() {
         let mut tracker = UsageTracker::new(2, true);
         let request = control_request(ControlAction::Read, 2);
-        let mut reading = request.target.reading.clone();
+        let mut reading = control_reading();
         reading.level = Some(80);
         reading.charging = Some(false);
         reading.timestamp = 19;
@@ -1418,7 +1993,7 @@ mod tests {
     #[test]
     fn failed_changes_disable_and_backward_clock_revoke_usage_evidence() {
         let request = control_request(ControlAction::Read, 2);
-        let mut reading = request.target.reading.clone();
+        let mut reading = control_reading();
         reading.timestamp = 30;
         let mut rate = PollingRate::try_from(1000).unwrap();
         let confirmed = simulate_control(&request, &mut rate, 2, 20);
@@ -1604,13 +2179,17 @@ mod tests {
         assert!(execute_job(job, &NoHid, &clock, &cancel).result.is_err());
         assert_eq!(*observed.lock().unwrap(), [false, true]);
     }
-    fn control_request(action: ControlAction, generation: u64) -> ControlRequest {
+    fn control_reading() -> Reading {
         let mut reading = Reading::new("simulated:mouse", "Mouse", "simulation", 10);
         reading.kind = "mouse".into();
+        reading
+    }
+    fn control_request(action: ControlAction, generation: u64) -> ControlRequest {
+        let reading = control_reading();
         ControlRequest {
             request: 1,
             target: ControlTarget {
-                reading,
+                device: ConfigurationDevice::from_reading(&reading),
                 generation,
             },
             action,
@@ -1668,7 +2247,7 @@ mod tests {
             0,
         );
         for provider in hb_providers::controls::POLLING_PROVIDERS {
-            request.target.reading.source = (*provider).into();
+            request.target.device.source = (*provider).into();
             assert!(
                 execute_control(
                     &request, &NeverHid, &clock, &shutdown, &cancelled, true, None
@@ -1702,6 +2281,7 @@ mod tests {
         commands.send(Command::Refresh).unwrap();
         let (event_tx, events) = bounded(1);
         let runtime = Runtime {
+            configuration: Arc::new(ConfigurationWatch::default()),
             commands,
             events,
             thread: None,
@@ -1726,6 +2306,7 @@ mod tests {
         let (event_tx, events) = bounded(4);
         let permission = Arc::new(ControlPermission::new(true));
         let runtime = Runtime {
+            configuration: Arc::new(ConfigurationWatch::default()),
             commands,
             events,
             thread: None,
@@ -1767,6 +2348,7 @@ mod tests {
             }
         }
         let mut session = ControlSession {
+            configuration: None,
             inner: Box::new(NeverSession),
             shutdown: Arc::new(AtomicBool::new(false)),
             cancelled: Arc::new(AtomicBool::new(false)),

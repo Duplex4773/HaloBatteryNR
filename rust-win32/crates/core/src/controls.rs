@@ -1,5 +1,5 @@
 //! Optional, explicit device configuration. No game or input-event access.
-use crate::{HidTransport, PollContext, Reading};
+use crate::{Connection, HidTransport, PollContext, Reading};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -24,9 +24,53 @@ impl From<PollingRate> for u32 {
         rate.0
     }
 }
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PollingCapability {
+    ReadWrite,
+    Unavailable(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfigurationDevice {
+    pub key: String,
+    pub name: String,
+    pub kind: String,
+    pub source: String,
+    pub via: String,
+    pub connection: Connection,
+    pub serial: Option<String>,
+    pub container: Option<String>,
+    pub capability: PollingCapability,
+}
+impl ConfigurationDevice {
+    pub fn from_reading(reading: &Reading) -> Self {
+        Self {
+            key: reading.key.clone(),
+            name: reading.name.clone(),
+            kind: reading.kind.clone(),
+            source: reading.source.clone(),
+            via: reading.via.clone(),
+            connection: reading.connection.clone(),
+            serial: reading.serial.clone(),
+            container: reading.container.clone(),
+            capability: PollingCapability::ReadWrite,
+        }
+    }
+    pub fn online(&self) -> bool {
+        self.connection == Connection::Online
+    }
+    pub fn matches_reading(&self, reading: &Reading) -> bool {
+        self.key == reading.key
+            && self.kind == reading.kind
+            && self.source == reading.source
+            && self.via == reading.via
+            && self.serial == reading.serial
+            && self.container == reading.container
+    }
+}
 #[derive(Clone, Debug)]
 pub struct ControlTarget {
-    pub reading: Reading,
+    pub device: ConfigurationDevice,
     /// Enumeration epoch of the last successful configuration read.
     pub generation: u64,
 }
@@ -62,7 +106,7 @@ impl ControlOutcome {
     pub fn failed(request: &ControlRequest, message: impl Into<String>) -> Self {
         Self {
             request: request.request,
-            key: request.target.reading.key.clone(),
+            key: request.target.device.key.clone(),
             observation: None,
             previous: None,
             may_have_changed: false,

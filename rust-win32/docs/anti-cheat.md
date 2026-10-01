@@ -1,6 +1,6 @@
 # Polling controls and anti-cheat boundaries
 
-Halo Battery's optional polling-rate controls configure an allowlisted mouse
+Halo Battery's optional polling-rate controls configure an allowlisted mouse or wired Razer keyboard
 through ordinary user-mode Windows HID access. This document describes the
 implementation boundaries; it is not an anti-cheat approval or compatibility
 guarantee. Include it with portable release documentation and notices.
@@ -33,6 +33,12 @@ guarantee. Include it with portable release documentation and notices.
   to remain identical. It does not create or modify button/macro assignments,
   switch profiles or execute stored actions. Its firmware-update collection is
   explicitly excluded.
+- Wired Razer keyboard configuration uses its exact interface-3, 91-byte feature
+  allowlist and one acknowledged rate SET with readback. Batteryless keyboard
+  inventory is passive, dashboard-only and active only while Devices is visible.
+  Known Corsair keyboards are recognition-only: no command collection is opened,
+  and no polling query, mode change, SET or heartbeat is implemented. Maintained
+  software sessions and automatic rate reapplication are disabled by design.
 - Settings and suspension revoke configuration permission synchronously, even
   with a full command queue. A latest-settings mailbox and acknowledged epochs
   prevent old jobs or lifecycle events from reviving permission. Shutdown drains
@@ -92,3 +98,6 @@ audit. See [Razer protocol evidence](polling-razer-evidence.md),
 [Logitech evidence](polling-logitech-evidence.md) and
 [MCHOSE evidence](polling-mchose-evidence.md) for per-device
 provenance and the distinction between reported rate and measured USB frequency.
+See [keyboard evidence](polling-keyboard-evidence.md) for the separate keyboard
+allowlist and Corsair software-session exclusion. No keyboard hardware or
+anti-cheat compatibility validation is implied by the native simulation tests.

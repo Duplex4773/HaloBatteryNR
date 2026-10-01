@@ -4,9 +4,58 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
+## Keyboard controls and tray theme checkpoint, 1 October 2026
+
+The current portable executable is **2,794,496 bytes (2.67 MiB)**,
+SHA256 `3CDFBF17B0AEF715AAD0AAF603E633C32E8DA5942CB60FA1464B726659715864`.
+Formatting, strict workspace Clippy, the optimized release build, production
+source/import restrictions and **436 behavioral tests** pass. Two optional timing
+tests remain ignored. The 459-ID upstream coverage audit remains complete.
+Source and executable privacy checks pass; local paths, hardware identities,
+settings, diagnostics and screenshots remain outside committed/package files.
+
+Five exact wired Razer keyboard PIDs offer 125/250/500/1000/2000/4000/8000 Hz
+through interface 3 and 91-byte feature reports. Tests enforce one keyboard SET,
+same-rate no-write, malformed/BUSY/late reports, uncertainty, readback mismatch,
+cancellation, reconnect and visibility epochs. Duplicate physical keyboards and
+ambiguous collections remain separate or unavailable. Closing Devices revokes
+queued keyboard work even when it is reopened before the command queue drains.
+All thirteen recognized Corsair PIDs send zero configuration packets, including
+forged requests. Existing mouse support boundaries and transactions are retained.
+
+The connected **Corsair K70 RGB Pro** was passively recognized with the exact
+maintained-software-session explanation and no configuration commands. No physical
+keyboard polling SET was performed. The five Razer keyboards remain locally
+hardware-unverified; simulation does not establish effective reporting frequency,
+persistence or anti-cheat approval. See [keyboard evidence](polling-keyboard-evidence.md).
+
+The final release passes the simulated keyboard UI suite: rename, 250-Hz
+Read/Apply/Restore, disabled Corsair controls, battery-only History/Insights,
+one mouse-only status/history inventory and forty dashboard cycles. USER/GDI
+counts at cycles 1/20/40 stay **43/107**, with settled private memory **9.66 MiB**
+at 5/10/20 seconds after closing. The earlier native dashboard regression also
+passes theme, keyboard navigation, settings and mouse-control checks.
+
+Tray popups follow the dashboard's system app palette even while it is closed,
+using documented native owner drawing. High contrast retains native system menus.
+Pixel tests cover both palettes, selection and disabled rows; mnemonic tests
+preserve native IDs and skip disabled items. Reentrant callbacks use immutable
+menu state. Forty unit-level popup lifecycles retain bounded GDI resources; the
+actual final-release popup matches system appearance and eight open/cancel cycles
+retain **17 GDI handles**. No system appearance settings were changed.
+
+Separate **180-second** final-release windows average **6.21/6.21 MiB** private
+memory and **0.260%/0.139%** of one logical core for hardware/no-animation and
+simulated charging respectively. The animated run warms keyboard inventory and
+forty dashboard cycles, then closes Devices. Both meet the engineering targets.
+See the [resource audit follow-up](resource-audit.md#keyboard-and-tray-menu-follow-up)
+for comparison conditions, peak memory and limitations. An earlier hardware run
+with changed settings was excluded from the background comparison; the sampler
+now rejects settings changes and dashboards left open at measurement end.
+
 ## Resource audit checkpoint, 1 October 2026
 
-The latest optimized executable is **2,722,304 bytes (2.60 MiB)**, SHA256
+At this audit checkpoint, the optimized executable was **2,722,304 bytes (2.60 MiB)**, SHA256
 `4638C934130E688F31624E1D5E1B9D936B3E255458BF09D5B1A78BEAC0B1221B`.
 Formatting, strict Clippy, the release build and **410 behavioral tests** pass;
 two optional timing tests were run separately. Native interaction and Insights

@@ -19,7 +19,7 @@ pub(crate) fn execute(
     hid: &dyn HidTransport,
     context: &PollContext<'_>,
 ) -> ControlOutcome {
-    let reading = &request.target.reading;
+    let reading = &request.target.device;
     if reading.source != "logitech" || !reading.online() || reading.kind != "mouse" {
         return ControlOutcome::failed(request, "select an online Logitech mouse to configure");
     }
@@ -233,7 +233,7 @@ pub(crate) fn execute(
         ))
     };
     let observation = result.observed_hz.map(|hz| PollingObservation {
-        target: ControlTarget { reading: reading.clone(), generation },
+        target: ControlTarget { device: reading.clone(), generation },
         supported: route.capability.supported_hz.iter().filter_map(|h| PollingRate::try_from(*h).ok()).collect(),
         rate: if mode_verified {rate(Some(hz))} else {None},
         timestamp: context.clock.unix(),

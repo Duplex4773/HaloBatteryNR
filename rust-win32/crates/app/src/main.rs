@@ -37,6 +37,11 @@ fn entry() -> Result<(), ProviderError> {
             .and_then(|i| args.get(i + 1))
             .cloned()
     };
+    if args.iter().any(|a| a == "--simulate-keyboards") && !args.iter().any(|a| a == "--simulate") {
+        return Err(ProviderError::new(
+            "--simulate-keyboards requires --simulate",
+        ));
+    }
     let dir = option("--data-dir")
         .map(PathBuf::from)
         .unwrap_or_else(hb_storage::data_dir);
@@ -45,9 +50,11 @@ fn entry() -> Result<(), ProviderError> {
         // require an explicit rate and exact stable key; no default mouse SET.
         let _instance = hb_windows::system::Instance::acquire()?;
         let selected_provider = option("--provider").unwrap_or_else(|| "razer".into());
-        if !hb_providers::controls::POLLING_PROVIDERS.contains(&selected_provider.as_str()) {
+        if !hb_providers::controls::POLLING_PROVIDERS.contains(&selected_provider.as_str())
+            && selected_provider != "corsair"
+        {
             return Err(ProviderError::new(
-                "Polling controls support Razer, Logitech and MCHOSE only",
+                "Polling controls support Razer, Logitech and MCHOSE; Corsair keyboards are recognition only",
             ));
         }
         let action = match option("--polling-hz") {
@@ -79,20 +86,44 @@ fn entry() -> Result<(), ProviderError> {
             deadline: clock.monotonic() + Duration::from_secs(25),
             playstation_full_mode: false,
         };
-        let mut provider = hb_providers::providers()
-            .into_iter()
-            .find(|p| p.id() == selected_provider)
-            .unwrap();
-        let devices = provider.poll(&hid, &context)?;
+        let kind = option("--device-kind").unwrap_or_else(|| "all".into());
+        if !["all", "mouse", "keyboard"].contains(&kind.as_str()) {
+            return Err(ProviderError::new(
+                "Use --device-kind all, mouse or keyboard",
+            ));
+        }
+        let key = option("--device-key");
+        let mut devices = Vec::new();
+        if kind != "mouse" && matches!(selected_provider.as_str(), "razer" | "corsair") {
+            devices = hb_providers::configuration::discover_keyboards(&hid, &context)?
+                .into_iter()
+                .filter(|d| d.source == selected_provider)
+                .collect();
+        }
+        let selected_keyboard = key
+            .as_ref()
+            .is_some_and(|key| devices.iter().any(|d| &d.key == key));
+        if kind != "keyboard" && !selected_keyboard && selected_provider != "corsair" {
+            let mut provider = hb_providers::providers()
+                .into_iter()
+                .find(|p| p.id() == selected_provider)
+                .ok_or_else(|| ProviderError::new("Provider unavailable"))?;
+            devices.extend(
+                provider
+                    .poll(&hid, &context)?
+                    .iter()
+                    .map(ConfigurationDevice::from_reading),
+            );
+        }
         let mut output = Vec::new();
-        for reading in devices
+        for device in devices
             .into_iter()
             .filter(|r| option("--device-key").is_none_or(|key| key == r.key))
         {
             let request = ControlRequest {
                 request: 1,
                 target: ControlTarget {
-                    reading,
+                    device,
                     generation: hid.generation(),
                 },
                 action,
@@ -107,7 +138,7 @@ fn entry() -> Result<(), ProviderError> {
                 None,
             );
             output.push(serde_json::json!({ "key": result.key,
-                "name": request.target.reading.name,
+                "name": request.target.device.name,
                 "previous_hz": result.previous.map(PollingRate::hz),
                 "observed_hz": result.observation.as_ref().and_then(|o| o.rate).map(PollingRate::hz),
                 "supported_hz": result.observation.as_ref().map(|o| o.supported.iter().map(|r| r.hz()).collect::<Vec<_>>()),

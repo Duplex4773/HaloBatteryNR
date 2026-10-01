@@ -11,7 +11,7 @@ pub(crate) fn execute(
     hid: &dyn HidTransport,
     context: &PollContext<'_>,
 ) -> ControlOutcome {
-    let reading = &request.target.reading;
+    let reading = &request.target.device;
     if reading.source != "mchose" || !reading.online() || reading.kind != "mouse" {
         return ControlOutcome::failed(request, "select an online MCHOSE mouse to configure");
     }
@@ -79,7 +79,7 @@ pub(crate) fn execute(
     let result = mchose_controls::execute_rate(&mut session, context, info, requested);
     let observation = result.observed_hz.map(|hz| PollingObservation {
         target: ControlTarget {
-            reading: reading.clone(),
+            device: reading.clone(),
             generation,
         },
         supported: result

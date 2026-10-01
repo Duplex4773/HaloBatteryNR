@@ -25,7 +25,7 @@ fn request() -> ControlRequest {
     ControlRequest {
         request: 1,
         target: ControlTarget {
-            reading,
+            device: ConfigurationDevice::from_reading(&reading),
             generation: 0,
         },
         action: ControlAction::Apply(PollingRate::try_from(8000).unwrap()),
@@ -85,9 +85,9 @@ fn mchose_session_requires_online_mouse_current_epoch_and_permission() {
         let mut request = base.clone();
         match changed {
             0 => request.target.generation = 1,
-            1 => request.target.reading.connection = Connection::Sleeping,
-            2 => request.target.reading.kind = "keyboard".into(),
-            _ => request.target.reading.key = "mchose:3837:other".into(),
+            1 => request.target.device.connection = Connection::Sleeping,
+            2 => request.target.device.kind = "keyboard".into(),
+            _ => request.target.device.key = "mchose:3837:other".into(),
         }
         refused_without_open(vec![receiver()], &request, false);
     }
@@ -149,14 +149,14 @@ fn selected_receiver_read_exposes_only_verified_reference_rates() {
     let observation = result.observation.unwrap();
     assert_eq!(observation.rate.unwrap().hz(), 1000);
     assert_eq!(observation.target.generation, request.target.generation);
-    assert_eq!(observation.target.reading.key, request.target.reading.key);
+    assert_eq!(observation.target.device.key, request.target.device.key);
     assert_eq!(
-        observation.target.reading.serial,
-        request.target.reading.serial
+        observation.target.device.serial,
+        request.target.device.serial
     );
     assert_eq!(
-        observation.target.reading.container,
-        request.target.reading.container
+        observation.target.device.container,
+        request.target.device.container
     );
     assert_eq!(
         observation
@@ -190,14 +190,14 @@ fn selected_receiver_apply_preserves_blob_and_verifies_observation() {
     let observation = result.observation.unwrap();
     assert_eq!(observation.rate.unwrap().hz(), 8000);
     assert_eq!(observation.target.generation, request.target.generation);
-    assert_eq!(observation.target.reading.key, request.target.reading.key);
+    assert_eq!(observation.target.device.key, request.target.device.key);
     assert_eq!(
-        observation.target.reading.serial,
-        request.target.reading.serial
+        observation.target.device.serial,
+        request.target.device.serial
     );
     assert_eq!(
-        observation.target.reading.container,
-        request.target.reading.container
+        observation.target.device.container,
+        request.target.device.container
     );
     assert_eq!(*hid.opened.lock().unwrap(), vec!["synthetic-receiver"]);
     hid.done();

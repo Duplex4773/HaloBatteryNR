@@ -1,5 +1,8 @@
 //! Explicit hardware configuration, serialized by the application's HID owner.
-use crate::{provider::trusted_identity, razer_controls};
+use crate::{
+    provider::{is_bluetooth, receiver_key, trusted_identity},
+    razer_controls,
+};
 use hb_core::*;
 use std::time::Duration;
 
@@ -89,7 +92,10 @@ impl DeviceController for HidDeviceController {
         hid: &dyn HidTransport,
         context: &PollContext<'_>,
     ) -> ControlOutcome {
-        let reading = &request.target.reading;
+        let reading = &request.target.device;
+        if let PollingCapability::Unavailable(reason) = &reading.capability {
+            return ControlOutcome::failed(request, reason.clone());
+        }
         if reading.source == "logitech" {
             return crate::logitech_adapter::execute(request, hid, context);
         }
@@ -102,8 +108,17 @@ impl DeviceController for HidDeviceController {
                 "hardware polling controls are unavailable for this provider",
             );
         }
-        if !reading.online() || reading.kind != "mouse" {
-            return ControlOutcome::failed(request, "select an online mouse to configure");
+        if !reading.online() || !matches!(reading.kind.as_str(), "mouse" | "keyboard") {
+            return ControlOutcome::failed(
+                request,
+                "select an online mouse or keyboard to configure",
+            );
+        }
+        if reading.kind == "keyboard" && reading.via != "usb" {
+            return ControlOutcome::failed(
+                request,
+                "keyboard polling controls require a wired USB device",
+            );
         }
         if !context.active() {
             return ControlOutcome::failed(request, "configuration cancelled or deadline reached");
@@ -122,9 +137,11 @@ impl DeviceController for HidDeviceController {
             Err(e) => return ControlOutcome::failed(request, e.message),
         };
         let mut matching = devices.iter().filter(|info| {
-            razer_controls::protocol(info).is_some()
-                && reading.key
-                    == format!("razer:{:04x}:{}", info.product_id, trusted_identity(info))
+            razer_controls::protocol(info).is_some_and(|protocol| {
+                (protocol == razer_controls::Protocol::KeyboardExtended)
+                    == (reading.kind == "keyboard")
+                    && (reading.kind != "keyboard" || !is_bluetooth(&info.path))
+            }) && reading.key == format!("razer:{:04x}:{}", info.product_id, trusted_identity(info))
         });
         let Some(info) = matching.next() else {
             return ControlOutcome::failed(
@@ -155,6 +172,19 @@ impl DeviceController for HidDeviceController {
                 "device serial or container changed; refresh configuration before applying",
             );
         }
+        if reading.kind == "keyboard"
+            && devices.iter().any(|other| {
+                other.vendor_id == info.vendor_id
+                    && other.product_id == info.product_id
+                    && trusted_identity(other) == trusted_identity(info)
+                    && receiver_key(other) != receiver_key(info)
+            })
+        {
+            return ControlOutcome::failed(
+                request,
+                "multiple physical devices share this identity; refusing ambiguous target",
+            );
+        }
         let protocol = razer_controls::protocol(info).unwrap();
         let requested = match request.action {
             ControlAction::Read => None,
@@ -180,7 +210,7 @@ impl DeviceController for HidDeviceController {
             .map(|f| format!("Razer polling configuration failed: {f:?}"));
         let observation = result.observed_hz.map(|hz| PollingObservation {
             target: ControlTarget {
-                reading: reading.clone(),
+                device: reading.clone(),
                 generation,
             },
             supported: protocol
@@ -193,6 +223,9 @@ impl DeviceController for HidDeviceController {
             evidence: match protocol {
                 razer_controls::Protocol::Extended | razer_controls::Protocol::ExtendedWireless => {
                     "OpenRazer high-rate protocol reference; hardware unverified locally"
+                }
+                razer_controls::Protocol::KeyboardExtended => {
+                    "OpenRazer Windows keyboard polling reference; hardware unverified locally"
                 }
                 razer_controls::Protocol::Legacy => {
                     "OpenMouse legacy polling reference; hardware unverified locally"

@@ -15,16 +15,21 @@ show the practical benefit on the tested machine.
 Added features include:
 
 - A Devices, History, Settings and Insights dashboard with system light/dark
-  appearance, keyboard navigation and per-monitor DPI support.
+  appearance shared by the tray context menu, keyboard navigation and per-monitor DPI support.
 - Thirty-day battery history, with **Time used** as the default view and calendar
   views available. Sleeping periods pause estimated use time; calendar charts
   carry the last known level through unavailable readings.
 - Estimated use remaining, charge summaries and observed drain comparisons by
   confirmed polling rate, with evidence requirements for estimates.
 - Optional read/apply/restore polling-rate controls for supported Razer, Logitech
-  and MCHOSE mice, including supported 8000 Hz routes. Controls use ordinary
+  and MCHOSE mice and five wired Razer keyboard models, including supported
+  8000 Hz routes. Controls use ordinary
   user-mode HID, default off and never apply saved rates automatically. See
   [supported models and limits](rust-win32/docs/polling-controls.md).
+- Wired keyboards appear on Devices without battery rings, alerts or battery
+  history. Known Corsair high-rate keyboards, including K70 RGB Pro, are listed
+  with polling changes unavailable because their maintained software session
+  conflicts with the app's one-time-only configuration policy.
 - A configurable orange battery warning (30% by default), separate low-alert
   thresholds, stable tray placement through mouse sleep, and dashboard reopening
   while monitoring remains active.
@@ -42,19 +47,21 @@ refresh interval and status export enabled, with dashboards and menus closed.
 The hardware workload used a wireless Razer DeathAdder V4 Pro and normal
 provider discovery; the charging workload used one simulated animated mouse.
 Original figures include observed Python and PowerShell helper processes.
+Rust figures use the keyboard/menu build, after dashboard warmup; the animated
+run also warmed keyboard inventory and completed 40 dashboard cycles.
 
 | Measurement | Original Halo Battery 1.13.0 | Halo Battery Next Rust port |
 | --- | ---: | ---: |
-| Hardware: average private memory | 138.18 MiB | 6.27 MiB |
-| Hardware: CPU, one logical core | 0.269% | 0.130% |
-| Animated charging: average private memory | 33.10 MiB | 5.71 MiB |
-| Animated charging: CPU, one logical core | 0.226% | 0.208% |
-| Portable executable size | Not measured | 2.60 MiB |
+| Hardware: average private memory | 138.18 MiB | 6.21 MiB |
+| Hardware: CPU, one logical core | 0.269% | 0.260% |
+| Animated charging: average private memory | 33.10 MiB | 6.21 MiB |
+| Animated charging: CPU, one logical core | 0.226% | 0.139% |
+| Portable executable size | Not measured | 2.67 MiB |
 
 These compare unchanged upstream Python source with optimized Rust release
-builds on one machine, rather than two packaged releases. Animated CPU use is
-similar; the hardware run shows substantially lower memory and CPU use for the
-Rust port. Small timing differences need repeated measurements. See the
+builds on one machine, rather than two packaged releases. The hardware run shows substantially lower private memory for the Rust port.
+CPU results vary across short runs; the latest hardware CPU values are close.
+Small timing differences need repeated measurements. See the
 [full resource audit](rust-win32/docs/resource-audit.md) for build identities,
 peak memory, compiler settings, lifecycle checks and measurement limits.
 

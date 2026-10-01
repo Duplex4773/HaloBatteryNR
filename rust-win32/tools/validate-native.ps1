@@ -2,6 +2,7 @@ param(
   [int]$Seconds = 180,
   [switch]$Animation,
   [switch]$Hardware,
+  [switch]$Keyboards,
   [switch]$PollingControls,
   [int]$Cycles = 20,
   [string]$Executable,
@@ -9,6 +10,7 @@ param(
   [string]$SamplerPython
 )
 $ErrorActionPreference = 'Stop'
+if ($Keyboards -and $Hardware) { throw 'Keyboard resource fixtures require simulation.' }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $exe = if ($Executable) { (Resolve-Path -LiteralPath $Executable).Path } else { Join-Path $repo 'target/x86_64-pc-windows-msvc/release/HaloBatteryNext.exe' }
 if (!(Test-Path -LiteralPath $exe)) { throw 'Release build required.' }
@@ -38,6 +40,7 @@ public static class HaloNativeTest {
 }
 $arguments = @('--background', '--data-dir', "`"$data`"")
 if (!$Hardware) { $arguments += '--simulate' }
+if ($Keyboards) { $arguments += '--simulate-keyboards' }
 $process = Start-Process -FilePath $exe -ArgumentList $arguments -WindowStyle Hidden -PassThru
 try {
   $deadline = [DateTime]::UtcNow.AddSeconds(30)
@@ -78,6 +81,8 @@ try {
   $process.Refresh()
   $after = @{ private_bytes=$process.PrivateMemorySize64; gdi=[HaloNativeTest]::GetGuiResources($process.Handle,0); user=[HaloNativeTest]::GetGuiResources($process.Handle,1); threads=$process.Threads.Count }
   $cpu = $process.TotalProcessorTime.TotalSeconds
+  # Reject an interactive/settings-changing run as a background comparison.
+  $measurementConfigHash = (Get-FileHash -LiteralPath (Join-Path $data 'config.json') -Algorithm SHA256).Hash
   $clock = [Diagnostics.Stopwatch]::StartNew()
   $samples = @()
   if ($SamplerPython) {
@@ -101,8 +106,15 @@ try {
     $cpuPercent = ($process.TotalProcessorTime.TotalSeconds-$cpu)/$duration*100
   }
   $process.Refresh()
+  if ((Get-FileHash -LiteralPath (Join-Path $data 'config.json') -Algorithm SHA256).Hash -ne $measurementConfigHash) {
+    throw 'Settings changed during resource sampling; repeat without dashboard interaction.'
+  }
+  if ([HaloNativeTest]::Window($process.Id, 'Halo Battery Next') -ne [IntPtr]::Zero) {
+    throw 'Dashboard was open at the end of resource sampling; repeat with the dashboard closed.'
+  }
   $result = @{
     mode = $(if($Hardware){'hardware'}else{'simulated'}); animation = [bool]$Animation; polling_controls = [bool]$PollingControls;
+    keyboard_fixtures = [bool]$Keyboards;
     duration_seconds = $duration;
     one_core_cpu_percent = $cpuPercent;
     private_bytes_average = ($samples | Measure-Object -Average).Average;

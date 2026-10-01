@@ -20,7 +20,7 @@ Copy-Item -LiteralPath (Join-Path $reference 'docs/protocols.md') -Destination (
 $documentation = Join-Path $output 'docs'
 [IO.Directory]::CreateDirectory($documentation) | Out-Null
 Copy-Item -LiteralPath (Join-Path $reference 'docs/protocols.md') -Destination $documentation
-foreach ($name in @('provider-parity.md', 'coverage-summary.md', 'validation-next.md', 'resource-audit.md', 'windows-integration.md', 'polling-controls.md', 'polling-razer-evidence.md', 'polling-logitech-evidence.md', 'polling-mchose-evidence.md', 'anti-cheat.md', 'history.md', 'insights.md')) {
+foreach ($name in @('provider-parity.md', 'coverage-summary.md', 'validation-next.md', 'resource-audit.md', 'windows-integration.md', 'polling-controls.md', 'polling-razer-evidence.md', 'polling-keyboard-evidence.md', 'polling-logitech-evidence.md', 'polling-mchose-evidence.md', 'anti-cheat.md', 'history.md', 'insights.md')) {
   Copy-Item -LiteralPath (Join-Path $repo "docs/$name") -Destination $documentation
 }
 $notices = Join-Path $output 'licenses'

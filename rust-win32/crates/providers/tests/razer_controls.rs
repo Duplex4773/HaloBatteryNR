@@ -507,23 +507,138 @@ fn cancellation_after_first_set_stops_second_set_and_verification() {
             }
         }
     }
+    for protocol in [Protocol::Extended, Protocol::KeyboardExtended] {
+        let cancel = AtomicBool::new(false);
+        let clock = CancelClock {
+            time: AtomicU64::new(0),
+            sleeps: AtomicU64::new(0),
+            cancel: &cancel,
+        };
+        let c = PollContext {
+            clock: &clock,
+            cancelled: &cancel,
+            deadline: Duration::from_secs(1),
+            playstation_full_mode: false,
+        };
+        let mut s = Session::new(vec![reply(0xc0, 2, 0, 8), reply(0x40, 2, 0, 1)]);
+        let r = execute_rate(&mut s, &c, protocol, Some(8000));
+        assert_eq!(r.failure, Some(ProtocolFailure::CancelledOrDeadline));
+        assert_eq!(r.observed_hz, None);
+        assert!(r.may_have_changed);
+        assert_eq!(s.sent.lock().unwrap().len(), 2);
+        assert_eq!(s.replies.len(), 1);
+    }
+}
+
+#[test]
+fn keyboard_all_rates_have_exact_single_set_and_one_millisecond_settle() {
+    for pid in [0x026b, 0x026c, 0x0287, 0x028d, 0x02a5] {
+        let info = HidInfo {
+            vendor_id: 0x1532,
+            product_id: pid,
+            interface: 3,
+            feature_length: Some(91),
+            ..Default::default()
+        };
+        let p = protocol(&info).unwrap();
+        assert_eq!(p, Protocol::KeyboardExtended);
+        assert_eq!(p.rates(), &[125, 250, 500, 1000, 2000, 4000, 8000]);
+        for &hz in p.rates() {
+            let clock = TestClock::default();
+            let cancel = AtomicBool::new(false);
+            let previous = if hz == 1000 { 8000 } else { 1000 };
+            let mut session = Session::new(vec![
+                reply(0xc0, 2, 0, (8000 / previous) as u8),
+                reply(0x40, 2, 0, (8000 / hz) as u8),
+                reply(0xc0, 2, 0, (8000 / hz) as u8),
+            ]);
+            let result = execute_rate(&mut session, &context(&clock, &cancel), p, Some(hz));
+            assert_eq!(result.failure, None);
+            assert_eq!(result.previous_hz, Some(previous));
+            assert_eq!(result.observed_hz, Some(hz));
+            let sent = session.sent.lock().unwrap();
+            assert_eq!(
+                sent.iter().map(|r| r[8]).collect::<Vec<_>>(),
+                [0xc0, 0x40, 0xc0]
+            );
+            let mut golden = vec![0; 91];
+            golden[2] = 0x1f;
+            golden[6] = 2;
+            golden[8] = 0x40;
+            golden[10] = (8000 / hz) as u8;
+            golden[89] = golden[3..89].iter().fold(0, |a, b| a ^ b);
+            assert_eq!(sent[1], golden);
+            assert_eq!(clock.monotonic(), Duration::from_millis(3));
+            assert!(request(p, Some((hz, 1))).is_none());
+        }
+        for interface in [0, 1, 2, 4] {
+            assert_eq!(
+                protocol(&HidInfo {
+                    interface,
+                    ..info.clone()
+                }),
+                None
+            );
+        }
+        for feature_length in [None, Some(90), Some(92)] {
+            assert_eq!(
+                protocol(&HidInfo {
+                    feature_length,
+                    ..info.clone()
+                }),
+                None
+            );
+        }
+    }
+}
+#[test]
+fn keyboard_busy_malformed_verification_and_late_reply_never_repeat_set() {
+    let p = Protocol::KeyboardExtended;
+    for acknowledgement in [reply(0x40, 1, 0, 1), reply(0xc0, 2, 0, 1), vec![0; 90]] {
+        let clock = TestClock::default();
+        let cancel = AtomicBool::new(false);
+        let mut session = Session::new(vec![
+            reply(0xc0, 2, 0, 8),
+            acknowledgement,
+            reply(0xc0, 2, 0, 1),
+        ]);
+        let result = execute_rate(&mut session, &context(&clock, &cancel), p, Some(8000));
+        assert!(result.failure.is_some());
+        assert!(result.may_have_changed);
+        assert_eq!(result.previous_hz, Some(1000));
+        assert_eq!(result.observed_hz, Some(8000));
+        assert_eq!(
+            session
+                .sent
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|r| r[8] == 0x40)
+                .count(),
+            1
+        );
+    }
+    for last in [reply(0xc0, 2, 0, 8), vec![0; 90]] {
+        let clock = TestClock::default();
+        let cancel = AtomicBool::new(false);
+        let mut session = Session::new(vec![reply(0xc0, 2, 0, 8), reply(0x40, 2, 0, 1), last]);
+        let result = execute_rate(&mut session, &context(&clock, &cancel), p, Some(8000));
+        assert!(result.failure.is_some());
+        assert!(result.may_have_changed);
+        assert_eq!(result.previous_hz, Some(1000));
+    }
+    let clock = TestClock::default();
     let cancel = AtomicBool::new(false);
-    let clock = CancelClock {
-        time: AtomicU64::new(0),
-        sleeps: AtomicU64::new(0),
-        cancel: &cancel,
-    };
-    let c = PollContext {
-        clock: &clock,
-        cancelled: &cancel,
-        deadline: Duration::from_secs(1),
-        playstation_full_mode: false,
-    };
-    let mut s = Session::new(vec![reply(0xc0, 2, 0, 8), reply(0x40, 2, 0, 1)]);
-    let r = execute_rate(&mut s, &c, Protocol::Extended, Some(8000));
-    assert_eq!(r.failure, Some(ProtocolFailure::CancelledOrDeadline));
-    assert_eq!(r.observed_hz, None);
-    assert!(r.may_have_changed);
-    assert_eq!(s.sent.lock().unwrap().len(), 2);
-    assert_eq!(s.replies.len(), 1);
+    let mut ctx = context(&clock, &cancel);
+    ctx.deadline = Duration::from_millis(2);
+    let mut session = Session::new(vec![reply(0xc0, 2, 0, 8), reply(0x40, 2, 0, 1)]);
+    let result = execute_rate(&mut session, &ctx, p, Some(8000));
+    assert_eq!(result.failure, Some(ProtocolFailure::CancelledOrDeadline));
+    assert!(result.observed_hz.is_none());
+    assert_eq!(session.sent.lock().unwrap().len(), 2);
+    cancel.store(true, Ordering::Relaxed);
+    let mut session = Session::new(vec![]);
+    let result = execute_rate(&mut session, &context(&clock, &cancel), p, Some(250));
+    assert_eq!(result.failure, Some(ProtocolFailure::CancelledOrDeadline));
+    assert!(session.sent.lock().unwrap().is_empty());
 }

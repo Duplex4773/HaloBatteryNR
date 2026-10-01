@@ -1,8 +1,10 @@
 # Resource audit — 2026-10-01
 
-This audit reduces repeated work without changing provider packets, discovery
+The original optimization audit below reduces repeated work without changing provider packets, discovery
 filters, transport precedence, polling intervals, notification behavior or the
-default charging animation. Keyboard polling support remains separate work.
+default charging animation. A later keyboard/menu checkpoint is recorded at the
+end of this report; the optimization measurements below retain their original
+build identities.
 Measurements use **180-second windows**, with application startup and dashboard
 interaction outside the CPU sampling window.
 
@@ -86,13 +88,13 @@ are reported separately.
 
 ## Measured comparison
 
-The final Rust executable is **2,722,304 bytes (2.60 MiB)**, SHA256
+The optimization-audit executable is **2,722,304 bytes (2.60 MiB)**, SHA256
 `4638C934130E688F31624E1D5E1B9D936B3E255458BF09D5B1A78BEAC0B1221B`.
 The pre-audit baseline was commit `1327e22`, 2,720,256 bytes, SHA256
 `F720422C06B7DFB09AA85ED780C286488C7E55225C4E3B07D22C8A3787F3E39C`.
 The original source reference was upstream `a566a046` (1.13.0).
 
-| Workload and metric | Original Python | Final Rust port |
+| Workload and metric | Original Python | Optimization-audit Rust port |
 | --- | ---: | ---: |
 | Wireless DeathAdder V4 Pro: average private memory | 138.18 MiB | 6.27 MiB |
 | Wireless DeathAdder V4 Pro: peak private memory | 143.50 MiB | 14.84 MiB |
@@ -233,3 +235,63 @@ upstream launcher and sampler commands. Raw measurements and local hardware
 identities stay in ignored `validation-local`; only aggregate results belong in
 this report. No account/profile paths, personal device aliases or settings are
 included in source or the portable package.
+## Keyboard and tray menu follow-up
+
+The later keyboard/menu implementation uses the same optimized Rust profile and
+locked dependencies. Its executable is **2,794,496 bytes (2.67 MiB)**,
+SHA256 `3CDFBF17B0AEF715AAD0AAF603E633C32E8DA5942CB60FA1464B726659715864`.
+Configuration-only keyboard metadata uses existing HID workers and cached
+enumeration. It is discovered only while Devices is visible; closed-dashboard
+monitoring performs no keyboard-only discovery or rate queries. The configured
+rate is never automatically enforced. Popup fonts/brushes exist only during a
+native menu; dashboard/tray callback painting uses immutable palette snapshots.
+
+The final binary was sampled in separate 180-second windows on the same host,
+with 60-second battery refresh, status export on, polling controls off and the
+dashboard/menu closed. Hardware used one wireless DeathAdder V4 Pro with real
+numeric history samples; its connected K70 was recognized in a separate passive
+probe. The animated run used one simulated charging mouse plus Razer/Corsair
+configuration fixtures, warmed keyboard inventory and forty dashboard cycles,
+then closed the window. Keyboard metadata is not a battery device. The original
+Python values below retain the earlier audit's 180-second reference measurements;
+they were not rerun for the keyboard implementation.
+
+| Workload and metric | Original Python reference | Current Rust keyboard/menu build |
+| --- | ---: | ---: |
+| Wireless DeathAdder V4 Pro: average private memory | 138.18 MiB | 6.21 MiB |
+| Wireless DeathAdder V4 Pro: peak private memory | 143.50 MiB | 14.90 MiB |
+| Wireless DeathAdder V4 Pro: CPU, one logical core | 0.269% | 0.260% |
+| One simulated charging mouse: average private memory | 33.10 MiB | 6.21 MiB |
+| One simulated charging mouse: peak private memory | 34.02 MiB | 14.54 MiB |
+| One simulated charging mouse: CPU, one logical core | 0.226% | 0.139% |
+| Portable executable size | Not measured | 2.67 MiB |
+
+The current build meets the 10-MiB executable, 30-MiB background private-memory,
+0.5%-unanimated and 1%-animated CPU engineering targets on this host. CPU varies
+across short windows: the latest hardware result is close to the Python reference,
+so it does not establish a repeatable CPU improvement. The previous Rust checkpoint
+remains above with its original numbers. Private memory remains substantially
+lower here. These figures do not measure keyboard hardware rate effectiveness,
+multiple-device scaling or resource use during a protected game.
+
+The final animated warmup holds **107 GDI handles** before/after forty dashboard
+cycles (USER 44 → 43). The separate seeded keyboard UI suite holds **43 USER /
+107 GDI** at cycles 1, 20 and 40; private memory settles to **9.66 MiB** after close.
+Eight actual-popup cycles hold **17 GDI handles**, after the first menu warmup.
+Forty additional popup unit lifecycles and palette/mnemonic tests pass. Stable
+native handles and settling do not prove the absence of every heap leak.
+
+Formatting, strict Clippy, production source/import restrictions and **436 tests**
+pass, with two optional timing tests ignored. The 459-ID upstream mapping remains
+complete. Corsair discovery is passive and sends no configuration packet; the
+five Razer keyboard routes remain hardware-unverified. An earlier resource run
+whose settings changed was discarded. The harness now rejects settings changes
+or a dashboard left open at measurement end. No identifying local data is included
+in this report or the portable package.
+
+```powershell
+./tools/validate-keyboards-ui.ps1
+./tools/validate-tray-menu.ps1
+./tools/validate-native.ps1 -Seconds 180 -Hardware -Cycles 2 -SamplerPython PYTHON_PATH
+./tools/validate-native.ps1 -Seconds 180 -Animation -Keyboards -Cycles 40 -SamplerPython PYTHON_PATH
+```

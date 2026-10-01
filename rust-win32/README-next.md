@@ -14,15 +14,16 @@ enabled and dashboards/menus closed:
 
 | Measurement | Original Halo Battery 1.13.0 | Rust port 0.1.0 |
 | --- | ---: | ---: |
-| Wireless DeathAdder V4 Pro: average private memory | 138.18 MiB | 6.27 MiB |
-| Wireless DeathAdder V4 Pro: CPU, one logical core | 0.269% | 0.130% |
-| One simulated charging mouse: average private memory | 33.10 MiB | 5.71 MiB |
-| One simulated charging mouse: CPU, one logical core | 0.226% | 0.208% |
-| Portable executable size | Not measured | 2.60 MiB |
+| Wireless DeathAdder V4 Pro: average private memory | 138.18 MiB | 6.21 MiB |
+| Wireless DeathAdder V4 Pro: CPU, one logical core | 0.269% | 0.260% |
+| One simulated charging mouse: average private memory | 33.10 MiB | 6.21 MiB |
+| One simulated charging mouse: CPU, one logical core | 0.226% | 0.139% |
+| Portable executable size | Not measured | 2.67 MiB |
 
 Original figures include observed helper processes. This is unchanged upstream
 Python source versus optimized Rust release builds on one machine; a packaged
-original release was unavailable. Animated CPU use is similar. The hardware
+original release was unavailable. Rust figures include the keyboard/menu build and 40 animated dashboard warmup
+cycles. Hardware CPU values are close in this run; short-run CPU results vary. The hardware
 comparison includes native/PowerShell discovery costs, and short-run differences
 are not guarantees. The fork also retains 30-day raw history and a native
 dashboard. See [`docs/resource-audit.md`](docs/resource-audit.md) for exact builds,
@@ -33,7 +34,7 @@ peak memory, optimizations, compiler experiments and reproduction commands.
 Run `HaloBatteryNext.exe` to open the dashboard. Closing the window keeps monitoring active. Click a device tray icon, choose Open dashboard, or launch the executable again to reopen it. A duplicate `--background` launch stays quiet. The tray menu offers refresh, device controls and Exit. Settings include Windows startup registration, which starts the executable with `--background`.
 
 The dashboard follows Windows app light/dark appearance and changes while open,
-including native controls and history graphics. Windows high-contrast colors
+including native controls, history graphics and the tray context menu. Windows high-contrast colors
 take priority. Tray appearance remains independently configurable. Unplugged
 or hidden devices still follow the existing per-device tray identity rules.
 
@@ -96,7 +97,7 @@ evidence; saved requests never count. Existing history can provide partial
 charge summaries. See [`docs/insights.md`](docs/insights.md).
 
 Optional hardware polling-rate controls default off. Enable them in Settings,
-select a supported mouse on Devices, then use Refresh rate, Apply rate or Restore
+select a supported mouse or wired Razer keyboard on Devices, then use Refresh rate, Apply rate or Restore
 previous. DeathAdder V4 Pro, Viper V3 Pro and Viper Mini Signature Edition have
 dedicated high-rate routes up to 8000 Hz; the Mini requires suitable firmware.
 DeathAdder V3 Pro retains conservative legacy support. Superlight 2/DEX and
@@ -107,6 +108,22 @@ with software control mode required; legacy C53A and direct USB are limited to
 remain unavailable until their target identity and protocol are established.
 Saved selections are never applied automatically. Readback verifies configuration,
 not independently measured effective frequency. See `docs/polling-controls.md`.
+
+Wired keyboard controls support Huntsman V2/Tenkeyless and BlackWidow V4/Pro/75%
+on their exact allowlisted USB identities. All seven rates from 125 to 8000 Hz,
+including 250 Hz, use a single acknowledged SET followed by configured-rate
+readback. Hardware behavior remains unverified locally. Known Corsair high-rate
+models, including K70 RGB Pro, appear with a reason that polling changes are
+unavailable: maintained software sessions are disabled by design. No Corsair
+configuration packets, mode changes or heartbeats are sent.
+
+Batteryless keyboards are dashboard-only inventory. They offer rename and, where
+supported, polling controls, without a per-device tray icon, battery alert,
+history row, Insights estimate or status battery entry. The application's existing
+fallback icon remains available. Passive keyboard enumeration runs at most once
+every 30 seconds while Devices is visible; closed dashboards do not discover or
+query keyboards. Existing mouse controls and battery monitoring are unchanged.
+See [`docs/polling-keyboard-evidence.md`](docs/polling-keyboard-evidence.md).
 
 Configuration uses ordinary user-mode HID APIs, with no game-process memory
 access, injection, input hooks, input automation or custom drivers. Apply is

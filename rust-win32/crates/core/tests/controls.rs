@@ -36,7 +36,7 @@ fn only_verified_change_resets_learning() {
     let request = ControlRequest {
         request: 1,
         target: ControlTarget {
-            reading: Reading::new("a", "Mouse", "razer", 10),
+            device: ConfigurationDevice::from_reading(&Reading::new("a", "Mouse", "razer", 10)),
             generation: 2,
         },
         action: ControlAction::Read,
@@ -82,4 +82,33 @@ fn changed_rate_clears_proven_aliases_and_preserves_unrelated_receiver_devices()
     assert!(!engine.estimator.devices.contains_key("a"));
     assert!(!engine.estimator.devices.contains_key("b"));
     assert!(engine.estimator.devices.contains_key("c"));
+}
+
+#[test]
+fn configuration_identity_is_independent_of_battery_state() {
+    let mut reading = Reading::new("razer:026b:SYNTHETIC", "Keyboard", "razer", 10);
+    reading.kind = "keyboard".into();
+    reading.via = "usb".into();
+    reading.serial = Some("SYNTHETIC".into());
+    reading.container = Some("CONTAINER".into());
+    let device = ConfigurationDevice::from_reading(&reading);
+    assert!(device.online());
+    assert_eq!(device.capability, PollingCapability::ReadWrite);
+    reading.level = Some(50);
+    reading.timestamp = 99;
+    reading.name = "Renamed".into();
+    reading.connection = Connection::Sleeping;
+    assert!(device.matches_reading(&reading));
+    for change in 0..6 {
+        let mut other = reading.clone();
+        match change {
+            0 => other.key.push('x'),
+            1 => other.source.push('x'),
+            2 => other.via.push('x'),
+            3 => other.serial = None,
+            4 => other.container = None,
+            _ => other.kind = "mouse".into(),
+        };
+        assert!(!device.matches_reading(&other));
+    }
 }

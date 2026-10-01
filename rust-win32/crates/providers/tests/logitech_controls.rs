@@ -469,7 +469,7 @@ fn control_request(action: ControlAction) -> ControlRequest {
     ControlRequest {
         request: 7,
         target: ControlTarget {
-            reading,
+            device: ConfigurationDevice::from_reading(&reading),
             generation: 0,
         },
         action,
@@ -590,9 +590,9 @@ fn adapter_exact_container_and_verified_unit_key_and_epoch_gate_before_gets() {
         let mut request =
             control_request(ControlAction::Apply(PollingRate::try_from(4000).unwrap()));
         match variation {
-            0 => request.target.reading.container = Some("container-old".into()),
-            1 => request.target.reading.key = "logitech:c54d:1".into(),
-            2 => request.target.reading.serial = Some("00000000".into()),
+            0 => request.target.device.container = Some("container-old".into()),
+            1 => request.target.device.key = "logitech:c54d:1".into(),
+            2 => request.target.device.serial = Some("00000000".into()),
             _ => request.target.generation = 9,
         };
         let r = adapter(&request, &h, &FakeClock::default());

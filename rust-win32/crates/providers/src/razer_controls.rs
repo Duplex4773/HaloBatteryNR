@@ -4,11 +4,13 @@ use hb_core::{HidInfo, HidSession, PollContext};
 use std::time::Duration;
 
 pub const EXTENDED_RATES: &[u32] = &[125, 500, 1000, 2000, 4000, 8000];
+pub const KEYBOARD_RATES: &[u32] = &[125, 250, 500, 1000, 2000, 4000, 8000];
 pub const LEGACY_RATES: &[u32] = &[125, 500, 1000];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Protocol {
     Extended,
+    KeyboardExtended,
     /// Dedicated Mini SE / Viper V3 Pro receiver: same commands, longer settle.
     ExtendedWireless,
     Legacy,
@@ -34,7 +36,13 @@ pub struct PollingResult {
     pub failure: Option<ProtocolFailure>,
 }
 pub fn protocol(info: &HidInfo) -> Option<Protocol> {
-    if info.vendor_id != 0x1532 || info.interface != 0 || info.feature_length != Some(91) {
+    if info.vendor_id != 0x1532 || info.feature_length != Some(91) {
+        return None;
+    }
+    if info.interface == 3 && keyboard_name(info.product_id).is_some() {
+        return Some(Protocol::KeyboardExtended);
+    }
+    if info.interface != 0 {
         return None;
     }
     match info.product_id {
@@ -49,13 +57,16 @@ impl Protocol {
         match self {
             Self::Extended | Self::ExtendedWireless => EXTENDED_RATES,
             Self::Legacy => LEGACY_RATES,
+            Self::KeyboardExtended => KEYBOARD_RATES,
         }
     }
     fn extended(self) -> bool {
         self != Self::Legacy
     }
     fn settle(self) -> Duration {
-        Duration::from_millis(if self == Self::ExtendedWireless {
+        Duration::from_millis(if self == Self::KeyboardExtended {
+            1
+        } else if self == Self::ExtendedWireless {
             60
         } else {
             31
@@ -90,7 +101,7 @@ pub fn request(protocol: Protocol, set: Option<(u32, u8)>) -> Option<[u8; 91]> {
     if let Some((hz, step)) = set {
         let code = protocol.code(hz)?;
         if protocol.extended() {
-            if step > 1 {
+            if step > 1 || (protocol == Protocol::KeyboardExtended && step != 0) {
                 return None;
             }
             report[9] = step;
@@ -196,7 +207,11 @@ pub fn execute_rate(
     if result.observed_hz == Some(hz) {
         return result;
     }
-    for step in 0..if protocol.extended() { 2 } else { 1 } {
+    for step in 0..if protocol.extended() && protocol != Protocol::KeyboardExtended {
+        2
+    } else {
+        1
+    } {
         if !context.active() {
             result.failure = Some(ProtocolFailure::CancelledOrDeadline);
             break;
@@ -231,4 +246,16 @@ pub fn execute_rate(
         }
     }
     result
+}
+
+/// Exact wired keyboard models verified against the pinned Windows reference.
+pub fn keyboard_name(pid: u16) -> Option<&'static str> {
+    match pid {
+        0x026b => Some("Razer Huntsman V2 Tenkeyless"),
+        0x026c => Some("Razer Huntsman V2"),
+        0x0287 => Some("Razer BlackWidow V4"),
+        0x028d => Some("Razer BlackWidow V4 Pro"),
+        0x02a5 => Some("Razer BlackWidow V4 75%"),
+        _ => None,
+    }
 }
