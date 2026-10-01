@@ -1756,6 +1756,8 @@ mod tests {
     }
     #[test]
     fn settings_survive_suspend_resume_and_full_mailboxes_shutdown() {
+        // WinRT workers own native windows; serialize process-wide handle audits.
+        let _native_guard = crate::ui::NATIVE_TEST_LOCK.lock().unwrap();
         let d = tempfile::tempdir().unwrap();
         let mut runtime = Runtime::start(
             d.path().to_owned(),
@@ -1813,6 +1815,8 @@ mod tests {
     }
     #[test]
     fn background_simulation_does_not_read_or_apply_saved_polling_selection() {
+        // WinRT workers own native windows; serialize process-wide handle audits.
+        let _native_guard = crate::ui::NATIVE_TEST_LOCK.lock().unwrap();
         let d = tempfile::tempdir().unwrap();
         let mut settings = Settings {
             polling_controls: true,
@@ -1852,6 +1856,8 @@ mod tests {
     }
     #[test]
     fn status_stays_absent_when_disabled_and_shutdown_drains_queues() {
+        // WinRT workers own native windows; serialize process-wide handle audits.
+        let _native_guard = crate::ui::NATIVE_TEST_LOCK.lock().unwrap();
         let d = tempfile::tempdir().unwrap();
         let mut runtime = Runtime::start(d.path().to_owned(), Settings::default(), true).unwrap();
         loop {

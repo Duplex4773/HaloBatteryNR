@@ -180,13 +180,35 @@ if([HaloShot]::GetDlgItem($dashboard,40)-ne[IntPtr]::Zero){throw 'Disabled polli
 $config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json
 if($config.polling_controls-or$config.devices.'simulated:mouse'.requested_polling_rate-ne8000-or$config.devices.'simulated:mouse'.name-ne'Renamed simulation'){throw 'Disabling polling lost preferences or failed to persist'}
 Write-Output 'Simulated polling opt-in, Read1000, Apply8000, Refresh, explicit Restore1000, saved intent/no automatic Apply on restart and disable passed.'
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]3,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
+$warningEdit=[HaloShot]::GetDlgItem($dashboard,215)
+if($warningEdit-eq[IntPtr]::Zero){throw 'Orange warning threshold setting missing'}
+[HaloShot]::SendText($warningEdit,12,[UIntPtr]::Zero,'35')|Out-Null
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]210,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
+$config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json
+if($config.warning_level-ne35){throw 'Orange warning setting did not persist'}
+[HaloShot]::SendText([HaloShot]::GetDlgItem($dashboard,215),12,[UIntPtr]::Zero,'30')|Out-Null
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]210,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
+Write-Output 'Visual orange warning threshold persists independently of low-alert settings.'
+
 [HaloShot]::PostMessage($monitor,32777,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 200
 if([HaloShot]::FindWindow($null,'Halo Battery Next')-ne[IntPtr]::Zero){throw 'Dashboard did not close'}
 if([HaloShot]::FindWindow($null,'Halo Battery Next monitor')-eq[IntPtr]::Zero){throw 'Monitor lost on dashboard close'}
- $samples=@{};foreach($cycle in 1..40){[HaloShot]::PostMessage($monitor,32776,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 80;$d=[HaloShot]::FindWindow($null,'Halo Battery Next');[HaloShot]::PostMessage($d,273,[UIntPtr]2,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 80;[HaloShot]::PostMessage($d,273,[UIntPtr]3,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 60;[HaloShot]::PostMessage($monitor,32777,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 80;if($cycle -in 1,20,40){$p.Refresh();$samples["$cycle"]=@{user=[HaloShot]::GetGuiResources($p.Handle,1);gdi=[HaloShot]::GetGuiResources($p.Handle,0);private=$p.PrivateMemorySize64}}}
+ $samples=@{};foreach($cycle in 1..40){[HaloShot]::PostMessage($monitor,32776,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 80;$d=[HaloShot]::FindWindow($null,'Halo Battery Next');[HaloShot]::PostMessage($d,273,[UIntPtr]2,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 80;[HaloShot]::PostMessage($d,273,[UIntPtr]3,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 60;[HaloShot]::PostMessage($d,274,[UIntPtr]61536,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 80;if([HaloShot]::FindWindow($null,'Halo Battery Next')-ne[IntPtr]::Zero){throw 'Titlebar close did not release dashboard'};if($cycle -in 1,20,40){$p.Refresh();$samples["$cycle"]=@{user=[HaloShot]::GetGuiResources($p.Handle,1);gdi=[HaloShot]::GetGuiResources($p.Handle,0);private=$p.PrivateMemorySize64}}}
 @{cold=$cold;cycles=$samples}|ConvertTo-Json -Depth 5|Set-Content (Join-Path $folder 'resource-cycles.json')
 if($samples['40'].gdi-gt$samples['1'].gdi-or$samples['40'].user-gt($samples['1'].user+2)){throw 'Native resources grew after the warm dashboard lifecycle baseline'}
 Write-Output ($samples|ConvertTo-Json -Depth 5)
+# A duplicate background launch is quiet; a normal launch opens the same monitor.
+$quietLaunch=Start-Process $exe -ArgumentList @('--background','--simulate','--data-dir',"`"$folder`"") -PassThru -WindowStyle Hidden
+if(!$quietLaunch.WaitForExit(10000)-or$quietLaunch.ExitCode-ne0){throw 'Background duplicate launch did not exit cleanly'}
+if([HaloShot]::FindWindow($null,'Halo Battery Next')-ne[IntPtr]::Zero){throw 'Background duplicate unexpectedly opened dashboard'}
+$normalLaunch=Start-Process $exe -ArgumentList @('--simulate','--data-dir',"`"$folder`"") -PassThru -WindowStyle Hidden
+if(!$normalLaunch.WaitForExit(10000)-or$normalLaunch.ExitCode-ne0){throw 'Normal duplicate launch did not exit cleanly'}
+$deadline=[DateTime]::UtcNow.AddSeconds(5)
+do{Start-Sleep -Milliseconds 100;$dashboard=[HaloShot]::FindWindow($null,'Halo Battery Next')}while($dashboard-eq[IntPtr]::Zero-and[DateTime]::UtcNow-lt$deadline)
+if($dashboard-eq[IntPtr]::Zero){throw 'Normal duplicate did not reopen the original dashboard'}
+[HaloShot]::PostMessage($dashboard,274,[UIntPtr]61536,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 100
+Write-Output 'Forty titlebar-close/reopen cycles passed; normal duplicate opens original monitor, background duplicate stays quiet.'
 [HaloShot]::PostMessage($monitor,32778,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
 if(!$p.WaitForExit(30000)){throw 'Quit timeout'}
 Write-Output "Screenshots saved. Closed dashboard retains monitor; quit exit=$($p.ExitCode)."

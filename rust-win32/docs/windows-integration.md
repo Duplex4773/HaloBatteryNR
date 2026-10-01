@@ -24,6 +24,31 @@ Windows provides no dependable WGI-to-XInput slot identity in these APIs. The po
 
 Startup registration, application identity, and the single-instance mutex use the distinct HaloBatteryNext identity. Windows theme and fullscreen gaming checks are native. MyDockFinder process detection uses an owned Toolhelp snapshot and a ten-second cache. It recognizes the original executable names and names containing `mydock`.
 
+The mutex reports already-running separately from actual acquisition failures.
+A normal second launch posts an Open request to the existing monitor; a duplicate
+background launch exits quietly. Dashboard handles are checked for validity and
+ownership before reuse. The titlebar close path releases the mutable state borrow
+before calling the default window procedure, allowing its nested close message to
+run normal cleanup. Explicit reentrant close/destruction paths defer targeted
+cleanup to the monitor. Closing releases controls, chart, brushes and font without
+exiting monitoring; stale destruction notifications cannot retire a recreated
+dashboard. See the documented [default window procedure](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-defwindowprocw)
+and [window-handle validity](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-iswindow).
+
+Dashboard appearance reads Windows `AppsUsesLightTheme`, separately from the
+taskbar's `SystemUsesLightTheme`. Settings/theme/system-color messages update
+owned GDI brushes, native controls and Direct2D colors without rebuilding unsaved
+edits. High contrast uses Windows system colors and native contrast behavior.
+The titlebar uses documented [DWM attributes](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwmwindowattribute);
+native control painting uses documented subclass, owner-draw and control-color
+messages, retaining Windows keyboard, focus and accessibility behavior. No
+undocumented theme ordinals, global input hooks or system preference writes are
+used. Dashboard-only resources are released when it closes.
+
+The optional orange warning band defaults to 30% and is independent of low-charge
+notifications. Charging green and per-device low-alert red retain priority;
+zero disables orange. Theme/threshold changes update registered icons in place.
+
 Device tray GUIDs remain stable through sleep and wake. Battery, theme, DPI and
 settings changes modify the existing notification icon instead of deleting and
 adding it again. Explorer recovery first attempts a modification and adds the

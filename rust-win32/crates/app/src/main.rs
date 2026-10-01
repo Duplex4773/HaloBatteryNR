@@ -1,5 +1,6 @@
 #![windows_subsystem = "windows"]
 mod chart;
+mod dashboard_theme;
 mod icons;
 mod runtime;
 mod storage_worker;
@@ -169,11 +170,14 @@ fn entry() -> Result<(), ProviderError> {
         hb_storage::atomic_write(&path, &serde_json::to_vec_pretty(&output).unwrap())?;
         return Ok(());
     }
-    let _instance = match hb_windows::system::Instance::acquire() {
-        Ok(instance) => instance,
-        Err(e) => {
+    let _instance = match hb_windows::system::Instance::acquire_state()? {
+        hb_windows::system::InstanceAcquisition::Acquired(instance) => instance,
+        hb_windows::system::InstanceAcquisition::AlreadyRunning => {
             // A second normal launch opens the existing dashboard. The mutex
             // still owns lifecycle exclusion; this lookup never starts workers.
+            if args.iter().any(|a| a == "--background") {
+                return Ok(());
+            }
             unsafe {
                 use windows::Win32::UI::WindowsAndMessaging::*;
                 if let Ok(hwnd) = FindWindowW(
@@ -192,7 +196,9 @@ fn entry() -> Result<(), ProviderError> {
                     return Ok(());
                 }
             }
-            return Err(e);
+            return Err(ProviderError::new(
+                "Halo Battery Next is already starting; try opening it again shortly",
+            ));
         }
     };
     let icon_path = dir.join("application.png");

@@ -4,7 +4,54 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
-## Battery-insights checkpoint, 1 October 2026
+## Dashboard lifecycle, appearance and warning checkpoint, 1 October 2026
+
+Formatting, strict workspace Clippy, the optimized release build and **379 Rust
+tests** pass locally; one existing optional timing test remains ignored. The
+459-ID upstream audit remains complete at **366 mapped**, **36 tested intentional
+differences** and **57 retired Python details**. The executable is **2,705,408
+bytes (2.58 MiB)**, SHA256
+`AC327F85BF1D490D64D168FA2AF6228B6301D06C8CFD5F24F404F89633D4E1AA`.
+
+The prior portable release reproduced the reopening failure in an isolated
+simulation after `WM_SYSCOMMAND/SC_CLOSE`, the title-bar close route. Native
+regressions now cover that nested message path, stale handles, external window
+destruction, hidden/minimized restoration, tray double-click/menu activation and
+cleanup arriving after a replacement window. Forty title-bar close/reopen cycles
+pass. A normal duplicate launch opens the original dashboard; a duplicate
+`--background` launch exits quietly. Monitoring continues after closure and
+graceful exit returns zero.
+
+Dashboard appearance follows Windows app light/dark preferences, independently
+of tray appearance. All four pages were rendered in both palettes without
+changing system preferences. Native tests check readable dark buttons and combo
+arrows, checkbox state, brush release, chart palettes and high-contrast fallback.
+Repeated palette changes preserve the same unsaved interval edit and its text.
+This is automated native validation, not a screen-reader or multi-monitor audit.
+
+Pixel regressions verify orange at the default **30%** visual boundary, red at
+the default **20%** alert boundary, custom thresholds, disabling orange, both
+tray themes, charging priority and cached sleeping/stale readings. The actual
+Settings Save handler persisted an orange threshold of 35%, then restored 30%.
+Notification rules are unchanged. The user confirmed separate device icons;
+this change preserves the existing per-device identities.
+
+Existing history, keyboard, settings, device controls, simulated polling and
+Insights native checks pass. Across forty warm dashboard cycles USER/GDI handles
+stayed at **44/105**; private memory went from **14.75 MiB** to **16.93 MiB**.
+Forty warm Insights cycles held handles at **14/18**, with private memory
+**5.84–5.87 MiB**. Native-resource tests serialize tests that create WinRT windows
+so concurrent fixtures do not contaminate process-wide handle audits.
+
+A **15.05-second** animated background smoke check with one simulated device and
+polling controls enabled averaged **6.02 MiB** private memory and **0.104%** of
+one logical core. Explorer-recovery and resume messages were replayed and
+shutdown flushed state. This short check does not replace the earlier
+five-minute measurements below. These checks use invented data and do not
+change physical device configuration. Production API/import restrictions and
+source/release privacy checks pass.
+
+## Earlier battery-insights checkpoint, 1 October 2026
 
 Formatting, strict workspace Clippy, the optimized release build and **370 Rust
 tests** pass locally; one existing optional timing test remains ignored. The

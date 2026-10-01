@@ -5,22 +5,41 @@ use windows::{
     Win32::{
         Foundation::*,
         System::{Registry::*, Threading::*},
-        UI::Shell::*,
+        UI::{
+            Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW},
+            Shell::*,
+            WindowsAndMessaging::*,
+        },
     },
     core::w,
 };
 pub struct Instance(HANDLE);
+pub enum InstanceAcquisition {
+    Acquired(Instance),
+    AlreadyRunning,
+}
 impl Instance {
     pub fn acquire() -> Result<Self, ProviderError> {
-        let handle = unsafe { CreateMutexW(None, false, w!("Local\\HaloBatteryNext")) }
+        match Self::acquire_state()? {
+            InstanceAcquisition::Acquired(instance) => Ok(instance),
+            InstanceAcquisition::AlreadyRunning => {
+                Err(ProviderError::new("Halo Battery Next is already running"))
+            }
+        }
+    }
+    pub fn acquire_state() -> Result<InstanceAcquisition, ProviderError> {
+        Self::acquire_named(w!("Local\\HaloBatteryNext"))
+    }
+    fn acquire_named(name: windows::core::PCWSTR) -> Result<InstanceAcquisition, ProviderError> {
+        let handle = unsafe { CreateMutexW(None, false, name) }
             .map_err(|e| ProviderError::new(e.to_string()))?;
         if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
             unsafe {
                 let _ = CloseHandle(handle);
             }
-            return Err(ProviderError::new("Halo Battery Next is already running"));
+            return Ok(InstanceAcquisition::AlreadyRunning);
         }
-        Ok(Self(handle))
+        Ok(InstanceAcquisition::Acquired(Self(handle)))
     }
 }
 impl Drop for Instance {
@@ -140,13 +159,36 @@ pub fn is_startup() -> bool {
     }) == ERROR_SUCCESS
 }
 pub fn dark_theme() -> bool {
+    theme_value(w!("SystemUsesLightTheme"))
+}
+/// Windows app appearance can differ from the taskbar/system appearance.
+pub fn dashboard_dark_theme() -> bool {
+    !high_contrast() && theme_value(w!("AppsUsesLightTheme"))
+}
+pub fn high_contrast() -> bool {
+    let mut contrast = HIGHCONTRASTW {
+        cbSize: std::mem::size_of::<HIGHCONTRASTW>() as u32,
+        ..Default::default()
+    };
+    unsafe {
+        SystemParametersInfoW(
+            SPI_GETHIGHCONTRAST,
+            0,
+            Some((&mut contrast as *mut HIGHCONTRASTW).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+        .is_ok()
+            && contrast.dwFlags.contains(HCF_HIGHCONTRASTON)
+    }
+}
+fn theme_value(name: windows::core::PCWSTR) -> bool {
     let mut data = 1u32;
     let mut size = 4;
     unsafe {
         let _ = RegGetValueW(
             HKEY_CURRENT_USER,
             w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
-            w!("SystemUsesLightTheme"),
+            name,
             RRF_RT_REG_DWORD,
             None,
             Some((&mut data as *mut u32).cast()),
@@ -327,6 +369,32 @@ fn is_mydockfinder(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn singleton_reports_already_running_and_releases_owned_handle() {
+        use windows::core::PCWSTR;
+        let name = wide(&format!(
+            "Local\\HaloBatteryNext.Acquisition.Test.{}.{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let InstanceAcquisition::Acquired(first) =
+            Instance::acquire_named(PCWSTR(name.as_ptr())).unwrap()
+        else {
+            panic!("unique instance was not acquired")
+        };
+        assert!(matches!(
+            Instance::acquire_named(PCWSTR(name.as_ptr())).unwrap(),
+            InstanceAcquisition::AlreadyRunning
+        ));
+        drop(first);
+        assert!(matches!(
+            Instance::acquire_named(PCWSTR(name.as_ptr())).unwrap(),
+            InstanceAcquisition::Acquired(_)
+        ));
+    }
     #[test]
     fn application_identity_registry_roundtrip() {
         use windows::core::PCWSTR;

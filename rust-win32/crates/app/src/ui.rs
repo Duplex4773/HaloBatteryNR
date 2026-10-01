@@ -1,11 +1,16 @@
 //! A single UI thread owns all HWND, HICON and Direct2D resources.
 use crate::{
     chart::Chart,
+    dashboard_theme::DashboardTheme,
     icons::{self, Icon},
     runtime::{Command, Event, Runtime},
 };
 use hb_core::*;
-use std::{cell::RefCell, collections::BTreeMap, path::PathBuf};
+use std::{
+    cell::{Cell, RefCell},
+    collections::BTreeMap,
+    path::PathBuf,
+};
 use windows::{
     Win32::{
         Devices::HumanInterfaceDevice::HidD_GetHidGuid,
@@ -468,8 +473,12 @@ fn charge_cycle_text(cycle: &ChargeCycle) -> String {
         drain
     )
 }
+struct UiContext {
+    state: RefCell<State>,
+    monitor: Cell<HWND>,
+}
 struct State {
-    context: *const RefCell<State>,
+    context: *const UiContext,
     runtime: Runtime,
     settings: Settings,
     dir: PathBuf,
@@ -482,6 +491,7 @@ struct State {
     page: u16,
     selected: usize,
     chart: Option<Chart>,
+    theme: Option<DashboardTheme>,
     series: HistorySeries,
     history: HistorySelection,
     request: u64,
@@ -544,34 +554,38 @@ pub fn run(
             DEFAULT_PITCH.0 as u32,
             w!("Segoe UI"),
         );
-        let context = Box::new(RefCell::new(State {
-            context: std::ptr::null(),
-            runtime,
-            settings,
-            dir,
-            monitor: HWND::default(),
-            dashboard: None,
-            controls: BTreeMap::new(),
-            trays: BTreeMap::new(),
-            snapshot: Snapshot::default(),
-            diagnostics: BTreeMap::new(),
-            page: 1,
-            selected: 0,
-            chart: None,
-            series: HistorySeries::default(),
-            history: HistorySelection::default(),
-            request: 0,
-            taskbar: RegisterWindowMessageW(w!("TaskbarCreated")),
-            notify: None,
-            animating: false,
-            error: initial_error.unwrap_or_default(),
-            font,
-            polling: PollingUi::default(),
-            insights: InsightsUi::default(),
-            polling_intents: BTreeMap::new(),
-        }));
-        let ptr = &*context as *const RefCell<State>;
-        let mut state = context.borrow_mut();
+        let context = Box::new(UiContext {
+            state: RefCell::new(State {
+                context: std::ptr::null(),
+                runtime,
+                settings,
+                dir,
+                monitor: HWND::default(),
+                dashboard: None,
+                controls: BTreeMap::new(),
+                trays: BTreeMap::new(),
+                snapshot: Snapshot::default(),
+                diagnostics: BTreeMap::new(),
+                page: 1,
+                selected: 0,
+                chart: None,
+                theme: None,
+                series: HistorySeries::default(),
+                history: HistorySelection::default(),
+                request: 0,
+                taskbar: RegisterWindowMessageW(w!("TaskbarCreated")),
+                notify: None,
+                animating: false,
+                error: initial_error.unwrap_or_default(),
+                font,
+                polling: PollingUi::default(),
+                insights: InsightsUi::default(),
+                polling_intents: BTreeMap::new(),
+            }),
+            monitor: Cell::new(HWND::default()),
+        });
+        let ptr = &*context as *const UiContext;
+        let mut state = context.state.borrow_mut();
         state.context = ptr;
         state.monitor = CreateWindowExW(
             WINDOW_EX_STYLE::default(),
@@ -588,6 +602,7 @@ pub fn run(
             Some(ptr.cast()),
         )
         .map_err(err)?;
+        context.monitor.set(state.monitor);
         // Consume a launcher's startup ShowWindow flag on the hidden monitor.
         let _ = ShowWindow(state.monitor, SW_HIDE);
         let filter = DEV_BROADCAST_DEVICEINTERFACE_W {
@@ -615,7 +630,7 @@ pub fn run(
             if result <= 0 {
                 break;
             }
-            let dashboard = context.borrow().dashboard;
+            let dashboard = context.state.borrow().dashboard;
             if message.message == WM_SYSCHAR && b"dhsri".contains(&(message.wParam.0 as u8)) {
                 DispatchMessageW(&message);
                 continue;
@@ -626,7 +641,7 @@ pub fn run(
             let _ = TranslateMessage(&message);
             DispatchMessageW(&message);
         }
-        let mut state = context.borrow_mut();
+        let mut state = context.state.borrow_mut();
         state.runtime.attach_window(0);
         state.trays.clear();
         if let Some(h) = state.dashboard.take() {
@@ -650,23 +665,77 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, cs.lpCreateParams as isize);
             return DefWindowProcW(hwnd, msg, wp, lp);
         }
-        let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const RefCell<State>;
+        let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const UiContext;
         if ptr.is_null() {
             return DefWindowProcW(hwnd, msg, wp, lp);
         }
         if msg == WM_NCDESTROY {
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+            // Destruction is synchronous, including inside native modal loops.
+            // Detach immediately, then release dashboard resources once the
+            // outer State borrow ends. The hidden monitor outlives dashboards.
+            if hwnd != (*ptr).monitor.get() {
+                if let Ok(mut state) = (*ptr).state.try_borrow_mut() {
+                    state.dashboard_destroyed(hwnd);
+                } else {
+                    let _ = PostMessageW(
+                        Some((*ptr).monitor.get()),
+                        WM_APP + 11,
+                        WPARAM(hwnd.0 as usize),
+                        LPARAM(0),
+                    );
+                }
+            }
             return DefWindowProcW(hwnd, msg, wp, lp);
         }
-        let Ok(mut guard) = (&*ptr).try_borrow_mut() else {
+        let Ok(mut guard) = (*ptr).state.try_borrow_mut() else {
+            // DefWindowProc handles WM_CLOSE by destroying the window. Never
+            // let that bypass State cleanup while a native callback reenters.
+            let deferred = match msg {
+                WM_CLOSE => Some((WM_APP + 9, WPARAM(hwnd.0 as usize))),
+                m if m == WM_APP + 8 || m == WM_APP + 9 || m == WM_APP + 11 => Some((m, wp)),
+                _ => None,
+            };
+            if let Some((message, param)) = deferred {
+                let _ = PostMessageW(Some((*ptr).monitor.get()), message, param, lp);
+                return LRESULT(0);
+            }
             return DefWindowProcW(hwnd, msg, wp, lp);
         };
         let s = &mut *guard;
         if let Some(update) = tray_message_update(msg, s.taskbar) {
+            if msg == WM_SETTINGCHANGE {
+                s.refresh_theme();
+            }
             s.sync_trays(update);
             return LRESULT(0);
         }
+        if Some(hwnd) == s.dashboard
+            && let Some(theme) = &s.theme
+        {
+            if let Some(result) =
+                theme.control_colors(msg, HDC(wp.0 as *mut _), HWND(lp.0 as *mut _))
+            {
+                return result;
+            }
+            if msg == WM_DRAWITEM
+                && let Some(result) = theme.draw_item(lp)
+            {
+                return result;
+            }
+            if msg == WM_ERASEBKGND {
+                let mut rect = RECT::default();
+                let _ = GetClientRect(hwnd, &mut rect);
+                FillRect(HDC(wp.0 as *mut _), &rect, theme.background_brush());
+                return LRESULT(1);
+            }
+        }
         match msg {
+            WM_THEMECHANGED | WM_SYSCOLORCHANGE => {
+                s.refresh_theme();
+                s.sync_trays(TrayUpdate::Redraw);
+                LRESULT(0)
+            }
             m if m == WM_APP + 7 => {
                 s.drain();
                 LRESULT(0)
@@ -676,8 +745,19 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 LRESULT(0)
             }
             m if m == WM_APP + 9 => {
-                if let Some(h) = s.dashboard {
-                    let _ = PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0));
+                if let Some(h) = s.dashboard
+                    && (wp.0 == 0 || wp.0 == h.0 as usize)
+                {
+                    s.close_dashboard(h);
+                }
+                LRESULT(0)
+            }
+            m if m == WM_APP + 11 => {
+                let destroyed = HWND(wp.0 as *mut _);
+                // A recreated dashboard may reuse the old numeric HWND before
+                // this deferred notification runs; only retire a stale owner.
+                if !s.owns_dashboard(destroyed) {
+                    s.dashboard_destroyed(destroyed);
                 }
                 LRESULT(0)
             }
@@ -740,7 +820,10 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 let event = (lp.0 as u32) & 0xffff;
                 if event == WM_CONTEXTMENU || event == WM_RBUTTONUP {
                     s.menu(key.clone())
-                } else if event == WM_LBUTTONUP || event == NIN_SELECT || event == (NIN_SELECT | 1)
+                } else if event == WM_LBUTTONUP
+                    || event == WM_LBUTTONDBLCLK
+                    || event == NIN_SELECT
+                    || event == (NIN_SELECT | 1)
                 {
                     s.open()
                 }
@@ -763,14 +846,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             }
             WM_CLOSE => {
                 if Some(hwnd) == s.dashboard {
-                    s.chart = None;
-                    s.polling.abandon();
-                    s.insights.abandon();
-                    s.controls.clear();
-                    s.dashboard = None;
-                    let _ = DeleteObject(s.font.into());
-                    s.font = HFONT::default();
-                    let _ = DestroyWindow(hwnd);
+                    s.close_dashboard(hwnd);
                 }
                 LRESULT(0)
             }
@@ -815,7 +891,15 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                         s.chart = Chart::new(hwnd, r.right as u32, r.bottom as u32).ok()
                     }
                     if let Some(c) = &s.chart
-                        && c.paint(r.right as u32, r.bottom as u32, &s.series).is_err()
+                        && s.theme.as_ref().is_some_and(|theme| {
+                            c.paint_with_palette(
+                                r.right as u32,
+                                r.bottom as u32,
+                                &s.series,
+                                &theme.palette,
+                            )
+                            .is_err()
+                        })
                     {
                         s.chart = None;
                     }
@@ -827,7 +911,13 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
                 DefWindowProcW(hwnd, msg, wp, lp)
             }
-            _ => DefWindowProcW(hwnd, msg, wp, lp),
+            _ => {
+                // Native default processing can synchronously send messages
+                // back to this window (SC_CLOSE, WM_PRINT, activation). Release
+                // State before handing control back to Windows.
+                drop(guard);
+                DefWindowProcW(hwnd, msg, wp, lp)
+            }
         }
     }))
     .unwrap_or_else(|_| {
@@ -838,6 +928,62 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
     })
 }
 impl State {
+    fn refresh_theme(&mut self) {
+        self.apply_theme(DashboardTheme::new(
+            hb_windows::system::dashboard_dark_theme(),
+            hb_windows::system::high_contrast(),
+        ));
+    }
+    fn apply_theme(&mut self, theme: DashboardTheme) {
+        let Some(hwnd) = self.dashboard else {
+            return;
+        };
+        theme.apply_window(hwnd);
+        for control in self.controls.values() {
+            theme.apply_control(*control);
+        }
+        self.theme = Some(theme);
+        unsafe {
+            let _ = RedrawWindow(
+                Some(hwnd),
+                None,
+                None,
+                RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN,
+            );
+        }
+    }
+    fn owns_dashboard(&self, hwnd: HWND) -> bool {
+        unsafe {
+            IsWindow(Some(hwnd)).as_bool()
+                && GetWindowLongPtrW(hwnd, GWLP_USERDATA) == self.context as isize
+        }
+    }
+    fn dashboard_destroyed(&mut self, hwnd: HWND) {
+        if self.dashboard != Some(hwnd) {
+            return;
+        }
+        self.dashboard = None;
+        self.chart = None;
+        self.theme = None;
+        self.polling.abandon();
+        self.insights.abandon();
+        self.controls.clear();
+        unsafe {
+            let _ = DeleteObject(self.font.into());
+        }
+        self.font = HFONT::default();
+    }
+    fn close_dashboard(&mut self, hwnd: HWND) {
+        if self.dashboard != Some(hwnd) {
+            return;
+        }
+        // Keep GDI/control resources alive until native children are destroyed.
+        unsafe {
+            let _ = DestroyWindow(hwnd);
+        }
+        self.dashboard_destroyed(hwnd);
+    }
+
     #[allow(clippy::too_many_arguments)] // Mirrors the native control creation fields.
     fn control(
         &mut self,
@@ -870,6 +1016,9 @@ impl State {
             )
             .unwrap_or_default();
             send(h, WM_SETFONT, WPARAM(self.font.0 as usize), LPARAM(1));
+            if let Some(theme) = &self.theme {
+                theme.apply_control(h);
+            }
             self.controls.insert(id, h);
             h
         }
@@ -921,7 +1070,9 @@ impl State {
             id,
             w!("COMBOBOX"),
             "",
-            WS_TABSTOP | WS_VSCROLL | WINDOW_STYLE(CBS_DROPDOWNLIST as u32),
+            WS_TABSTOP
+                | WS_VSCROLL
+                | WINDOW_STYLE((CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS) as u32),
             x,
             y,
             width,
@@ -959,9 +1110,12 @@ impl State {
     fn open(&mut self) {
         unsafe {
             if let Some(h) = self.dashboard {
-                let _ = ShowWindow(h, SW_RESTORE);
-                let _ = SetForegroundWindow(h);
-                return;
+                if self.owns_dashboard(h) {
+                    let _ = ShowWindow(h, SW_RESTORE);
+                    let _ = SetForegroundWindow(h);
+                    return;
+                }
+                self.dashboard_destroyed(h);
             }
             let ptr = self.context;
             let dpi = GetDpiForWindow(self.monitor).max(96) as i32;
@@ -981,6 +1135,7 @@ impl State {
             ) {
                 Ok(h) => {
                     self.dashboard = Some(h);
+                    self.refresh_theme();
                     self.polling.abandon();
                     self.build();
                     self.read_polling();
@@ -1156,8 +1311,10 @@ impl State {
                 );
                 self.label(200, "Battery refresh interval", 20, 302, 230);
                 self.edit(201, &self.settings.interval.to_string(), 260, 298, 100);
-                self.label(202, "Default low alert %", 410, 302, 210);
-                self.edit(203, &self.settings.low.to_string(), 660, 298, 80);
+                self.label(202, "Low alert %", 390, 302, 95);
+                self.edit(203, &self.settings.low.to_string(), 490, 298, 55);
+                self.label(214, "Orange warning %", 560, 302, 150);
+                self.edit(215, &self.settings.warning_level.to_string(), 720, 298, 55);
                 let themes: Vec<_> = ["auto", "white", "black", "windows", "topbar"]
                     .iter()
                     .map(|s| s.to_string())
@@ -1522,7 +1679,8 @@ impl State {
                     .ok()
                     .filter(|n| (5..=3600).contains(n));
                 let low = self.text(203).parse::<u8>().ok().filter(|n| *n <= 100);
-                if interval.is_none() || low.is_none() {
+                let warning = self.text(215).parse::<u8>().ok().filter(|n| *n <= 100);
+                if interval.is_none() || low.is_none() || warning.is_none() {
                     self.error =
                         "Battery refresh interval must be 5–3600 seconds; alert must be 0–100"
                             .into();
@@ -1532,6 +1690,7 @@ impl State {
                 value["polling_controls"] = self.checked(112).into();
                 value["interval"] = interval.unwrap().into();
                 value["low"] = low.unwrap().into();
+                value["warning_level"] = warning.unwrap().into();
                 value["icon_theme"] =
                     ["auto", "white", "black", "windows", "topbar"][self.choice(205).min(4)].into();
                 let repo = self.text(209);
@@ -2085,7 +2244,8 @@ fn icon_signature(d: &DeviceView, settings: &Settings, dark: bool) -> String {
         (
             settings.animation,
             settings.percent_in_icon,
-            settings.badges
+            settings.badges,
+            settings.warning_level
         )
     )
 }
@@ -2883,5 +3043,258 @@ mod insights_tests {
         assert!(!ui.accept(2, Some("simulation"), Ok(BatteryInsights::default())));
         ui.select(Some("other".into()));
         assert!(ui.data.is_none());
+    }
+}
+
+#[cfg(test)]
+mod dashboard_lifecycle_tests {
+    use super::*;
+
+    unsafe fn dispatch_monitor(monitor: HWND) {
+        let mut message = MSG::default();
+        unsafe {
+            // Scope pumping to this test's monitor. Do not consume another
+            // process/window's commands or depend on timer timing.
+            while PeekMessageW(
+                &mut message,
+                Some(monitor),
+                WM_APP + 8,
+                WM_APP + 11,
+                PM_REMOVE,
+            )
+            .as_bool()
+            {
+                DispatchMessageW(&message);
+            }
+        }
+    }
+
+    #[test]
+    fn native_dashboard_reopens_after_nested_close_and_external_destruction() {
+        let _guard = NATIVE_TEST_LOCK.lock().unwrap();
+        let settings = Settings::default();
+        let test_directory = tempfile::tempdir().unwrap();
+        let dir = test_directory.path().to_path_buf();
+        let runtime = Runtime::start(dir.clone(), settings.clone(), true).unwrap();
+        unsafe {
+            let instance = GetModuleHandleW(None).unwrap();
+            let class = w!("HaloBatteryNext.Native");
+            let wc = WNDCLASSW {
+                lpfnWndProc: Some(proc),
+                hInstance: instance.into(),
+                lpszClassName: class,
+                hCursor: LoadCursorW(None, IDC_ARROW).unwrap(),
+                ..Default::default()
+            };
+            assert_ne!(RegisterClassW(&wc), 0);
+            let context = Box::new(UiContext {
+                state: RefCell::new(State {
+                    context: std::ptr::null(),
+                    runtime,
+                    settings,
+                    dir,
+                    monitor: HWND::default(),
+                    dashboard: None,
+                    controls: BTreeMap::new(),
+                    trays: BTreeMap::new(),
+                    snapshot: Snapshot::default(),
+                    diagnostics: BTreeMap::new(),
+                    page: 1,
+                    selected: 0,
+                    chart: None,
+                    theme: None,
+                    series: HistorySeries::default(),
+                    history: HistorySelection::default(),
+                    request: 0,
+                    taskbar: RegisterWindowMessageW(w!("TaskbarCreated")),
+                    notify: None,
+                    animating: false,
+                    error: String::new(),
+                    font: HFONT::default(),
+                    polling: PollingUi::default(),
+                    insights: InsightsUi::default(),
+                    polling_intents: BTreeMap::new(),
+                }),
+                monitor: Cell::new(HWND::default()),
+            });
+            let ptr = &*context as *const UiContext;
+            {
+                let mut state = context.state.borrow_mut();
+                state.context = ptr;
+                state.monitor = CreateWindowExW(
+                    WINDOW_EX_STYLE::default(),
+                    class,
+                    w!("Test monitor"),
+                    WINDOW_STYLE::default(),
+                    0,
+                    0,
+                    0,
+                    0,
+                    None,
+                    None,
+                    Some(instance.into()),
+                    Some(ptr.cast()),
+                )
+                .unwrap();
+                context.monitor.set(state.monitor);
+                state.open();
+                let dashboard = state.dashboard.unwrap();
+                // Synchronous close enters proc while State is borrowed: it
+                // must defer rather than silently use DefWindowProc's destroy.
+                send(dashboard, WM_CLOSE, WPARAM(0), LPARAM(0));
+                assert!(IsWindow(Some(dashboard)).as_bool());
+            }
+            let monitor = context.monitor.get();
+            dispatch_monitor(monitor);
+            assert!(context.state.borrow().dashboard.is_none());
+            assert!(context.state.borrow().controls.is_empty());
+            assert!(context.state.borrow().theme.is_none());
+            assert!(context.state.borrow().font.is_invalid());
+            send(monitor, WM_APP + 8, WPARAM(0), LPARAM(0));
+            let first = context.state.borrow().dashboard.unwrap();
+            assert!(IsWindowVisible(first).as_bool());
+            for mode in [SW_MINIMIZE, SW_HIDE] {
+                let _ = ShowWindow(first, mode);
+                send(monitor, WM_APP + 8, WPARAM(0), LPARAM(0));
+                assert_eq!(context.state.borrow().dashboard, Some(first));
+                assert!(IsWindowVisible(first).as_bool());
+                assert!(!IsIconic(first).as_bool());
+            }
+            {
+                let mut state = context.state.borrow_mut();
+                DestroyWindow(first).unwrap();
+                assert_eq!(state.dashboard, Some(first)); // Deferred NCDESTROY.
+                assert!(!IsWindow(Some(first)).as_bool());
+                state.open(); // Must recover even before queued cleanup runs.
+                assert!(state.owns_dashboard(state.dashboard.unwrap()));
+            }
+            dispatch_monitor(monitor);
+            let reopened = context.state.borrow().dashboard.unwrap();
+            assert!(context.state.borrow().owns_dashboard(reopened));
+            // Native double-click and menu action must be idempotent opens.
+            for _ in 0..3 {
+                send(monitor, TRAY, WPARAM(0), LPARAM(WM_LBUTTONDBLCLK as isize));
+                send(monitor, WM_COMMAND, WPARAM(500), LPARAM(0));
+                assert_eq!(context.state.borrow().dashboard, Some(reopened));
+            }
+            // Exercise each page against actual native brushes/controls without
+            // changing the user's Windows appearance or stored settings.
+            for dark in [false, true] {
+                for page in [1, 2, 3, 6] {
+                    let expected;
+                    {
+                        let mut state = context.state.borrow_mut();
+                        state.page = page;
+                        state.apply_theme(DashboardTheme::new(dark, false));
+                        expected = state.theme.as_ref().unwrap().palette.background;
+                        state.build();
+                    }
+                    let _ = RedrawWindow(
+                        Some(reopened),
+                        None,
+                        None,
+                        RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW,
+                    );
+                    let source = GetDC(Some(reopened));
+                    let dc = CreateCompatibleDC(Some(source));
+                    let mut client = RECT::default();
+                    GetClientRect(reopened, &mut client).unwrap();
+                    let width = client.right;
+                    let height = client.bottom;
+                    let bitmap = CreateCompatibleBitmap(source, width, height);
+                    let old = SelectObject(dc, bitmap.into());
+                    send(reopened, WM_ERASEBKGND, WPARAM(dc.0 as usize), LPARAM(0));
+                    assert_eq!(
+                        GetPixel(dc, width - 8, height - 8),
+                        expected,
+                        "page {page}, dark={dark}"
+                    );
+                    if std::env::var_os("HALO_CAPTURE_DASHBOARD_TEST").is_some() {
+                        send(
+                            reopened,
+                            WM_PRINT,
+                            WPARAM(dc.0 as usize),
+                            LPARAM((PRF_CLIENT | PRF_CHILDREN | PRF_ERASEBKGND) as isize),
+                        );
+                        SelectObject(dc, old);
+                        let mut info = BITMAPINFO::default();
+                        info.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+                        info.bmiHeader.biWidth = width;
+                        info.bmiHeader.biHeight = -height;
+                        info.bmiHeader.biPlanes = 1;
+                        info.bmiHeader.biBitCount = 32;
+                        let mut pixels = vec![0u8; width as usize * height as usize * 4];
+                        assert_eq!(
+                            GetDIBits(
+                                dc,
+                                bitmap,
+                                0,
+                                height as u32,
+                                Some(pixels.as_mut_ptr().cast()),
+                                &mut info,
+                                DIB_RGB_COLORS
+                            ),
+                            height
+                        );
+                        let mut file = Vec::with_capacity(54 + pixels.len());
+                        file.extend_from_slice(b"BM");
+                        file.extend_from_slice(&((54 + pixels.len()) as u32).to_le_bytes());
+                        file.extend_from_slice(&[0; 4]);
+                        file.extend_from_slice(&54u32.to_le_bytes());
+                        file.extend_from_slice(&40u32.to_le_bytes());
+                        file.extend_from_slice(&width.to_le_bytes());
+                        file.extend_from_slice(&(-height).to_le_bytes());
+                        file.extend_from_slice(&1u16.to_le_bytes());
+                        file.extend_from_slice(&32u16.to_le_bytes());
+                        file.extend_from_slice(&[0; 24]);
+                        file.extend_from_slice(&pixels);
+                        let output = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                            .join("../../validation-local/dashboard");
+                        std::fs::create_dir_all(&output).unwrap();
+                        std::fs::write(
+                            output.join(format!(
+                                "page-{page}-{}.bmp",
+                                if dark { "dark" } else { "light" }
+                            )),
+                            file,
+                        )
+                        .unwrap();
+                    } else {
+                        SelectObject(dc, old);
+                    }
+                    let _ = DeleteObject(bitmap.into());
+                    let _ = DeleteDC(dc);
+                    ReleaseDC(Some(reopened), source);
+                }
+            }
+            {
+                let mut state = context.state.borrow_mut();
+                state.page = 3;
+                state.build();
+                let interval = state.controls[&201];
+                SetWindowTextW(interval, w!("1234")).unwrap();
+                for dark in [false, true, false] {
+                    state.apply_theme(DashboardTheme::new(dark, false));
+                    assert_eq!(state.controls[&201], interval);
+                    assert_eq!(state.text(201), "1234");
+                    assert_eq!(state.page, 3);
+                    assert_eq!(state.dashboard, Some(reopened));
+                }
+            }
+            // The titlebar X enters DefWindowProc(SC_CLOSE), which synchronously
+            // reenters WM_CLOSE. Default processing must release State first.
+            send(
+                reopened,
+                WM_SYSCOMMAND,
+                WPARAM(SC_CLOSE as usize),
+                LPARAM(0),
+            );
+            dispatch_monitor(monitor);
+            assert!(context.state.borrow().dashboard.is_none());
+            context.state.borrow_mut().runtime.stop();
+            DestroyWindow(monitor).unwrap();
+            UnregisterClassW(class, Some(instance.into())).unwrap();
+        }
+        drop(test_directory);
     }
 }

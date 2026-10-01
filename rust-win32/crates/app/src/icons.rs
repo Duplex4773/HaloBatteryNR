@@ -64,6 +64,8 @@ fn render(
         [75., 199., 133.]
     } else if d.reading.level.is_some_and(|l| l <= d.low_alert_at) {
         [232., 89., 84.]
+    } else if s.warning_level > 0 && d.reading.level.is_some_and(|l| l <= s.warning_level) {
+        [245., 166., 35.]
     } else {
         foreground
     };
@@ -335,6 +337,125 @@ fn native_pixels(icon: &Icon) -> Vec<u8> {
         let _ = DeleteObject(info.hbmMask.into());
         assert_eq!(bytes, pixels.len() as i32);
         pixels
+    }
+}
+#[cfg(test)]
+mod warning_tests {
+    use super::*;
+    use hb_core::{Connection, Precision, Reading};
+
+    fn device(level: Option<u8>) -> DeviceView {
+        let mut reading = Reading::new("test:warning", "Warning", "test", 0);
+        reading.level = level;
+        reading.charging = Some(false);
+        DeviceView {
+            reading,
+            name: "Warning".into(),
+            icon: "mouse".into(),
+            low_alert_at: 20,
+            seconds_left: None,
+            text: "Warning".into(),
+            hidden: false,
+        }
+    }
+    fn image(d: &DeviceView, s: &Settings, dark: bool) -> Vec<u8> {
+        native_pixels(&frames(d, s, dark, 32).unwrap()[0])
+    }
+    fn contains_color(pixels: &[u8], rgb: [u8; 3], alpha: u8) -> bool {
+        let premultiplied = rgb.map(|c| (c as u32 * alpha as u32 / 255) as u8);
+        pixels
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|p| *p == [premultiplied[2], premultiplied[1], premultiplied[0], alpha])
+    }
+
+    #[test]
+    fn warning_and_low_boundaries_have_distinct_native_colors_in_both_themes() {
+        let _guard = crate::ui::NATIVE_TEST_LOCK.lock().unwrap();
+        let mut d = device(Some(31));
+        let mut s = Settings::default();
+        for dark in [false, true] {
+            let foreground = if dark { [240, 240, 240] } else { [30, 30, 30] };
+            for (level, color) in [
+                (31, foreground),
+                (30, [245, 166, 35]),
+                (21, [245, 166, 35]),
+                (20, [232, 89, 84]),
+            ] {
+                d.reading.level = Some(level);
+                let pixels = image(&d, &s, dark);
+                assert!(
+                    contains_color(&pixels, color, 255),
+                    "level {level}, dark {dark}"
+                );
+                if level == 31 {
+                    assert!(!contains_color(&pixels, [245, 166, 35], 255));
+                }
+            }
+            d.low_alert_at = 10;
+            d.reading.level = Some(20);
+            assert!(contains_color(&image(&d, &s, dark), [245, 166, 35], 255));
+            d.reading.level = Some(10);
+            assert!(contains_color(&image(&d, &s, dark), [232, 89, 84], 255));
+            s.warning_level = 0;
+            d.reading.level = Some(20);
+            assert!(!contains_color(&image(&d, &s, dark), [245, 166, 35], 255));
+            d.reading.level = Some(10);
+            assert!(contains_color(&image(&d, &s, dark), [232, 89, 84], 255));
+            s.warning_level = 30;
+            d.low_alert_at = 20;
+        }
+    }
+
+    #[test]
+    fn warning_preserves_charging_priority_coarse_glyph_and_cached_sleeping_level() {
+        let _guard = crate::ui::NATIVE_TEST_LOCK.lock().unwrap();
+        let mut d = device(Some(25));
+        let mut s = Settings {
+            percent_in_icon: true,
+            ..Default::default()
+        };
+        d.reading.precision = Precision::Coarse;
+        let coarse = image(&d, &s, true);
+        assert!(contains_color(&coarse, [245, 166, 35], 255));
+        s.percent_in_icon = false;
+        assert_eq!(coarse, image(&d, &s, true));
+        d.reading.precision = Precision::Exact;
+        s.percent_in_icon = true;
+        for connection in [Connection::Sleeping, Connection::Stale] {
+            d.reading.connection = connection;
+            let cached = image(&d, &s, true);
+            assert!(contains_color(&cached, [245, 166, 35], 100));
+            s.percent_in_icon = false;
+            assert_ne!(
+                cached,
+                image(&d, &s, true),
+                "Cached exact percent remains visible"
+            );
+            s.percent_in_icon = true;
+        }
+        d.reading.connection = Connection::Online;
+        d.reading.level = Some(10);
+        d.reading.charging = Some(true);
+        let icons = frames(&d, &s, true, 32).unwrap();
+        assert_eq!(icons.len(), 30);
+        for icon in &icons {
+            let pixels = native_pixels(icon);
+            assert!(contains_color(&pixels, [75, 199, 133], 255));
+            assert!(!contains_color(&pixels, [245, 166, 35], 255));
+            assert!(!contains_color(&pixels, [232, 89, 84], 255));
+        }
+        drop(icons);
+        d.reading.charging = Some(false);
+        d.reading.level = None;
+        let unknown = image(&d, &s, true);
+        assert!(!contains_color(&unknown, [245, 166, 35], 255));
+        s.percent_in_icon = false;
+        assert_eq!(unknown, image(&d, &s, true));
+        s.warning_level = 10;
+        d.reading.level = Some(15);
+        assert!(contains_color(&image(&d, &s, true), [232, 89, 84], 255));
     }
 }
 #[cfg(test)]

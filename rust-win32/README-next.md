@@ -4,7 +4,17 @@ A Windows 11 x64 Rust/Win32 port of [HaloBattery](https://github.com/HeyOkay/Hal
 
 ## Run and build
 
-Run `HaloBatteryNext.exe` to open the dashboard. Closing the window keeps monitoring active. The tray menu offers refresh, device controls and Exit. Settings include Windows startup registration, which starts the executable with `--background`.
+Run `HaloBatteryNext.exe` to open the dashboard. Closing the window keeps monitoring active. Click a device tray icon, choose Open dashboard, or launch the executable again to reopen it. A duplicate `--background` launch stays quiet. The tray menu offers refresh, device controls and Exit. Settings include Windows startup registration, which starts the executable with `--background`.
+
+The dashboard follows Windows app light/dark appearance and changes while open,
+including native controls and history graphics. Windows high-contrast colors
+take priority. Tray appearance remains independently configurable. Unplugged
+or hidden devices still follow the existing per-device tray identity rules.
+
+Noncharging battery rings turn orange at **30%** by default, then red at the
+device's configured low-alert threshold (20% by default). Charging remains green.
+Settings → Orange warning % adjusts the visual band; zero disables orange.
+Red takes priority if thresholds overlap. Notification thresholds are unchanged.
 
 Configuration, diagnostics, optional `status.json` and SQLite history are stored in `%APPDATA%\HaloBatteryNext`. The app has its own startup entry, singleton mutex and notification identity. It does not import upstream settings. Both applications may run together, but receivers that reject concurrent access report recoverable errors.
 

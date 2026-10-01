@@ -1,4 +1,5 @@
 //! Direct2D resources only exist while the History page exists.
+use crate::dashboard_theme::Palette;
 use hb_core::{HistoryAxis, HistorySample, HistorySeries};
 use windows::Win32::{
     Foundation::HWND,
@@ -130,41 +131,34 @@ impl Chart {
             })
         }
     }
+    #[cfg(test)]
     pub fn paint(
         &self,
         width: u32,
         height: u32,
         series: &HistorySeries,
     ) -> windows::core::Result<()> {
+        self.paint_with_palette(width, height, series, &Palette::new(false, false))
+    }
+    pub fn paint_with_palette(
+        &self,
+        width: u32,
+        height: u32,
+        series: &HistorySeries,
+        palette: &Palette,
+    ) -> windows::core::Result<()> {
         let since = series.since;
         let until = series.until;
         unsafe {
             self.target.Resize(&D2D_SIZE_U { width, height })?;
             self.target.BeginDraw();
-            self.target.Clear(Some(&D2D1_COLOR_F {
-                r: 0.98,
-                g: 0.98,
-                b: 0.98,
-                a: 1.,
-            }));
-            let grid = self.target.CreateSolidColorBrush(
-                &D2D1_COLOR_F {
-                    r: 0.82,
-                    g: 0.84,
-                    b: 0.86,
-                    a: 1.,
-                },
-                None,
-            )?;
-            let line = self.target.CreateSolidColorBrush(
-                &D2D1_COLOR_F {
-                    r: 0.10,
-                    g: 0.52,
-                    b: 0.38,
-                    a: 1.,
-                },
-                None,
-            )?;
+            self.target.Clear(Some(&Palette::d2d(palette.background)));
+            let grid = self
+                .target
+                .CreateSolidColorBrush(&Palette::d2d(palette.border), None)?;
+            let line = self
+                .target
+                .CreateSolidColorBrush(&Palette::d2d(palette.accent), None)?;
             let left = 60. * self.scale;
             let right = width as f32 - 25. * self.scale;
             let top = 140. * self.scale;
@@ -179,15 +173,9 @@ impl Chart {
                     None,
                 );
             }
-            let label = self.target.CreateSolidColorBrush(
-                &D2D1_COLOR_F {
-                    r: 0.20,
-                    g: 0.22,
-                    b: 0.24,
-                    a: 1.,
-                },
-                None,
-            )?;
+            let label = self
+                .target
+                .CreateSolidColorBrush(&Palette::d2d(palette.text), None)?;
             let text = |text: &str, x: f32, y: f32, w: f32| {
                 let chars: Vec<u16> = text.encode_utf16().collect();
                 self.target.DrawText(
@@ -414,6 +402,11 @@ mod tests {
             for _ in 0..5 {
                 let chart = Chart::new(hwnd, 840, 820).unwrap();
                 chart.paint(840, 820, &HistorySeries::default()).unwrap();
+                for palette in [Palette::new(true, false), Palette::new(true, true)] {
+                    chart
+                        .paint_with_palette(840, 820, &HistorySeries::default(), &palette)
+                        .unwrap();
+                }
                 chart
                     .paint(
                         840,

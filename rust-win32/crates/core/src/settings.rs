@@ -16,6 +16,8 @@ pub struct DevicePreferences {
 pub struct Settings {
     pub interval: u64,
     pub low: u8,
+    /// Visual warning threshold; zero disables orange. Red low-alert color has priority.
+    pub warning_level: u8,
     pub notify: bool,
     pub full_alert: bool,
     pub bluetooth: bool,
@@ -39,6 +41,7 @@ impl Default for Settings {
         Self {
             interval: 60,
             low: 20,
+            warning_level: 30,
             notify: true,
             full_alert: true,
             bluetooth: true,
@@ -71,7 +74,7 @@ impl Settings {
             };
             let valid = match key.as_str() {
                 "interval" => val.as_u64().is_some_and(|n| (5..=3600).contains(&n)),
-                "low" => val.as_u64().is_some_and(|n| n <= 100),
+                "low" | "warning_level" => val.as_u64().is_some_and(|n| n <= 100),
                 "icon_theme" => val
                     .as_str()
                     .is_some_and(|s| ["auto", "white", "black", "windows", "topbar"].contains(&s)),
