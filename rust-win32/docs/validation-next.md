@@ -4,6 +4,51 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
+## Polling expansion checkpoint, 1 October 2026
+
+The optional control allowlist adds Viper V3 Pro and Viper Mini Signature Edition
+dedicated receivers, Logitech PRO X2 Superstrike and a narrowly scoped MCHOSE
+A7 V2 Ultra+ wireless route. MCHOSE requires receiver 3837:100B, paired model
+4021 and firmware 5.46.2.4; only the wireless rate nibble changes in its saved
+configuration block. Unknown models/firmware and ambiguous receiver routes are
+refused. Logitech advertised capabilities are intersected with connection
+ceilings: C54D permits up to 8000 Hz, while C53A and direct USB are conservatively
+limited to 1000 Hz. Superstrike on C53A is refused. Mini Signature Edition 8K
+requires suitable firmware. See the three polling evidence documents for exact
+wire facts, limits and primary sources.
+
+Formatting, strict workspace Clippy, the optimized release build and **404 Rust
+tests** pass; one optional timing test remains ignored. The upstream audit still
+accounts for all **459 IDs**: **366 mapped**, **36 tested intentional differences**
+and **57 retired Python details**. New synthetic regressions exercise extended
+Razer settling/readback, exact Logitech model/receiver ceilings, MCHOSE full-byte
+preservation and paired identity, malformed/late/unstable replies, changed
+profiles/configurations, uncertain SETs, cancellation/deadlines, duplicate
+collections and enumeration changes during an open session. The app's gaming
+guard refuses Apply before enumeration for every polling provider.
+
+The source/import API restrictions pass and the manifest remains
+`asInvoker`, `uiAccess=false`. Configuration uses the existing guarded user-mode
+HID worker, explicit Apply, bounded operations and no automatic rate writes.
+Source and executable privacy checks contain no build-account name or profile
+path. These checks do not establish anti-cheat vendor approval or immunity from
+policy changes. **No physical polling SET was performed for this expansion**;
+all newly added routes remain hardware-unverified locally. The earlier
+user-reported DeathAdder V4 Pro wireless results are unchanged.
+
+Native tests retain automatic Windows app appearance, keyboard navigation,
+history modes, settings and simulated opt-in/Read/Apply/Restore/no-startup-write
+behavior. Forty titlebar-close/reopen cycles pass, including duplicate-launch
+behavior, with **45 USER / 107 GDI** handles at cycles 1, 20 and 40. A separate
+**15.05-second** animated background simulation with one device and controls
+enabled averaged **6.01 MiB** private memory and **0.104%** of one logical core.
+Explorer-restart and resume notification replays pass, as does graceful status
+flushing. This short smoke check does not re-establish the five-minute CPU target
+or replace physical hardware validation.
+
+The portable executable is **2,719,232 bytes (2.59 MiB)**, SHA256
+`3CB9B4676BE5BA9B1DC09A8E354B147FB6F75C71D70930F7613E44102FE4F5B2`.
+
 ## Automatic appearance correction, 1 October 2026
 
 The user's report exposed two gaps in the earlier appearance validation: the

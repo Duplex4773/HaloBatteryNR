@@ -99,6 +99,94 @@ fn known_collection_only() {
     }
 }
 #[test]
+fn dedicated_high_rate_receivers_have_exact_allowlist_and_settle() {
+    for pid in [0x009f, 0x00c1] {
+        let info = HidInfo {
+            vendor_id: 0x1532,
+            product_id: pid,
+            interface: 0,
+            feature_length: Some(91),
+            ..Default::default()
+        };
+        let p = protocol(&info).unwrap();
+        assert_eq!(p, Protocol::ExtendedWireless);
+        assert_eq!(p.rates(), EXTENDED_RATES);
+        for hz in p.rates() {
+            let clock = TestClock::default();
+            let cancel = AtomicBool::new(false);
+            let code = (8000 / hz) as u8;
+            let mut s = Session::new(vec![
+                reply(0xc0, 2, 0, if *hz == 1000 { 1 } else { 8 }),
+                reply(0x40, 2, 0, code),
+                reply(0x40, 2, 1, code),
+                reply(0xc0, 2, 0, code),
+            ]);
+            let result = execute_rate(&mut s, &context(&clock, &cancel), p, Some(*hz));
+            assert_eq!(result.failure, None);
+            assert_eq!(result.observed_hz, Some(*hz));
+            let sent = s.sent.lock().unwrap();
+            assert_eq!(sent.len(), 4);
+            assert!(sent.iter().all(|r| r[2] == 0x1f));
+            assert_eq!(
+                sent[1],
+                request(Protocol::Extended, Some((*hz, 0))).unwrap()
+            );
+            assert_eq!(
+                sent[2],
+                request(Protocol::Extended, Some((*hz, 1))).unwrap()
+            );
+            assert_eq!(clock.monotonic(), Duration::from_millis(240));
+        }
+        for wrong in [
+            HidInfo {
+                interface: 1,
+                ..info.clone()
+            },
+            HidInfo {
+                feature_length: None,
+                ..info.clone()
+            },
+            HidInfo {
+                feature_length: Some(90),
+                ..info.clone()
+            },
+        ] {
+            assert_eq!(protocol(&wrong), None);
+        }
+    }
+    // Stock receivers, wired counterparts and pairable accessories do not
+    // inherit the dedicated receiver's ceiling from their marketing name.
+    for pid in [
+        0x009e, 0x00c0, 0x00b3, 0x00a4, 0x00a5, 0x00a6, 0x00aa, 0x00ab, 0x00af, 0x00b0, 0x00b8,
+        0x00c2, 0x00c3, 0x00c4, 0x00c5, 0x00cc, 0x00cd, 0x00d6, 0x00d7,
+    ] {
+        assert_eq!(
+            protocol(&HidInfo {
+                vendor_id: 0x1532,
+                product_id: pid,
+                interface: 0,
+                feature_length: Some(91),
+                ..Default::default()
+            }),
+            None
+        );
+    }
+}
+
+#[test]
+fn dedicated_receiver_settle_respects_deadline_before_write() {
+    let clock = TestClock::default();
+    let cancel = AtomicBool::new(false);
+    let mut c = context(&clock, &cancel);
+    c.deadline = Duration::from_millis(40);
+    let mut s = Session::new(vec![reply(0xc0, 2, 0, 8)]);
+    let result = execute_rate(&mut s, &c, Protocol::ExtendedWireless, Some(8000));
+    assert_eq!(result.failure, Some(ProtocolFailure::CancelledOrDeadline));
+    assert!(!result.may_have_changed);
+    assert_eq!(s.sent.lock().unwrap().len(), 1);
+    assert_eq!(s.replies.len(), 1);
+}
+#[test]
 fn golden_extended_reports_and_strict_rate_codes() {
     let get = request(Protocol::Extended, None).unwrap();
     assert_eq!(&get[..11], &[0, 0, 0x1f, 0, 0, 0, 1, 0, 0xc0, 0, 0]);

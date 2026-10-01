@@ -143,6 +143,31 @@ fn reads_fresh_epoch_and_ignores_display_name() {
     assert_eq!(hid.state.opens.load(Ordering::Relaxed), 1);
 }
 #[test]
+fn dedicated_high_rate_razer_receivers_use_exact_device_keys() {
+    for pid in [0x009f, 0x00c1] {
+        let mut hid = transport();
+        hid.devices[0].product_id = pid;
+        let mut request = request(apply());
+        request.target.reading.key = format!("razer:{pid:04x}:MOUSE-1");
+        let result = run(&request, &hid, false);
+        assert!(result.failure.is_none(), "{result:?}");
+        assert!(result.confirmed_change());
+        let observation = result.observation.unwrap();
+        assert_eq!(observation.rate.unwrap().hz(), 8000);
+        assert!(observation.evidence.contains("OpenRazer high-rate"));
+        assert_eq!(
+            hid.state
+                .sent
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|packet| packet[8])
+                .collect::<Vec<_>>(),
+            [0xc0, 0x40, 0x40, 0xc0]
+        );
+    }
+}
+#[test]
 fn apply_requires_fresh_epoch_before_open() {
     let hid = transport();
     let mut r = request(apply());

@@ -2,6 +2,8 @@ pub mod catalog;
 pub mod controls;
 mod logitech_adapter;
 pub mod logitech_controls;
+mod mchose_adapter;
+pub mod mchose_controls;
 pub mod protocols;
 pub mod provider;
 pub mod razer_controls;

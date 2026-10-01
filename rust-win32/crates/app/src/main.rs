@@ -45,9 +45,9 @@ fn entry() -> Result<(), ProviderError> {
         // require an explicit rate and exact stable key; no default mouse SET.
         let _instance = hb_windows::system::Instance::acquire()?;
         let selected_provider = option("--provider").unwrap_or_else(|| "razer".into());
-        if !["razer", "logitech"].contains(&selected_provider.as_str()) {
+        if !hb_providers::controls::POLLING_PROVIDERS.contains(&selected_provider.as_str()) {
             return Err(ProviderError::new(
-                "Polling controls support Razer and Logitech only",
+                "Polling controls support Razer, Logitech and MCHOSE only",
             ));
         }
         let action = match option("--polling-hz") {

@@ -65,7 +65,7 @@ pub(crate) fn execute(
         if info.vendor_id == 0x046d
             && info.usage_page == 0xff00
             && [1, 2].contains(&info.usage)
-            && matches!(info.product_id, 0xc54d | 0xc53a | 0xc09b | 0xc0a0)
+            && matches!(info.product_id, 0xc54d | 0xc53a | 0xc09b | 0xc0a0 | 0xc0a8)
         {
             groups
                 .entry((info.product_id, receiver_key(info)))

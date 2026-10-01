@@ -1598,18 +1598,21 @@ mod tests {
         let clock = SystemClock::default();
         let shutdown = Arc::new(AtomicBool::new(false));
         let cancelled = Arc::new(AtomicBool::new(false));
-        let request = control_request(
+        let mut request = control_request(
             ControlAction::Apply(PollingRate::try_from(8000).unwrap()),
             0,
         );
-        assert!(
-            execute_control(
-                &request, &NeverHid, &clock, &shutdown, &cancelled, true, None
-            )
-            .failure
-            .unwrap()
-            .contains("Close the game")
-        );
+        for provider in hb_providers::controls::POLLING_PROVIDERS {
+            request.target.reading.source = (*provider).into();
+            assert!(
+                execute_control(
+                    &request, &NeverHid, &clock, &shutdown, &cancelled, true, None
+                )
+                .failure
+                .unwrap()
+                .contains("Close the game")
+            );
+        }
         cancelled.store(true, Ordering::Relaxed);
         assert!(
             execute_control(

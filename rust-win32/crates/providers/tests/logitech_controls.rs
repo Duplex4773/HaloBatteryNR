@@ -92,8 +92,10 @@ fn models_capability_mask_exact_current_and_wired_limit() {
     for (slot, pid, wpid, usb) in [
         (1, 0xc54d, 0x40a9, 0xc09b),
         (2, 0xc53a, 0x40b8, 0xc0a0),
+        (1, 0xc54d, 0x40bd, 0xc0a8),
         (255, 0xc09b, 0x40a9, 0xc09b),
         (255, 0xc0a0, 0x40b8, 0xc0a0),
+        (255, 0xc0a8, 0x40bd, 0xc0a8),
     ] {
         let d = device(pid);
         let h = FakeHid::new(
@@ -113,7 +115,7 @@ fn models_capability_mask_exact_current_and_wired_limit() {
         );
         assert_eq!(
             cap.supported_hz,
-            if slot == 255 {
+            if pid != 0xc54d {
                 vec![125, 250, 500, 1000]
             } else {
                 vec![125, 250, 500, 1000, 2000, 4000, 8000]
@@ -121,6 +123,45 @@ fn models_capability_mask_exact_current_and_wired_limit() {
         );
         h.done();
     }
+}
+#[test]
+fn superstrike_receiver_rate_change_uses_only_live_rate_and_mode_getters() {
+    let d = device(0xc54d);
+    let discovery = probe(2, [1, 2, 3, 4], 0x40bd, 0xc0a8, 0x7f, 3, Some(2));
+    let h = FakeHid::new(vec![d.clone()], discovery.clone());
+    let cap = discover_fake(&h, &d, 2).unwrap();
+    h.done();
+    let mut steps = discovery;
+    steps.extend(pair(2, 11, 0x39, &[6], &[]));
+    steps.extend(pair(2, 11, 0x2a, &[], &[6]));
+    steps.extend(pair(2, 12, 0x2b, &[], &[2]));
+    let h = FakeHid::new(vec![d.clone()], steps);
+    let result = execute_fake(&h, &d, &cap, Some(8000));
+    assert_eq!(result.failure, None);
+    assert_eq!(result.observed_hz, Some(8000));
+    assert_eq!(result.previous_hz, Some(1000));
+    assert!(result.software_mode && result.may_have_changed);
+    h.done();
+}
+#[test]
+fn older_receiver_never_offers_or_sets_high_rates_from_mouse_mask() {
+    let d = device(0xc53a);
+    let cap = capability(&d, 1);
+    assert_eq!(cap.supported_hz, vec![125, 250, 500, 1000]);
+    let h = FakeHid::new(vec![d.clone()], vec![]);
+    let result = execute_fake(&h, &d, &cap, Some(8000));
+    assert_eq!(result.failure, Some(ProtocolFailure::Unsupported));
+    assert!(!result.may_have_changed);
+    h.done();
+}
+#[test]
+fn superstrike_unproven_receiver_is_refused_before_rate_queries() {
+    let d = device(0xc53a);
+    let mut steps = probe(1, [1, 2, 3, 4], 0x40bd, 0xc0a8, 0x7f, 3, Some(2));
+    steps.truncate(4); // Only feature lookup and exact model/unit identity.
+    let h = FakeHid::new(vec![d.clone()], steps);
+    assert_eq!(discover_fake(&h, &d, 1), Err(ProtocolFailure::Unsupported));
+    h.done();
 }
 #[test]
 fn unsupported_names_vendor_collections_slots_and_zero_unit_do_not_query() {
@@ -467,6 +508,36 @@ fn adapter_resolves_nonfirst_paired_slot_by_unit_and_revalidates_before_setting(
     assert_eq!(r.previous.unwrap().hz(), 1000);
     assert_eq!(r.observation.unwrap().rate.unwrap().hz(), 4000);
     assert!(r.may_have_changed);
+    h.done();
+}
+#[test]
+fn adapter_resolves_superstrike_direct_collection_and_keeps_wired_ceiling() {
+    let d = device(0xc0a8);
+    let discovery = probe(255, [1, 2, 3, 4], 0x40bd, 0xc0a8, 0x7f, 3, Some(2));
+    let mut steps = discovery.clone();
+    steps.extend(discovery);
+    steps.extend(pair(255, 11, 0x39, &[2], &[]));
+    steps.extend(pair(255, 11, 0x2a, &[], &[2]));
+    steps.extend(pair(255, 12, 0x2b, &[], &[2]));
+    let h = FakeHid::new(vec![d], steps);
+    let result = adapter(
+        &control_request(ControlAction::Apply(PollingRate::try_from(500).unwrap())),
+        &h,
+        &FakeClock::default(),
+    );
+    assert_eq!(result.failure, None);
+    assert_eq!(result.previous.unwrap().hz(), 1000);
+    let observation = result.observation.unwrap();
+    assert_eq!(observation.rate.unwrap().hz(), 500);
+    assert_eq!(
+        observation
+            .supported
+            .iter()
+            .map(|r| r.hz())
+            .collect::<Vec<_>>(),
+        vec![125, 250, 500, 1000]
+    );
+    assert!(result.may_have_changed);
     h.done();
 }
 #[test]

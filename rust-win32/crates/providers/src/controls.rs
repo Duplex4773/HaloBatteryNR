@@ -3,6 +3,10 @@ use crate::{provider::trusted_identity, razer_controls};
 use hb_core::*;
 use std::time::Duration;
 
+/// Configuration routes are independent of the battery catalog. Adding battery
+/// support must never grant permission to send configuration commands.
+pub const POLLING_PROVIDERS: &[&str] = &["razer", "logitech", "mchose"];
+
 #[derive(Default)]
 pub struct HidDeviceController;
 
@@ -88,6 +92,9 @@ impl DeviceController for HidDeviceController {
         let reading = &request.target.reading;
         if reading.source == "logitech" {
             return crate::logitech_adapter::execute(request, hid, context);
+        }
+        if reading.source == "mchose" {
+            return crate::mchose_adapter::execute(request, hid, context);
         }
         if reading.source != "razer" {
             return ControlOutcome::failed(
@@ -183,10 +190,13 @@ impl DeviceController for HidDeviceController {
                 .collect(),
             rate: rate(Some(hz)),
             timestamp: context.clock.unix(),
-            evidence: if info.product_id == 0x00be || info.product_id == 0x00bf {
-                "OpenRazer protocol reference; hardware unverified locally"
-            } else {
-                "OpenMouse physical polling measurement; hardware unverified locally"
+            evidence: match protocol {
+                razer_controls::Protocol::Extended | razer_controls::Protocol::ExtendedWireless => {
+                    "OpenRazer high-rate protocol reference; hardware unverified locally"
+                }
+                razer_controls::Protocol::Legacy => {
+                    "OpenMouse legacy polling reference; hardware unverified locally"
+                }
             }
             .into(),
         });

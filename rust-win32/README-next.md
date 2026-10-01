@@ -71,9 +71,14 @@ charge summaries. See [`docs/insights.md`](docs/insights.md).
 
 Optional hardware polling-rate controls default off. Enable them in Settings,
 select a supported mouse on Devices, then use Refresh rate, Apply rate or Restore
-previous. DeathAdder V4 Pro supports the six advertised rates up to 8000 Hz;
-DeathAdder V3 Pro has conservative legacy support. Superlight 2/DEX use advertised
-HID++ rates, with software control mode required and direct USB limited to 1000 Hz.
+previous. DeathAdder V4 Pro, Viper V3 Pro and Viper Mini Signature Edition have
+dedicated high-rate routes up to 8000 Hz; the Mini requires suitable firmware.
+DeathAdder V3 Pro retains conservative legacy support. Superlight 2/DEX and
+PRO X2 Superstrike use advertised HID++ rates up to 8000 Hz on receiver C54D,
+with software control mode required; legacy C53A and direct USB are limited to
+1000 Hz. MCHOSE A7 V2 Ultra+ has an 8000-Hz wireless route restricted to its
+100B receiver, exact paired model and firmware 5.46.2.4. Other receivers/models
+remain unavailable until their target identity and protocol are established.
 Saved selections are never applied automatically. Readback verifies configuration,
 not independently measured effective frequency. See `docs/polling-controls.md`.
 

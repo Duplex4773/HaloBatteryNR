@@ -1,4 +1,4 @@
-//! Explicit HID++ rate controls for two evidence-backed models. No profile writes.
+//! Explicit HID++ rate controls for evidence-backed models. No profile writes.
 use hb_core::{HidInfo, HidSession, PollContext};
 use std::time::Duration;
 const RATES: [u32; 7] = [125, 250, 500, 1000, 2000, 4000, 8000];
@@ -42,7 +42,16 @@ pub fn candidate(info: &HidInfo) -> bool {
     info.vendor_id == 0x046d
         && info.usage_page == 0xff00
         && info.usage == 2
-        && matches!(info.product_id, 0xc54d | 0xc53a | 0xc09b | 0xc0a0)
+        && matches!(info.product_id, 0xc54d | 0xc53a | 0xc09b | 0xc0a0 | 0xc0a8)
+}
+/// A mouse capability mask does not establish the receiver's transport ceiling.
+/// Only C54D has corroborated >1000 Hz routing for these exact model pairs.
+pub fn connection_ceiling(info: &HidInfo) -> u32 {
+    if info.product_id == 0xc54d {
+        8000
+    } else {
+        1000
+    }
 }
 struct Exchange<'a, 'b, 'c> {
     long: &'a mut dyn HidSession,
@@ -140,6 +149,7 @@ impl Exchange<'_, '_, '_> {
         let ids = match (wpid, usb) {
             (Some(0x40a9), Some(0xc09b)) => (0x40a9, 0xc09b),
             (Some(0x40b8), Some(0xc0a0)) => (0x40b8, 0xc0a0),
+            (Some(0x40bd), Some(0xc0a8)) => (0x40bd, 0xc0a8),
             _ => return Err(ProtocolFailure::Unsupported),
         };
         Ok((unit, ids.0, ids.1))
@@ -195,6 +205,9 @@ pub fn discover(
     if unit != expected || slot == 255 && model_usb != info.product_id {
         return Err(ProtocolFailure::IdentityMismatch);
     }
+    if model_wpid == 0x40bd && info.product_id == 0xc53a {
+        return Err(ProtocolFailure::Unsupported);
+    }
     let rate_feature = exchange
         .feature(slot, 0x8061)?
         .ok_or(ProtocolFailure::Unsupported)?;
@@ -203,7 +216,7 @@ pub fn discover(
     let supported_hz = RATES
         .iter()
         .enumerate()
-        .filter(|(i, h)| mask & (1 << i) != 0 && (slot != 255 || **h <= 1000))
+        .filter(|(i, h)| mask & (1 << i) != 0 && **h <= connection_ceiling(info))
         .map(|(_, h)| *h)
         .collect::<Vec<_>>();
     if supported_hz.is_empty() {

@@ -17,12 +17,60 @@ product; no such compatibility claim is made.
 | --- | --- | --- | --- |
 | 00BE, DeathAdder V4 Pro wired | extended | 125, 500, 1000, 2000, 4000, 8000 | reference supported; wired controls unverified locally |
 | 00BF, DeathAdder V4 Pro receiver | extended | 125, 500, 1000, 2000, 4000, 8000 | user-reported wireless changes: 1000 → 8000 → 125 → 2000 Hz, 2026-10-01; 500/4000 unreported |
+| 009F, Viper Mini Signature Edition dedicated receiver | extended, 60-ms settle | 125, 500, 1000, 2000, 4000, 8000 | direct upstream protocol and rate list; hardware unverified locally; 8K requires suitable firmware |
+| 00C1, Viper V3 Pro dedicated receiver | extended, 60-ms settle | 125, 500, 1000, 2000, 4000, 8000 | direct upstream protocol and rate list, corroborating OpenMouse hardware report; hardware unverified locally |
 | 00B6 / 00B7, DeathAdder V3 Pro wired / stock receiver | legacy | 125, 500, 1000 | third-party physical test evidence; hardware unverified by Halo Battery |
 
 Every entry requires USB interface 0 and a 91-byte Windows feature collection.
 Missing descriptor information is rejected, as are other collections and PIDs.
 That conservative Windows gate can exclude hardware accessible through WebHID.
 No Bluetooth, generic dongle, inferred model, or legacy fallback is enabled.
+
+## Expansion audit (1 October 2026)
+
+The catalog's new high-rate routes are restricted to the dedicated **009F** and
+**00C1** receivers. This audit read the actual upstream driver and daemon rather
+than relying on a generated capability list. Sources are pinned for review:
+
+- [OpenRazer driver at 6820f9da](https://github.com/openrazer/openrazer/blob/6820f9da169d354bc7e6e93a0aa8683a6bb75792/driver/razermouse_driver.c),
+  `razer_get_report`, `razer_attr_read_poll_rate`, and `razer_attr_write_poll_rate`:
+  interface 0, 59,900-us wait, GET C0 with TID 1F and decode argument 1;
+  SET 40 with argument 0 equal to 0 then 1, both TID 1F.
+- [OpenRazer PID definitions](https://github.com/openrazer/openrazer/blob/6820f9da169d354bc7e6e93a0aa8683a6bb75792/driver/razermouse_driver.h)
+  and [direct daemon rate lists](https://github.com/openrazer/openrazer/blob/6820f9da169d354bc7e6e93a0aa8683a6bb75792/daemon/openrazer_daemon/hardware/mouse.py):
+  `RazerViperMiniSEWireless` is 009F and `RazerViperV3ProWireless` is 00C1;
+  each lists exactly 125/500/1000/2000/4000/8000 Hz. Their wired counterparts
+  009E and 00C0 list only 125/500/1000 Hz and are deliberately excluded.
+- [Pinned Windows recipes](https://github.com/Ar4ikov/openrazer-win/blob/6a626b2d11069ec8be6a7eda6e0dd8ee3ece0998/openrazer_win/devices/data/recipes.json)
+  corroborate the commands, two-step SET, interface and wait. The generated
+  extended getter fallthrough remains excluded as described below.
+- [Razer's Mini SE firmware announcement](https://www.razer.com/newsroom/product-news/razer-8000-hz-wireless-polling-rate)
+  documents an update enabling 8000-Hz wireless operation. Older firmware may
+  refuse or retain a lower requested value; no update or fallback is attempted.
+  [Razer's Viper V3 Pro guide](https://dl.razerzone.com/master-guides/RazerSynapse3/VIPERV3PRO-00000192-en.pdf)
+  independently lists the same six selectable rates.
+- [OpenMouse testing at beef2df9](https://github.com/OpenMouse-Project/mouse-protocol/blob/beef2df996836dbc6a488b8c2e38a67603ec6102/docs/razer-testing.md)
+  records Viper V3 Pro wired/receiver controls, and separately reports that Viper
+  V3 HyperSpeed stock receiver 00B8 rejects extended polling. Its experimental
+  model discovery and fallback policies are not used here.
+
+Rust rounds the documented 59.9-ms settling time up to 60 ms on the two new
+receivers. DeathAdder V4 Pro and the existing conservative V3 Pro route retain
+31 ms. Every new receiver still uses get-before, two acknowledged writes, and
+get-after; any malformed/status/unknown-rate response stops the change without
+trying a different command. Both receiver additions have synthetic validation
+only in Halo Battery. Readback confirms configuration, not measured frequency.
+
+The catalog also contains pairable HyperPolling dongle **00B3** and Mouse Dock
+Pro **00A4**, as well as Viper V2 Pro, DeathAdder V3 Pro/HyperSpeed, Cobra Pro,
+Basilisk V3 Pro and 35K variants with high rates advertised through an optional
+accessory. They are not upgraded by model name. 00B3 has a documented extended
+route (its second SET uses TID FF), but the app does not verify the paired mouse
+and its firmware/rate ceiling. 00A4 does not have the same verified polling route.
+Stock and wired PIDs do not acquire the accessory's capability. No generic
+receiver write, pairing change, firmware update or speculative probe is added.
+The non-battery Viper 8K (0091) and DeathAdder V3 (00B2) are outside the current
+app catalog. No additional PIDs or 250-Hz encoding are enabled by this audit.
 
 [OpenMouse's hardware test report](https://github.com/OpenMouse-Project/mouse-protocol/blob/main/docs/razer-testing.md)
 documents DeathAdder V3 Pro firmware 2.1 using MI_00, actual polling measurement,
@@ -57,7 +105,8 @@ reproduced. Each Rust getter sends once and decodes its protocol once.
 [Windows transport](https://github.com/Ar4ikov/openrazer-win/blob/6a626b2/openrazer_win/core/transport.py)
 selects a 91-byte feature collection, prefers the upstream interface, and matches
 class, command, and remaining-packet fields. The local transport table gives
-BE/BF a 31-ms wait. Rust uses that conservative wait for all enabled models.
+BE/BF a 31-ms wait. Rust retains that wait for the existing DeathAdder routes.
+The dedicated 009F/00C1 receiver routes instead use 60 ms as documented above.
 It does not impose unverified reply TID or CRC equality: the Windows reference
 does not validate those fields. Structural length, report ID, command, remaining
 packets, payload bounds, success status, and known rate codes are validated.

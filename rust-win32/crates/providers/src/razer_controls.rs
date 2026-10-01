@@ -9,6 +9,8 @@ pub const LEGACY_RATES: &[u32] = &[125, 500, 1000];
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Protocol {
     Extended,
+    /// Dedicated Mini SE / Viper V3 Pro receiver: same commands, longer settle.
+    ExtendedWireless,
     Legacy,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,6 +39,7 @@ pub fn protocol(info: &HidInfo) -> Option<Protocol> {
     }
     match info.product_id {
         0x00be | 0x00bf => Some(Protocol::Extended),
+        0x009f | 0x00c1 => Some(Protocol::ExtendedWireless),
         0x00b6 | 0x00b7 => Some(Protocol::Legacy),
         _ => None,
     }
@@ -44,27 +47,37 @@ pub fn protocol(info: &HidInfo) -> Option<Protocol> {
 impl Protocol {
     pub fn rates(self) -> &'static [u32] {
         match self {
-            Self::Extended => EXTENDED_RATES,
+            Self::Extended | Self::ExtendedWireless => EXTENDED_RATES,
             Self::Legacy => LEGACY_RATES,
         }
     }
+    fn extended(self) -> bool {
+        self != Self::Legacy
+    }
+    fn settle(self) -> Duration {
+        Duration::from_millis(if self == Self::ExtendedWireless {
+            60
+        } else {
+            31
+        })
+    }
     fn get_id(self) -> u8 {
-        if self == Self::Extended { 0xc0 } else { 0x85 }
+        if self.extended() { 0xc0 } else { 0x85 }
     }
     fn set_id(self) -> u8 {
-        if self == Self::Extended { 0x40 } else { 0x05 }
+        if self.extended() { 0x40 } else { 0x05 }
     }
     fn code(self, hz: u32) -> Option<u8> {
         if !self.rates().contains(&hz) {
             return None;
         }
-        Some(((if self == Self::Extended { 8000 } else { 1000 }) / hz) as u8)
+        Some(((if self.extended() { 8000 } else { 1000 }) / hz) as u8)
     }
 }
 pub fn request(protocol: Protocol, set: Option<(u32, u8)>) -> Option<[u8; 91]> {
     let mut report = [0; 91];
     report[2] = 0x1f;
-    report[6] = if set.is_some() && protocol == Protocol::Extended {
+    report[6] = if set.is_some() && protocol.extended() {
         2
     } else {
         1
@@ -76,7 +89,7 @@ pub fn request(protocol: Protocol, set: Option<(u32, u8)>) -> Option<[u8; 91]> {
     };
     if let Some((hz, step)) = set {
         let code = protocol.code(hz)?;
-        if protocol == Protocol::Extended {
+        if protocol.extended() {
             if step > 1 {
                 return None;
             }
@@ -92,6 +105,7 @@ pub fn request(protocol: Protocol, set: Option<(u32, u8)>) -> Option<[u8; 91]> {
 fn exchange(
     session: &mut dyn HidSession,
     context: &PollContext<'_>,
+    protocol: Protocol,
     report: &[u8; 91],
 ) -> Result<[u8; 90], ProtocolFailure> {
     if !context.active() {
@@ -100,7 +114,7 @@ fn exchange(
     session
         .send_feature(report)
         .map_err(|e| ProtocolFailure::Transport(e.message))?;
-    context.sleep(Duration::from_millis(31));
+    context.sleep(protocol.settle());
     if !context.active() {
         return Err(ProtocolFailure::CancelledOrDeadline);
     }
@@ -132,12 +146,17 @@ pub fn read_rate(
     context: &PollContext<'_>,
     protocol: Protocol,
 ) -> Result<u32, ProtocolFailure> {
-    let r = exchange(session, context, &request(protocol, None).unwrap())?;
+    let r = exchange(
+        session,
+        context,
+        protocol,
+        &request(protocol, None).unwrap(),
+    )?;
     // Extended getter's data_size is historically 1 despite arg1 containing rate.
     if r[5] < 1 {
         return Err(ProtocolFailure::InvalidReply);
     }
-    let code = r[if protocol == Protocol::Extended { 9 } else { 8 }];
+    let code = r[if protocol.extended() { 9 } else { 8 }];
     protocol
         .rates()
         .iter()
@@ -177,7 +196,7 @@ pub fn execute_rate(
     if result.observed_hz == Some(hz) {
         return result;
     }
-    for step in 0..if protocol == Protocol::Extended { 2 } else { 1 } {
+    for step in 0..if protocol.extended() { 2 } else { 1 } {
         if !context.active() {
             result.failure = Some(ProtocolFailure::CancelledOrDeadline);
             break;
@@ -186,6 +205,7 @@ pub fn execute_rate(
         if let Err(e) = exchange(
             session,
             context,
+            protocol,
             &request(protocol, Some((hz, step))).unwrap(),
         ) {
             result.failure = Some(e);

@@ -26,6 +26,13 @@ guarantee. Include it with portable release documentation and notices.
   Stable identities, collection shape, connection epoch, cancellation, deadline,
   supported rate, and readback must pass the respective guards. Partial writes
   and uncertain verification remain failures with the available observed rate.
+  Razer dedicated receivers, exact Logitech HID++ model pairs and the scoped
+  MCHOSE model/firmware use this same guarded worker; adding battery catalog
+  entries never adds configuration permission. MCHOSE stores the rate in a
+  larger block: the app alters only its rate nibble and requires all other bytes
+  to remain identical. It does not create or modify button/macro assignments,
+  switch profiles or execute stored actions. Its firmware-update collection is
+  explicitly excluded.
 - Settings and suspension revoke configuration permission synchronously, even
   with a full command queue. A latest-settings mailbox and acknowledged epochs
   prevent old jobs or lifecycle events from reviving permission. Shutdown drains
@@ -81,5 +88,7 @@ with window messages and capture images. They are isolated validation tools,
 not compiled into the release executable. Source inspection is bounded evidence:
 it is not a complete audit of every dependency, final executable import table,
 firmware, or future release. No hardware polling writes were performed for this
-audit. See [Razer protocol evidence](polling-razer-evidence.md) for per-device
+audit. See [Razer protocol evidence](polling-razer-evidence.md),
+[Logitech evidence](polling-logitech-evidence.md) and
+[MCHOSE evidence](polling-mchose-evidence.md) for per-device
 provenance and the distinction between reported rate and measured USB frequency.
