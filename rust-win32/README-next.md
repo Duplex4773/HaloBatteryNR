@@ -52,6 +52,13 @@ gaps. Original observations and timestamps remain intact. See
 
 PlayStation Bluetooth full mode is opt-in. 8BitDo mode switching is disabled. Unknown devices are excluded from command allowlists. Update checking remains disabled pending an independently configured release repository.
 
+The **Insights** page compares observed battery drain by last-confirmed polling
+rate and shows recent charge summaries with awake use, consumption and average
+drain. Evidence counts and conservative projection thresholds distinguish
+limited data from an estimate. Only fresh hardware readbacks establish rate
+evidence; saved requests never count. Existing history can provide partial
+charge summaries. See [`docs/insights.md`](docs/insights.md).
+
 Optional hardware polling-rate controls default off. Enable them in Settings,
 select a supported mouse on Devices, then use Refresh rate, Apply rate or Restore
 previous. DeathAdder V4 Pro supports the six advertised rates up to 8000 Hz;

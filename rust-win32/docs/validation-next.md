@@ -4,7 +4,39 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
-## Tray-preservation checkpoint, 1 October 2026
+## Battery-insights checkpoint, 1 October 2026
+
+Formatting, strict workspace Clippy, the optimized release build and **370 Rust
+tests** pass locally; one existing optional timing test remains ignored. The
+459-ID upstream audit stays complete at **366 mapped**, **36 tested intentional
+differences** and **57 retired Python details**. The executable is **2,695,680
+bytes (2.57 MiB)**, SHA256
+`994ED89B2AD641C364AE6DD014B3CC19ADC3875F1FC3DAF0F83E3B56F03553CA`.
+
+New regressions cover rate/session boundaries, charging through sleep,
+unobserved charge inference, malformed/coarse readings, backwards clocks,
+percentage jitter, sample/drop thresholds, bounded cycles, legacy databases,
+atomic metadata rollback, pruning, shutdown/restart and query-before-flush.
+A 43,200-row raw month streams to the same bounded result as the pure builder.
+Rate learning accepts fresh readbacks only and never restores evidence from
+saved preferences; existing simulation tests still assert no automatic Apply.
+
+Native Insights validation passed Alt+I, two invented rate comparisons, ten
+scrollable charge summaries, evidence details, device selection and local
+Refresh. Visual inspection confirmed readable details and dated cycle rows.
+Forty warm Insights open/close cycles held USER/GDI handles at **14/16** and
+private memory at **5.73 MiB**. Existing native history, keyboard, settings,
+device controls and simulated polling regressions also passed, with stable
+**44/102** handles across forty dashboard cycles.
+
+A **15.01-second** animated background smoke run with one simulated device and
+polling controls enabled averaged **6.46 MiB** private memory and **0.416%** of
+one logical core. Handles stayed stable and shutdown flushed state. This short
+check is not a replacement for the earlier five-minute measurements below.
+No physical rate changes or protected game sessions were used by these checks.
+Production API/import restrictions and source/release privacy checks pass.
+
+## Earlier tray-preservation checkpoint, 1 October 2026
 
 Formatting, strict workspace Clippy, the optimized release build and **347 Rust
 tests** pass locally. The executable is **2,644,480 bytes (2.52 MiB)**, SHA256
@@ -31,8 +63,8 @@ intentional differences**, and **57 retired Python implementation details**.
 The added difference records keeping known Razer presence after the percentage
 cache expires, replacing upstream's empty result. Existing cache-freshness limits
 and headset behavior remain unchanged. Recorder tests establish the app's Shell
-operations; the user's promoted placement through a physical sleep/wake cycle
-still requires manual confirmation and is not claimed by those tests.
+operations; the user subsequently confirmed that the taskbar placement fix
+worked. That user report supplements, rather than follows from, recorder tests.
 
 ## Earlier history checkpoint, 1 October 2026
 

@@ -4,6 +4,8 @@ pub mod engine;
 pub use controls::*;
 pub mod history;
 pub mod history_plot;
+pub mod insights;
+pub use insights::*;
 pub mod settings;
 
 pub use engine::{DeviceView, Engine, Notification, NotificationKind, Snapshot};

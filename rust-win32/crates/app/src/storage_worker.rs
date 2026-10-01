@@ -26,30 +26,36 @@ pub(super) fn run(
         let _ = events.send(Event::Error(format!("History: {e}")));
     }
     let mut flush = Instant::now();
-    let mut pending = Vec::new();
     let mut estimator = None;
+    let mut pending_usage: Vec<UsageObservation> = Vec::new();
     loop {
         let message =
             messages.recv_timeout(Duration::from_secs(60).saturating_sub(flush.elapsed()));
         let result = match message {
-            Ok(Storage::Sample(readings)) => {
+            Ok(Storage::UsageSample(observations)) => {
                 if let Ok(db) = &mut database {
-                    readings.iter().try_for_each(|r| db.record(r))
+                    observations.iter().try_for_each(|o| db.record_usage(o))
                 } else {
-                    // Bound outage recovery memory. Latest readings replace earlier
-                    // unchanged states; a sustained outage is visible in diagnostics.
-                    for r in readings {
-                        if let Some(old) = pending
+                    for observation in observations {
+                        if let Some(old) = pending_usage
                             .iter_mut()
-                            .find(|old: &&mut Reading| old.key == r.key)
+                            .find(|old| old.reading.key == observation.reading.key)
                         {
-                            *old = r;
-                        } else if pending.len() < 512 {
-                            pending.push(r);
+                            *old = observation;
+                        } else if pending_usage.len() < 512 {
+                            pending_usage.push(observation);
                         }
                     }
                     Ok(())
                 }
+            }
+            Ok(Storage::Insights(key, until, id)) => {
+                let result = match &mut database {
+                    Ok(db) => db.flush().and_then(|_| db.query_insights(&key, until)),
+                    Err(e) => Err(e.clone()),
+                };
+                let _ = events.send(Event::Insights(id, result));
+                Ok(())
             }
             Ok(Storage::Save(settings)) => {
                 hb_storage::save_settings(&folder.join("config.json"), &settings)
@@ -108,8 +114,8 @@ pub(super) fn run(
             if database.is_err() {
                 database = Store::open(&folder.join("history.db"));
                 if let Ok(db) = &mut database {
-                    for r in pending.drain(..) {
-                        let _ = db.record(&r);
+                    for observation in pending_usage.drain(..) {
+                        let _ = db.record_usage(&observation);
                     }
                     if let Some(state) = estimator.take() {
                         let _ = db.save_estimator(&state);

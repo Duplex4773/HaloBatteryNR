@@ -353,6 +353,121 @@ impl HistorySelection {
         }
     }
 }
+#[derive(Default)]
+struct InsightsUi {
+    sequence: u64,
+    pending: Option<(u64, String)>,
+    key: Option<String>,
+    data: Option<BatteryInsights>,
+    status: String,
+}
+impl InsightsUi {
+    fn abandon(&mut self) {
+        self.pending = None;
+    }
+    fn select(&mut self, key: Option<String>) {
+        if self.key != key {
+            self.abandon();
+            self.key = key;
+            self.data = None;
+            self.status.clear();
+        }
+    }
+    fn accept(
+        &mut self,
+        request: u64,
+        selected: Option<&str>,
+        result: Result<BatteryInsights, ProviderError>,
+    ) -> bool {
+        if !self
+            .pending
+            .as_ref()
+            .is_some_and(|(id, key)| *id == request && selected == Some(key.as_str()))
+        {
+            return false;
+        }
+        self.pending = None;
+        match result {
+            Ok(data) => {
+                self.data = Some(data);
+                self.status =
+                    "Local data refreshed. Select a rate or charge summary to view its evidence."
+                        .into();
+            }
+            Err(error) => {
+                self.status =
+                    format!("Could not read local insights: {error}. Use Refresh to retry.")
+            }
+        }
+        true
+    }
+}
+const INSIGHTS_EMPTY: &str = "Collect discharge data while the device is awake. For rate comparisons, enable polling controls in Settings and manually Refresh a supported device's hardware rate under Devices. Saved requested rates are never evidence.";
+fn insight_hours(seconds: u64) -> String {
+    format!("{:.1} h", seconds as f64 / 3600.0)
+}
+fn insight_estimate(hours: Option<f64>) -> String {
+    hours
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .map(|value| format!("{value:.1} h"))
+        .unwrap_or_else(|| "Not enough discharge evidence".into())
+}
+fn rate_insight_text(rate: &RateInsight) -> String {
+    let confidence = match rate.confidence {
+        InsightConfidence::Insufficient => "Insufficient",
+        InsightConfidence::Low => "Low",
+        InsightConfidence::Moderate => "Moderate",
+    };
+    format!(
+        "{} Hz · {} confidence\r\n{} awake · {} percentage points consumed\r\n{} samples · {} observed drops\r\nEstimated full-charge use: {}\r\nRemaining at last reading: {}\r\nLast-confirmed rate; usage conditions may differ.",
+        rate.hz,
+        confidence,
+        insight_hours(rate.awake_seconds),
+        rate.consumed_percent,
+        rate.sample_count,
+        rate.drop_count,
+        insight_estimate(rate.projected_full_charge_hours),
+        rate.remaining_hours
+            .filter(|hours| hours.is_finite() && *hours >= 0.0)
+            .map(|hours| format!("{hours:.1} h"))
+            .unwrap_or_else(|| "Unavailable".into())
+    )
+}
+fn charge_cycle_row(cycle: &ChargeCycle) -> String {
+    let timestamp = polling_timestamp(cycle.start_timestamp);
+    format!(
+        "{} · {}",
+        &timestamp[5..16],
+        insight_hours(cycle.awake_seconds)
+    )
+}
+fn charge_cycle_text(cycle: &ChargeCycle) -> String {
+    let evidence = match cycle.evidence {
+        CycleEvidence::ObservedCharge => "Observed charge (does not imply a full charge)",
+        CycleEvidence::InferredCharge => "Inferred charge from a battery rise",
+        CycleEvidence::Partial => "Partial cycle; charge start was not observed",
+    };
+    let drain = if cycle.awake_seconds > 0 {
+        format!(
+            "{:.1} percentage points/h",
+            cycle.consumed_percent as f64 * 3600.0 / cycle.awake_seconds as f64
+        )
+    } else {
+        "Not enough awake evidence".into()
+    };
+    format!(
+        "{} discharge summary · {}\r\n{} to {}\r\n{}% to {}% · {} percentage points consumed\r\n{} estimated awake time\r\nAverage observed drain: {}\r\nObserved segment, not a measured full-charge runtime.",
+        if cycle.current { "Latest" } else { "Previous" },
+        evidence,
+        polling_timestamp(cycle.start_timestamp),
+        polling_timestamp(cycle.end_timestamp),
+        cycle.start_percent,
+        cycle.end_percent,
+        cycle.consumed_percent,
+        insight_hours(cycle.awake_seconds),
+        drain
+    )
+}
 struct State {
     context: *const RefCell<State>,
     runtime: Runtime,
@@ -376,6 +491,7 @@ struct State {
     error: String,
     font: HFONT,
     polling: PollingUi,
+    insights: InsightsUi,
     polling_intents: BTreeMap<String, (u64, PollingRate)>,
 }
 fn wide(s: &str) -> Vec<u16> {
@@ -451,6 +567,7 @@ pub fn run(
             error: initial_error.unwrap_or_default(),
             font,
             polling: PollingUi::default(),
+            insights: InsightsUi::default(),
             polling_intents: BTreeMap::new(),
         }));
         let ptr = &*context as *const RefCell<State>;
@@ -499,7 +616,7 @@ pub fn run(
                 break;
             }
             let dashboard = context.borrow().dashboard;
-            if message.message == WM_SYSCHAR && b"dhsr".contains(&(message.wParam.0 as u8)) {
+            if message.message == WM_SYSCHAR && b"dhsri".contains(&(message.wParam.0 as u8)) {
                 DispatchMessageW(&message);
                 continue;
             }
@@ -611,7 +728,14 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                         .iter()
                         .position(|d| &d.reading.key == key)
                 {
-                    s.selected = i;
+                    if s.selected != i && s.page == 6 {
+                        s.selected = i;
+                        s.insights.abandon();
+                        s.build();
+                        s.query_insights();
+                    } else {
+                        s.selected = i;
+                    }
                 }
                 let event = (lp.0 as u32) & 0xffff;
                 if event == WM_CONTEXTMENU || event == WM_RBUTTONUP {
@@ -627,6 +751,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                     b'd' => s.command(1, 0),
                     b'h' => s.command(2, 0),
                     b's' => s.command(3, 0),
+                    b'i' => s.command(6, 0),
                     b'r' => s.command(4, 0),
                     _ => {}
                 }
@@ -640,6 +765,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 if Some(hwnd) == s.dashboard {
                     s.chart = None;
                     s.polling.abandon();
+                    s.insights.abandon();
                     s.controls.clear();
                     s.dashboard = None;
                     let _ = DeleteObject(s.font.into());
@@ -858,6 +984,7 @@ impl State {
                     self.polling.abandon();
                     self.build();
                     self.read_polling();
+                    self.query_insights();
                     let _ = ShowWindow(h, SW_SHOW);
                     let _ = SetForegroundWindow(h);
                 }
@@ -900,6 +1027,7 @@ impl State {
         self.button(1, "&Devices", 20, 16, 110);
         self.button(2, "&History", 140, 16, 110);
         self.button(3, "&Settings", 260, 16, 110);
+        self.button(6, "&Insights", 380, 16, 110);
         self.button(4, "&Refresh", 660, 16, 120);
         let names: Vec<_> = self
             .snapshot
@@ -1081,11 +1209,194 @@ impl State {
                 self.button(5, "Export &diagnostics", 220, 682, 200);
                 self.label(95, &self.error.clone(), 20, 732, 750);
             }
+            6 => self.build_insights(&names),
             _ => {}
         }
         unsafe {
             let _ = InvalidateRect(self.dashboard, None, true);
         }
+    }
+    fn set_control_text(&self, id: u16, text: &str) {
+        if let Some(h) = self.controls.get(&id) {
+            let text = wide(text);
+            unsafe {
+                let _ = SetWindowTextW(*h, PCWSTR(text.as_ptr()));
+            }
+        }
+    }
+    fn insights_edit(&mut self, id: u16, y: i32, height: i32) {
+        self.control(
+            id,
+            w!("EDIT"),
+            "",
+            WS_TABSTOP
+                | WS_BORDER
+                | WS_VSCROLL
+                | WINDOW_STYLE((ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL) as u32),
+            225,
+            y,
+            555,
+            height,
+        );
+    }
+    fn insights_list(&mut self, id: u16, y: i32, height: i32) {
+        self.control(
+            id,
+            w!("LISTBOX"),
+            "",
+            WS_TABSTOP
+                | WS_BORDER
+                | WS_VSCROLL
+                | WINDOW_STYLE((LBS_NOTIFY | LBS_NOINTEGRALHEIGHT) as u32),
+            20,
+            y,
+            190,
+            height,
+        );
+    }
+    fn build_insights(&mut self, names: &[String]) {
+        let key = self
+            .snapshot
+            .devices
+            .get(self.selected)
+            .map(|d| d.reading.key.clone());
+        self.insights.select(key);
+        self.combo(10, names, self.selected, 20, 65, 760);
+        self.label(
+            72,
+            "Battery Insights · local 30-day data · Refresh updates this page",
+            20,
+            105,
+            760,
+        );
+        self.label(
+            73,
+            "Polling-rate comparison · estimated full-charge awake runtime",
+            20,
+            140,
+            760,
+        );
+        self.insights_list(70, 170, 155);
+        self.insights_edit(74, 170, 155);
+        self.label(
+            75,
+            "Recent charge summaries · UTC start time (up to 10; partial cycles included)",
+            20,
+            340,
+            760,
+        );
+        self.insights_list(71, 370, 165);
+        self.insights_edit(76, 370, 165);
+        self.control(77, w!("STATIC"),
+            "Awake use is estimated device availability, not input activity. Full-charge runtime is a projection, not battery health.\r\n\r\nRates use the last confirmed setting. Refresh under Devices after changing it elsewhere. Sleep or unavailability pauses learning; reconnect, system suspend, restart or disabling controls requires fresh rate confirmation.",
+            WINDOW_STYLE::default(), 20, 550, 760, 140);
+        self.control(
+            78,
+            w!("STATIC"),
+            "",
+            WINDOW_STYLE::default(),
+            20,
+            700,
+            760,
+            60,
+        );
+        self.render_insights();
+    }
+    fn query_insights(&mut self) {
+        if self.dashboard.is_none() || self.page != 6 {
+            return;
+        }
+        let key = self
+            .snapshot
+            .devices
+            .get(self.selected)
+            .map(|d| d.reading.key.clone());
+        self.insights.select(key.clone());
+        let Some(key) = key else {
+            self.insights.status =
+                "No device selected. Connect a device and use Refresh under Devices.".into();
+            self.render_insights();
+            return;
+        };
+        self.insights.sequence = self.insights.sequence.wrapping_add(1).max(1);
+        let request = self.insights.sequence;
+        self.insights.pending = Some((request, key.clone()));
+        self.insights.status = "Reading local discharge evidence…".into();
+        self.set_control_text(78, &self.insights.status);
+        self.runtime.send(Command::Insights {
+            key,
+            until: SystemClock::default().unix(),
+            request,
+        });
+    }
+    fn render_insights(&self) {
+        if self.dashboard.is_none() || self.page != 6 {
+            return;
+        }
+        for id in [70, 71] {
+            if let Some(h) = self.controls.get(&id) {
+                unsafe {
+                    send(*h, LB_RESETCONTENT, WPARAM(0), LPARAM(0));
+                }
+            }
+        }
+        if let Some(data) = &self.insights.data {
+            for (id, rows) in [
+                (
+                    70,
+                    data.rates
+                        .iter()
+                        .map(|rate| {
+                            let estimate = rate
+                                .projected_full_charge_hours
+                                .filter(|hours| hours.is_finite() && *hours >= 0.0)
+                                .map(|hours| format!("~{hours:.1} h"))
+                                .unwrap_or_else(|| "limited data".into());
+                            format!("{} Hz · {estimate}", rate.hz)
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+                (
+                    71,
+                    data.cycles.iter().take(10).map(charge_cycle_row).collect(),
+                ),
+            ] {
+                if let Some(h) = self.controls.get(&id) {
+                    for row in rows {
+                        let text = wide(&row);
+                        unsafe {
+                            send(*h, LB_ADDSTRING, WPARAM(0), LPARAM(text.as_ptr() as isize));
+                        }
+                    }
+                    unsafe {
+                        send(*h, LB_SETCURSEL, WPARAM(0), LPARAM(0));
+                    }
+                }
+            }
+        }
+        self.insights_details();
+        self.set_control_text(78, &self.insights.status);
+    }
+    fn insights_details(&self) {
+        if self.dashboard.is_none() || self.page != 6 {
+            return;
+        }
+        let selected = |id| {
+            self.controls.get(&id).map_or(0, |h| unsafe {
+                send(*h, LB_GETCURSEL, WPARAM(0), LPARAM(0)).0.max(0) as usize
+            })
+        };
+        let rate = self
+            .insights
+            .data
+            .as_ref()
+            .and_then(|data| data.rates.get(selected(70)))
+            .map(rate_insight_text)
+            .unwrap_or_else(|| INSIGHTS_EMPTY.into());
+        let cycle = self.insights.data.as_ref().and_then(|data| data.cycles.get(selected(71)))
+            .map(charge_cycle_text).unwrap_or_else(|| "No charge summaries yet. Collect awake discharge readings; partial cycles appear when sufficient connected data is available.".into());
+        self.set_control_text(74, &rate);
+        self.set_control_text(76, &cycle);
     }
     fn save(&mut self) {
         self.runtime.send(Command::Settings(self.settings.clone()));
@@ -1093,13 +1404,19 @@ impl State {
     }
     fn command(&mut self, id: u16, notification: u16) {
         match id {
-            1..=3 => {
+            1..=3 | 6 => {
                 self.polling.abandon();
+                self.insights.abandon();
                 self.page = id;
                 self.build();
-                self.read_polling()
+                self.read_polling();
+                self.query_insights()
             }
             4 => {
+                if self.page == 6 {
+                    self.query_insights();
+                    return;
+                }
                 self.runtime.send(Command::Refresh);
                 if self.page == 2 {
                     self.query()
@@ -1119,10 +1436,13 @@ impl State {
             }
             10 if notification == CBN_SELCHANGE as u16 => {
                 self.polling.abandon();
+                self.insights.abandon();
                 self.selected = self.choice(10);
                 self.build();
-                self.read_polling()
+                self.read_polling();
+                self.query_insights()
             }
+            70 | 71 if notification == LBN_SELCHANGE as u16 => self.insights_details(),
             40 => self.apply_polling(false),
             41 => self.read_polling(),
             42 => self.apply_polling(true),
@@ -1539,6 +1859,16 @@ impl State {
                         self.runtime.send(Command::NotificationFailed(n));
                     }
                 }
+                Event::Insights(id, result) if self.dashboard.is_some() && self.page == 6 => {
+                    let key = self
+                        .snapshot
+                        .devices
+                        .get(self.selected)
+                        .map(|d| d.reading.key.as_str());
+                    if self.insights.accept(id, key, result) {
+                        self.render_insights();
+                    }
+                }
                 Event::History(id, result) if id == self.request => {
                     match result {
                         Ok(series) => self.series = series,
@@ -1587,6 +1917,7 @@ impl State {
                 .map(|d| &d.reading.key);
             if previous_key.as_ref() != selected_key {
                 self.polling.abandon();
+                self.insights.select(selected_key.cloned());
                 polling_selection_changed = true;
             }
             if self.page == 1
@@ -2469,5 +2800,88 @@ mod tray_registration_tests {
         assert_eq!(shell.commands(), [NIM_ADD, NIM_ADD, NIM_MODIFY]);
         assert!(registration.registered);
         assert_eq!(tray_message_update(WM_NULL, 0), None);
+    }
+}
+
+#[cfg(test)]
+mod insights_tests {
+    use super::*;
+    #[test]
+    fn formatting_exposes_evidence_and_estimation_limits() {
+        let rate = RateInsight {
+            hz: 1000,
+            awake_seconds: 7200,
+            consumed_percent: 20,
+            sample_count: 15,
+            drop_count: 4,
+            confidence: InsightConfidence::Low,
+            projected_full_charge_hours: Some(10.0),
+            remaining_hours: None,
+        };
+        let text = rate_insight_text(&rate);
+        for expected in [
+            "1000 Hz",
+            "Low confidence",
+            "2.0 h awake",
+            "20 percentage points",
+            "15 samples",
+            "4 observed drops",
+            "Estimated full-charge use: 10.0 h",
+            "Remaining at last reading: Unavailable",
+        ] {
+            assert!(text.contains(expected), "Missing {expected}: {text}");
+        }
+        assert_eq!(
+            insight_estimate(Some(f64::NAN)),
+            "Not enough discharge evidence"
+        );
+        assert_eq!(
+            insight_estimate(Some(-1.0)),
+            "Not enough discharge evidence"
+        );
+        assert!(INSIGHTS_EMPTY.contains("manually Refresh"));
+        assert!(INSIGHTS_EMPTY.contains("Saved requested rates are never evidence"));
+    }
+    #[test]
+    fn charge_summary_distinguishes_partial_and_inferred_evidence() {
+        let mut cycle = ChargeCycle {
+            start_timestamp: 0,
+            end_timestamp: 3600,
+            awake_seconds: 1800,
+            start_percent: 70,
+            end_percent: 65,
+            consumed_percent: 5,
+            evidence: CycleEvidence::Partial,
+            current: true,
+        };
+        let text = charge_cycle_text(&cycle);
+        assert!(text.contains("Latest discharge summary"));
+        assert!(text.contains("Partial cycle"));
+        assert!(text.contains("70% to 65%"));
+        assert!(text.contains("0.5 h estimated awake time"));
+        assert_eq!(charge_cycle_row(&cycle), "01-01 00:00 · 0.5 h");
+        assert!(text.contains("Average observed drain: 10.0 percentage points/h"));
+        cycle.awake_seconds = 0;
+        assert!(
+            charge_cycle_text(&cycle).contains("Average observed drain: Not enough awake evidence")
+        );
+        cycle.evidence = CycleEvidence::InferredCharge;
+        assert!(charge_cycle_text(&cycle).contains("Inferred charge"));
+        cycle.evidence = CycleEvidence::ObservedCharge;
+        assert!(charge_cycle_text(&cycle).contains("does not imply a full charge"));
+    }
+    #[test]
+    fn closed_or_switched_selection_ignores_insight_replies() {
+        let mut ui = InsightsUi::default();
+        ui.select(Some("simulation".into()));
+        ui.pending = Some((1, "simulation".into()));
+        assert!(!ui.accept(2, Some("simulation"), Ok(BatteryInsights::default())));
+        assert!(!ui.accept(1, Some("other"), Ok(BatteryInsights::default())));
+        assert!(ui.accept(1, Some("simulation"), Ok(BatteryInsights::default())));
+        ui.pending = Some((2, "simulation".into()));
+        ui.abandon();
+        assert!(!ui.accept(2, Some("simulation"), Ok(BatteryInsights::default())));
+        ui.select(Some("other".into()));
+        assert!(ui.data.is_none());
     }
 }

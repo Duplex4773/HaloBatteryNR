@@ -1,5 +1,8 @@
 //! Bounded, batched history storage; configuration never shares upstream's folder.
-use hb_core::{Estimator, HistoryStore, ProviderError, Reading, Settings, Snapshot};
+use hb_core::{
+    BatteryInsights, Estimator, HistoryStore, InsightsBuilder, PollingRate, ProviderError, Reading,
+    Settings, Snapshot, UsageObservation,
+};
 use rusqlite::{Connection, params};
 use std::{
     collections::BTreeMap,
@@ -88,8 +91,9 @@ fn timestamp(unix: i64) -> String {
 }
 pub struct Store {
     db: Connection,
-    pending: Vec<Reading>,
-    last: BTreeMap<String, Reading>,
+    pending: Vec<UsageObservation>,
+    last: BTreeMap<String, UsageObservation>,
+    has_usage_metadata: bool,
 }
 impl Store {
     pub fn open(path: &Path) -> Result<Self, ProviderError> {
@@ -100,14 +104,17 @@ impl Store {
         db.busy_timeout(std::time::Duration::from_secs(2))
             .map_err(sql_error)?;
         db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-512;
+            BEGIN IMMEDIATE;
             CREATE TABLE IF NOT EXISTS readings(device TEXT NOT NULL, ts INTEGER NOT NULL, level INTEGER, payload TEXT NOT NULL, PRIMARY KEY(device,ts));
             CREATE INDEX IF NOT EXISTS readings_time ON readings(ts);
             CREATE TABLE IF NOT EXISTS state(key TEXT PRIMARY KEY, payload TEXT NOT NULL);
-            PRAGMA user_version=1;").map_err(sql_error)?;
+            CREATE TABLE IF NOT EXISTS usage_metadata(device TEXT NOT NULL, ts INTEGER NOT NULL, polling_rate INTEGER, session TEXT, PRIMARY KEY(device,ts));
+            PRAGMA user_version=2; COMMIT;").map_err(sql_error)?;
         Ok(Self {
             db,
             pending: Vec::with_capacity(64),
             last: BTreeMap::new(),
+            has_usage_metadata: true,
         })
     }
     pub fn read_only(path: &Path) -> Result<Self, ProviderError> {
@@ -115,16 +122,102 @@ impl Store {
             .map_err(sql_error)?;
         db.execute_batch("PRAGMA cache_size=-256;")
             .map_err(sql_error)?;
+        let has_usage_metadata = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='usage_metadata')",
+            [], |row| row.get(0),
+        ).map_err(sql_error)?;
         Ok(Self {
             db,
             pending: Vec::new(),
             last: BTreeMap::new(),
+            has_usage_metadata,
         })
     }
     pub fn prune(&mut self, now: i64) -> Result<(), ProviderError> {
-        self.db
-            .execute("DELETE FROM readings WHERE ts < ?1", [now - 30 * 86400])
+        // Flush first so pending old observations cannot reappear after pruning.
+        self.flush()?;
+        let cutoff = now.saturating_sub(30 * 86400);
+        let transaction = self.db.transaction().map_err(sql_error)?;
+        transaction
+            .execute("DELETE FROM readings WHERE ts < ?1", [cutoff])
             .map_err(sql_error)?;
+        transaction.execute("DELETE FROM usage_metadata WHERE ts < ?1 OR NOT EXISTS(SELECT 1 FROM readings r WHERE r.device=usage_metadata.device AND r.ts=usage_metadata.ts)", [cutoff]).map_err(sql_error)?;
+        transaction.commit().map_err(sql_error)?;
+        self.last
+            .retain(|_, observation| observation.reading.timestamp >= cutoff);
+        Ok(())
+    }
+    /// Retained raw observations, streamed independently of chart sampling.
+    /// As with history queries, flush pending observations before querying.
+    pub fn query_insights(&self, key: &str, until: i64) -> Result<BatteryInsights, ProviderError> {
+        let sql = if self.has_usage_metadata {
+            "SELECT r.ts,r.payload,m.polling_rate,m.session FROM readings r LEFT JOIN usage_metadata m ON m.device=r.device AND m.ts=r.ts WHERE r.device=?1 AND r.ts BETWEEN ?2 AND ?3 ORDER BY r.ts"
+        } else {
+            "SELECT ts,payload,NULL,NULL FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3 ORDER BY ts"
+        };
+        let mut query = self.db.prepare(sql).map_err(sql_error)?;
+        let mut rows = query
+            .query(params![key, until.saturating_sub(30 * 86400), until])
+            .map_err(sql_error)?;
+        let mut builder = InsightsBuilder::default();
+        while let Some(row) = rows.next().map_err(sql_error)? {
+            let timestamp: i64 = row.get(0).map_err(sql_error)?;
+            let payload: String = row.get(1).map_err(sql_error)?;
+            let Ok(reading) = serde_json::from_str::<Reading>(&payload) else {
+                builder.break_continuity();
+                continue;
+            };
+            if reading.key != key || reading.timestamp != timestamp {
+                builder.break_continuity();
+                continue;
+            }
+            let polling_rate = row
+                .get::<_, Option<u32>>(2)
+                .ok()
+                .flatten()
+                .and_then(|hz| PollingRate::try_from(hz).ok());
+            let session = row
+                .get::<_, Option<String>>(3)
+                .ok()
+                .flatten()
+                .and_then(|value| value.parse::<u64>().ok());
+            builder.push(UsageObservation {
+                reading,
+                polling_rate,
+                session,
+            });
+        }
+        Ok(builder.finish())
+    }
+    /// Preserve confirmed configuration evidence without applying it to hardware.
+    pub fn record_usage(&mut self, observation: &UsageObservation) -> Result<(), ProviderError> {
+        let reading = &observation.reading;
+        let changed = self.last.get(&reading.key).is_none_or(|previous| {
+            let r = &previous.reading;
+            previous.polling_rate != observation.polling_rate
+                || previous.session != observation.session
+                || r.level != reading.level
+                || r.charging != reading.charging
+                || r.charging_inferred != reading.charging_inferred
+                || r.connection != reading.connection
+                || r.precision != reading.precision
+                || r.approx != reading.approx
+                || r.name != reading.name
+                || r.kind != reading.kind
+                || r.source != reading.source
+                || r.via != reading.via
+                || r.serial != reading.serial
+                || r.container != reading.container
+                || reading.timestamp < r.timestamp
+                || reading.timestamp.saturating_sub(r.timestamp) >= 60
+        });
+        if changed {
+            self.last.insert(reading.key.clone(), observation.clone());
+            self.pending.push(observation.clone());
+        }
+        if self.pending.len() >= 4096 {
+            self.flush()?;
+        }
         Ok(())
     }
     /// Chart history with at most one retained, valid last-known predecessor.
@@ -307,30 +400,11 @@ impl Store {
 }
 impl HistoryStore for Store {
     fn record(&mut self, reading: &Reading) -> Result<(), ProviderError> {
-        let changed = self.last.get(&reading.key).is_none_or(|r| {
-            r.level != reading.level
-                || r.charging != reading.charging
-                || r.charging_inferred != reading.charging_inferred
-                || r.connection != reading.connection
-                || r.precision != reading.precision
-                || r.approx != reading.approx
-                || r.name != reading.name
-                || r.kind != reading.kind
-                || r.source != reading.source
-                || r.via != reading.via
-                || r.serial != reading.serial
-                || r.container != reading.container
-                || reading.timestamp < r.timestamp
-                || reading.timestamp - r.timestamp >= 60
-        });
-        if changed {
-            self.last.insert(reading.key.clone(), reading.clone());
-            self.pending.push(reading.clone());
-        }
-        if self.pending.len() >= 4096 {
-            self.flush()?;
-        }
-        Ok(())
+        self.record_usage(&UsageObservation {
+            reading: reading.clone(),
+            polling_rate: None,
+            session: None,
+        })
     }
     fn query(
         &self,
@@ -405,7 +479,8 @@ impl HistoryStore for Store {
             return Ok(());
         }
         let transaction = self.db.transaction().map_err(sql_error)?;
-        for r in &self.pending {
+        for observation in &self.pending {
+            let r = &observation.reading;
             transaction
                 .execute(
                     "INSERT OR REPLACE INTO readings(device,ts,level,payload) VALUES(?1,?2,?3,?4)",
@@ -417,6 +492,10 @@ impl HistoryStore for Store {
                     ],
                 )
                 .map_err(sql_error)?;
+            transaction.execute(
+                "INSERT OR REPLACE INTO usage_metadata(device,ts,polling_rate,session) VALUES(?1,?2,?3,?4)",
+                params![r.key, r.timestamp, observation.polling_rate.map(PollingRate::hz), observation.session.map(|session| session.to_string())],
+            ).map_err(sql_error)?;
         }
         transaction.commit().map_err(sql_error)?;
         self.pending.clear();
