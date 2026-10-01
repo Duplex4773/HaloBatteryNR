@@ -20,6 +20,11 @@ error even if readback matches; refresh before deciding whether to restore.
 | PRO X Superlight 2 / DEX, supported receiver | Advertised subset of 125–8000 | Exact HID++ unit and model; software control mode required |
 | PRO X Superlight 2 / DEX, direct USB | Advertised subset up to 1000 | Effective wired limit from cited hardware evidence |
 
+DeathAdder V4 Pro wireless configuration changes have **user-reported working**
+evidence from 1 October 2026: **1000 → 8000 → 125 → 2000 Hz**. This report does
+not establish wired behavior, 500/4000 Hz, effective USB frequency or anti-cheat
+compatibility. See [validation details](validation-next.md).
+
 Logitech onboard profile mode is preserved. Changing that mode or rewriting
 profiles could affect other settings, so the app refuses the rate change and
 explains that software control mode is required. No DPI, button assignment,

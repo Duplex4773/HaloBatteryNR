@@ -15,7 +15,8 @@ product; no such compatibility claim is made.
 
 | PID (VID 1532) | Protocol | Offered Hz | Evidence status |
 | --- | --- | --- | --- |
-| 00BE / 00BF, DeathAdder V4 Pro wired / receiver | extended | 125, 500, 1000, 2000, 4000, 8000 | reference supported; hardware unverified by Halo Battery |
+| 00BE, DeathAdder V4 Pro wired | extended | 125, 500, 1000, 2000, 4000, 8000 | reference supported; wired controls unverified locally |
+| 00BF, DeathAdder V4 Pro receiver | extended | 125, 500, 1000, 2000, 4000, 8000 | user-reported wireless changes: 1000 → 8000 → 125 → 2000 Hz, 2026-10-01; 500/4000 unreported |
 | 00B6 / 00B7, DeathAdder V3 Pro wired / stock receiver | legacy | 125, 500, 1000 | third-party physical test evidence; hardware unverified by Halo Battery |
 
 Every entry requires USB interface 0 and a 91-byte Windows feature collection.
@@ -76,7 +77,14 @@ synchronous feature IO itself cannot be interrupted by this protocol layer.
 Tests use fake HID sessions and clocks only: exact report fields/XOR, extended
 argument-1 decoding and single send, rate rejection, write order, partial BUSY,
 readback mismatch, collection allowlist, malformed packets, deadline, and
-cancellation. The synthetic tests do not open physical hardware. Current local read-only
-hardware results are recorded in `validation-next.md`; no polling SET has been
-attempted while the receiver reports a device timeout.
+cancellation. The synthetic tests do not open physical hardware. Earlier automated
+read-only hardware results are recorded in `validation-next.md`; those probes
+did not attempt a polling SET while the receiver reported a device timeout.
+
+On 1 October 2026, the user reported working wireless polling changes on a
+DeathAdder V4 Pro in this sequence: **1000 → 8000 → 125 → 2000 Hz**. This is
+user-reported hardware validation of configuration changes, without identifying
+device captures. It does not cover 500/4000 Hz, wired operation, reconnection or
+power-cycle persistence, independently measured USB frequency, or anti-cheat
+compatibility. The original upstream support labels remain unchanged.
 Readback confirms reported configuration, not physical USB report frequency.

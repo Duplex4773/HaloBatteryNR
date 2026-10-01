@@ -29,11 +29,22 @@ checks and 40 open/close cycles passed; warm USER/GDI handles stayed **44/102**.
 Private memory across complete warm cycles was 14.69 MiB at cycle 1 and 16.12 MiB
 at cycle 40, remaining below the 30 MiB target during dashboard interaction.
 
-The current physical DeathAdder receiver is discoverable, but its battery query
-returned a device timeout. No physical polling SET was attempted. Razer polling,
-Superlight2/DEX polling and effective USB frequency remain **unverified locally**;
-reference hardware captures and synthetic tests do not change those labels.
-No protected game or anti-cheat session was used to claim compatibility.
+During the earlier automated hardware probe, the DeathAdder receiver was
+discoverable, but its battery query returned a device timeout. That probe did not
+attempt a physical polling SET. Superlight2/DEX polling and independently measured
+USB frequency remain **unverified locally**; reference hardware captures and
+synthetic tests do not change those labels. No protected game or anti-cheat
+session was used by the automated checks to claim compatibility.
+
+### User-reported DeathAdder V4 Pro wireless validation
+
+On **1 October 2026**, the user reported that polling changes worked wirelessly
+in the sequence **1000 Hz → 8000 Hz → 125 Hz → 2000 Hz**. Record this as
+**user-reported working** for those wireless configuration transitions. No
+identifying device details or captures are retained. Wired operation, 500/4000
+Hz, persistence across reconnect/power cycle, effective USB reporting frequency
+and anti-cheat compatibility were not established by this report. Upstream
+verified/unverified support labels remain unchanged.
 
 ### Five-minute polling-control measurements
 
