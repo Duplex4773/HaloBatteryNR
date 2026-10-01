@@ -44,7 +44,60 @@ const CHECKS: &[(&str, &str)] = &[
         "Release checks (not available in this build)",
     ),
 ];
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TrayUpdate {
+    Changed,
+    Redraw,
+    ExplorerRecovery,
+}
+fn tray_message_update(message: u32, taskbar_created: u32) -> Option<TrayUpdate> {
+    if taskbar_created != 0 && message == taskbar_created {
+        Some(TrayUpdate::ExplorerRecovery)
+    } else if message == WM_SETTINGCHANGE {
+        Some(TrayUpdate::Redraw)
+    } else {
+        None
+    }
+}
+#[derive(Default)]
+struct TrayRegistration {
+    registered: bool,
+}
+impl TrayRegistration {
+    fn update_with(
+        &mut self,
+        data: &NOTIFYICONDATAW,
+        update: TrayUpdate,
+        changed: bool,
+        notify: &mut impl FnMut(NOTIFY_ICON_MESSAGE, &NOTIFYICONDATAW) -> bool,
+    ) {
+        if !self.registered {
+            self.registered = notify(NIM_ADD, data);
+        } else if (changed || update != TrayUpdate::Changed)
+            && !notify(NIM_MODIFY, data)
+            && update == TrayUpdate::ExplorerRecovery
+        {
+            // Explorer may still own the GUID. Add only after it reports the
+            // icon missing; deleting an existing icon loses its pinned placement.
+            self.registered = notify(NIM_ADD, data);
+        }
+    }
+    fn remove_with(
+        &mut self,
+        data: &NOTIFYICONDATAW,
+        notify: &mut impl FnMut(NOTIFY_ICON_MESSAGE, &NOTIFYICONDATAW) -> bool,
+    ) {
+        if self.registered {
+            let _ = notify(NIM_DELETE, data);
+            self.registered = false;
+        }
+    }
+}
+fn shell_notify(command: NOTIFY_ICON_MESSAGE, data: &NOTIFYICONDATAW) -> bool {
+    unsafe { Shell_NotifyIconW(command, data) }.as_bool()
+}
 struct Tray {
+    registration: TrayRegistration,
     data: NOTIFYICONDATAW,
     frames: Vec<Icon>,
     signature: String,
@@ -52,9 +105,7 @@ struct Tray {
 }
 impl Drop for Tray {
     fn drop(&mut self) {
-        unsafe {
-            let _ = Shell_NotifyIconW(NIM_DELETE, &self.data);
-        }
+        self.registration.remove_with(&self.data, &mut shell_notify);
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -435,7 +486,7 @@ pub fn run(
         )
         .ok();
         state.runtime.attach_window(state.monitor.0 as usize);
-        state.sync_trays(false);
+        state.sync_trays(TrayUpdate::Changed);
         if !background {
             state.open();
         }
@@ -494,8 +545,8 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             return DefWindowProcW(hwnd, msg, wp, lp);
         };
         let s = &mut *guard;
-        if msg == s.taskbar {
-            s.sync_trays(true);
+        if let Some(update) = tray_message_update(msg, s.taskbar) {
+            s.sync_trays(update);
             return LRESULT(0);
         }
         match msg {
@@ -625,11 +676,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                     SWP_NOZORDER | SWP_NOACTIVATE,
                 );
                 s.build();
-                s.sync_trays(true);
-                LRESULT(0)
-            }
-            WM_SETTINGCHANGE => {
-                s.sync_trays(true);
+                s.sync_trays(TrayUpdate::Redraw);
                 LRESULT(0)
             }
             WM_PAINT => {
@@ -1042,7 +1089,7 @@ impl State {
     }
     fn save(&mut self) {
         self.runtime.send(Command::Settings(self.settings.clone()));
-        self.sync_trays(true);
+        self.sync_trays(TrayUpdate::Redraw);
     }
     fn command(&mut self, id: u16, notification: u16) {
         match id {
@@ -1551,7 +1598,7 @@ impl State {
                     let _ = SetWindowTextW(*h, PCWSTR(text.as_ptr()));
                 }
             }
-            self.sync_trays(false);
+            self.sync_trays(TrayUpdate::Changed);
             if identity != next {
                 self.build()
             } else if let Some(h) = self.controls.get(&10) {
@@ -1577,7 +1624,7 @@ impl State {
             self.read_polling();
         }
     }
-    fn sync_trays(&mut self, force: bool) {
+    fn sync_trays(&mut self, update: TrayUpdate) {
         let dark = tray_dark(&self.settings);
         let settings = &self.settings;
         let devices = tray_devices(&self.snapshot, settings);
@@ -1599,7 +1646,7 @@ impl State {
             let tip = d.text.clone();
             let existing = self.trays.get_mut(&d.reading.key);
             if let Some(t) = existing {
-                let mut changed = force;
+                let mut changed = false;
                 if signature != t.signature
                     && let Ok(frames) = icons::frames(d, settings, dark, 32)
                 {
@@ -1611,16 +1658,9 @@ impl State {
                 let old = t.data.szTip;
                 copy(&mut t.data.szTip, &tip);
                 changed |= old != t.data.szTip;
-                if changed {
-                    t.data.hIcon = t.frames[0].0;
-                    unsafe {
-                        if force {
-                            let _ = Shell_NotifyIconW(NIM_DELETE, &t.data);
-                        }
-                        let _ =
-                            Shell_NotifyIconW(if force { NIM_ADD } else { NIM_MODIFY }, &t.data);
-                    }
-                }
+                t.data.hIcon = t.frames[t.frame].0;
+                t.registration
+                    .update_with(&t.data, update, changed, &mut shell_notify);
             } else if let Ok(frames) = icons::frames(d, settings, dark, 32) {
                 let mut data = NOTIFYICONDATAW {
                     cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
@@ -1633,12 +1673,12 @@ impl State {
                     ..Default::default()
                 };
                 copy(&mut data.szTip, &tip);
-                unsafe {
-                    let _ = Shell_NotifyIconW(NIM_ADD, &data);
-                }
+                let mut registration = TrayRegistration::default();
+                registration.update_with(&data, update, true, &mut shell_notify);
                 self.trays.insert(
                     d.reading.key.clone(),
                     Tray {
+                        registration,
                         data,
                         frames,
                         signature,
@@ -2304,5 +2344,130 @@ mod history_tests {
         assert_eq!(selection.index(), 2);
         selection.axis = HistoryAxis::Calendar;
         assert_eq!(selection.index(), 1);
+    }
+}
+
+#[cfg(test)]
+mod tray_registration_tests {
+    use super::*;
+    fn data() -> NOTIFYICONDATAW {
+        NOTIFYICONDATAW {
+            guidItem: GUID::from_u128(stable_guid("razer:receiver")),
+            uID: 7,
+            uFlags: NIF_GUID | NIF_ICON | NIF_MESSAGE | NIF_TIP,
+            ..Default::default()
+        }
+    }
+    #[derive(Default)]
+    struct Recorder {
+        calls: Vec<(NOTIFY_ICON_MESSAGE, GUID, u32)>,
+        fail_modify: bool,
+        fail_add: bool,
+    }
+    impl Recorder {
+        fn notify(&mut self, command: NOTIFY_ICON_MESSAGE, data: &NOTIFYICONDATAW) -> bool {
+            self.calls.push((command, data.guidItem, data.uID));
+            !(command == NIM_MODIFY && self.fail_modify || command == NIM_ADD && self.fail_add)
+        }
+        fn commands(&self) -> Vec<NOTIFY_ICON_MESSAGE> {
+            self.calls.iter().map(|c| c.0).collect()
+        }
+    }
+    #[test]
+    fn sleep_wake_settings_and_theme_modify_same_guid_without_recreating_icon() {
+        let mut registration = TrayRegistration::default();
+        let data = data();
+        let mut shell = Recorder::default();
+        registration.update_with(&data, TrayUpdate::Changed, true, &mut |m, d| {
+            shell.notify(m, d)
+        });
+        // Sleep and wake change icon/tooltip, but not the Shell registration.
+        for _ in 0..2 {
+            registration.update_with(&data, TrayUpdate::Changed, true, &mut |m, d| {
+                shell.notify(m, d)
+            });
+        }
+        let mode = tray_message_update(WM_SETTINGCHANGE, 0xC123).unwrap();
+        assert_eq!(mode, TrayUpdate::Redraw);
+        registration.update_with(&data, mode, false, &mut |m, d| shell.notify(m, d));
+        registration.update_with(&data, TrayUpdate::Redraw, false, &mut |m, d| {
+            shell.notify(m, d)
+        });
+        registration.update_with(&data, TrayUpdate::Changed, false, &mut |m, d| {
+            shell.notify(m, d)
+        });
+        assert_eq!(
+            shell.commands(),
+            [NIM_ADD, NIM_MODIFY, NIM_MODIFY, NIM_MODIFY, NIM_MODIFY]
+        );
+        assert!(
+            shell
+                .calls
+                .iter()
+                .all(|(_, guid, id)| *guid == data.guidItem && *id == 7)
+        );
+        registration.remove_with(&data, &mut |m, d| shell.notify(m, d));
+        registration.remove_with(&data, &mut |m, d| shell.notify(m, d));
+        assert_eq!(shell.commands().last(), Some(&NIM_DELETE));
+        assert_eq!(
+            shell
+                .commands()
+                .iter()
+                .filter(|c| **c == NIM_DELETE)
+                .count(),
+            1
+        );
+    }
+    #[test]
+    fn explorer_recovery_modifies_healthy_icon_and_adds_only_after_missing_icon() {
+        let mut registration = TrayRegistration::default();
+        let data = data();
+        let mut shell = Recorder::default();
+        registration.update_with(&data, TrayUpdate::Changed, true, &mut |m, d| {
+            shell.notify(m, d)
+        });
+        let mode = tray_message_update(0xC123, 0xC123).unwrap();
+        assert_eq!(mode, TrayUpdate::ExplorerRecovery);
+        registration.update_with(&data, mode, false, &mut |m, d| shell.notify(m, d));
+        assert_eq!(shell.commands(), [NIM_ADD, NIM_MODIFY]);
+        shell.fail_modify = true;
+        registration.update_with(&data, mode, false, &mut |m, d| shell.notify(m, d));
+        assert_eq!(shell.commands(), [NIM_ADD, NIM_MODIFY, NIM_MODIFY, NIM_ADD]);
+        assert!(registration.registered);
+        assert!(!shell.commands().contains(&NIM_DELETE));
+        assert!(
+            shell
+                .calls
+                .iter()
+                .all(|(_, guid, _)| *guid == data.guidItem)
+        );
+    }
+    #[test]
+    fn ordinary_modify_failure_preserves_registration_and_failed_add_can_retry() {
+        let mut registration = TrayRegistration::default();
+        let data = data();
+        let mut shell = Recorder {
+            fail_add: true,
+            ..Default::default()
+        };
+        registration.update_with(&data, TrayUpdate::Changed, true, &mut |m, d| {
+            shell.notify(m, d)
+        });
+        assert!(!registration.registered);
+        shell.fail_add = false;
+        registration.update_with(&data, TrayUpdate::Changed, false, &mut |m, d| {
+            shell.notify(m, d)
+        });
+        assert!(registration.registered);
+        shell.fail_modify = true;
+        registration.update_with(&data, TrayUpdate::Redraw, false, &mut |m, d| {
+            shell.notify(m, d)
+        });
+        registration.update_with(&data, TrayUpdate::Changed, false, &mut |m, d| {
+            shell.notify(m, d)
+        });
+        assert_eq!(shell.commands(), [NIM_ADD, NIM_ADD, NIM_MODIFY]);
+        assert!(registration.registered);
+        assert_eq!(tray_message_update(WM_NULL, 0), None);
     }
 }

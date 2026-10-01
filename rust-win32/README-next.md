@@ -37,6 +37,12 @@ Providers return either successful discovery (possibly empty) or an explicit com
 
 History retains 30 days, batches writes once per minute and flushes on normal exit. Changed readings are queued immediately; unchanged readings are accepted at most once per minute. Usage estimates need at least 30 minutes of awake discharge and a three-point percentage drop. Coarse readings do not produce estimates.
 
+Tray icons are updated in place across sleep, wake and theme changes. A known
+Razer mouse remains represented while its receiver collection is present; its
+cached battery level expires after five minutes without removing the icon.
+This preserves the registered identity behind the user's notification-area
+placement. Unplugging the receiver or hiding the device still removes its icon.
+
 The History page defaults to **Time used**, with 2/8/24-hour use ranges. Estimated
 awake time pauses across sleeping, unavailable and charging observations; it does
 not track cursor activity. **Calendar time** retains 24-hour/7-day/30-day views

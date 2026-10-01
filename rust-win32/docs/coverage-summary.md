@@ -4,8 +4,8 @@ The pinned reference contains **459 upstream test IDs**. This inventory distingu
 
 | Status | IDs | Meaning |
 | --- | ---: | --- |
-| mapped | 367 | Automated regression asserts the original behavior or its native equivalent. |
-| intentional_difference | 35 | Tested policy deliberately replaces the original behavior; rationale is recorded per ID. |
+| mapped | 366 | Automated regression asserts the original behavior or its native equivalent. |
+| intentional_difference | 36 | Tested policy deliberately replaces the original behavior; rationale is recorded per ID. |
 | obsolete | 57 | Python implementation retired; no claim of automated native equivalence. |
 | partial | 0 | Some parser/helper evidence exists; original behavior is not fully established. |
 | manual | 0 | Manual evidence only; automated regression remains outstanding. |

@@ -4,7 +4,37 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
-## History checkpoint, 1 October 2026
+## Tray-preservation checkpoint, 1 October 2026
+
+Formatting, strict workspace Clippy, the optimized release build and **347 Rust
+tests** pass locally. The executable is **2,644,480 bytes (2.52 MiB)**, SHA256
+`0CF3988FFB3A3F365B7AC6553EE00B2C52B7ED5DA52A1E1A2CF4C52FA7917290`.
+Production API/import restrictions and source/release privacy scans pass.
+
+Native UI validation passed keyboard navigation, history view/range selection,
+settings, device controls and simulated polling controls. Forty warm dashboard
+open/close cycles kept USER/GDI handles at **44/102**; private memory was
+**16.32 MiB** at cycle 1 and **17.75 MiB** at cycle 40. Monitoring continued after
+dashboard closure, and graceful quit returned zero. These checks used invented
+devices and history, without changing physical device configuration.
+
+Recorded Shell-call regressions verify that sleep, wake, theme/settings redraws
+and healthy Explorer-recovery notifications retain the same GUID using modify
+calls; only a failed recovery modification attempts an add. Hiding/removal and
+shutdown still unregister the icon. Razer fake-HID regressions verify wake,
+short sleep, sleep beyond five minutes, unknown percentage after expiry, wake
+recovery and receiver removal without identity changes. Exclusive-open errors
+remain explicit, and backoff never invents an unobserved device.
+
+The original 459-ID coverage audit remains complete: **366 mapped**, **36 tested
+intentional differences**, and **57 retired Python implementation details**.
+The added difference records keeping known Razer presence after the percentage
+cache expires, replacing upstream's empty result. Existing cache-freshness limits
+and headset behavior remain unchanged. Recorder tests establish the app's Shell
+operations; the user's promoted placement through a physical sleep/wake cycle
+still requires manual confirmation and is not claimed by those tests.
+
+## Earlier history checkpoint, 1 October 2026
 
 Formatting, strict workspace Clippy, the optimized release build and **342 Rust
 tests** pass locally. The optional synthetic timing test also passes when run

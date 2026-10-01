@@ -8206,12 +8206,12 @@
   },
   {
     "upstream_test": "test_razer_foreign.ForeignRepliesTest.test_last_level_stays_greyed_while_another_app_holds_the_mouse",
-    "status": "mapped",
+    "status": "intentional_difference",
     "rust_test": "crates/providers/tests/provider_logitech_io.rs::razer_normal_request_repeated_reply_and_busy_cache_expiry",
     "rust_tests": [
       "crates/providers/tests/provider_logitech_io.rs::razer_normal_request_repeated_reply_and_busy_cache_expiry"
     ],
-    "notes": "Strict complete feature-report exchange verifies actual polling behavior, response matching and exact request count/channel. Scenario razer normal request repeated reply and busy cache expiry.",
+    "notes": "The five-minute cached battery percentage still expires. Unlike upstream's empty result after expiry, the port keeps the known mouse identity Sleeping with an unknown level while its allowlisted receiver collection remains present, preserving the existing tray registration and user placement. Strict scripted reports assert cached then expired level/state; additional long-sleep and unplug regressions preserve identity without inventing new devices.",
     "additional_evidence": [
       {
         "source": "coverage_mapping_providers.json",

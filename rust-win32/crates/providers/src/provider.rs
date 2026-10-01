@@ -1475,15 +1475,23 @@ impl HidProvider {
         {
             return None;
         }
-        if self.id != "jbl"
+        let expired = self.id != "jbl"
             && self
                 .last_observed
                 .get(key)
-                .is_none_or(|at| now.saturating_sub(*at) >= Duration::from_secs(300))
-        {
+                .is_none_or(|at| now.saturating_sub(*at) >= Duration::from_secs(300));
+        if expired && !(self.id == "razer" && r.kind == "mouse") {
             return None;
         }
         let mut r = r.clone();
+        if expired {
+            // Presence is separate from battery freshness. Keep the established
+            // mouse identity, but never display its expired percentage.
+            r.level = None;
+            r.charging = None;
+            r.charging_inferred = false;
+            r.approx = None;
+        }
         r.connection = Connection::Sleeping;
         if self.id == "nintendo" {
             r.charging = Some(false);
@@ -2218,6 +2226,23 @@ impl BatteryProvider for HidProvider {
             });
         }
         if self.id == "razer" {
+            // Failed/bounded-suppressed exchanges may not reach Ok(None). Only
+            // enumerated allowlisted collections can retain a known mouse.
+            for info in &infos {
+                if let Some(device) = DEVICES.iter().find(|d| {
+                    d.provider == "razer" && d.vid == info.vendor_id && d.pid == info.product_id
+                }) && candidate_group("razer", device, info, &infos)
+                {
+                    let key = format!("razer:{:04x}:{}", device.pid, trusted_identity(info));
+                    if (errors.is_empty() || !output.is_empty())
+                        && !output.iter().any(|r| r.key == key)
+                        && self.last.get(&key).is_some_and(|r| r.kind == "mouse")
+                        && let Some(reading) = self.cached(&key, c.clock.monotonic())
+                    {
+                        output.push(reading);
+                    }
+                }
+            }
             let live: Vec<_> = output.iter().filter(|r| r.online()).cloned().collect();
             output.retain(|r| {
                 r.online()

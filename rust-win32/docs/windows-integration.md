@@ -24,4 +24,20 @@ Windows provides no dependable WGI-to-XInput slot identity in these APIs. The po
 
 Startup registration, application identity, and the single-instance mutex use the distinct HaloBatteryNext identity. Windows theme and fullscreen gaming checks are native. MyDockFinder process detection uses an owned Toolhelp snapshot and a ten-second cache. It recognizes the original executable names and names containing `mydock`.
 
+Device tray GUIDs remain stable through sleep and wake. Battery, theme, DPI and
+settings changes modify the existing notification icon instead of deleting and
+adding it again. Explorer recovery first attempts a modification and adds the
+same GUID only after that fails; hiding/removing a device and shutdown still
+unregister its icon. This follows the separate add/modify/delete operations in
+[Microsoft's Shell_NotifyIcon documentation](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shell_notifyiconw).
+Windows retains control of main-area versus overflow placement; the app does
+not override user preferences or modify Explorer's registry settings.
+
+Known Razer mouse identity remains present while its exact allowlisted HID
+collection is enumerated, including beyond the five-minute cached-percentage
+timeout. At expiry its percentage and charging state become unknown, preserving
+original freshness and its registered tray icon. An unplugged receiver is still
+removed through normal engine miss handling. Explicit communication failures
+remain provider errors, while error-free backoff preserves known presence.
+
 `cargo check -p hb-windows` and `cargo test -p hb-windows` pass. Tests cover MAC/service grouping boundaries, Bluetooth classification, coarse/unknown/wired battery interpretation, invalid battery DWORD values, arrival retry deadlines, and cached polling with a fake Clock and HidTransport. No connected hardware or HID writes are required by these tests. Actual battery properties, device connection events, exclusive-device behavior, and multi-controller identity still require Windows hardware smoke tests. Full MyDockFinder wallpaper/window luminance matching is handled separately by the UI and is not established by process presence alone.

@@ -455,7 +455,10 @@ fn razer_normal_request_repeated_reply_and_busy_cache_expiry() {
     let rows = poll(&mut p, &hid, &clock);
     assert_eq!((rows[0].level, rows[0].online()), (Some(71), false));
     clock.0.store(300_000, Ordering::Relaxed);
-    assert!(poll(&mut p, &hid, &clock).is_empty());
+    let expired = poll(&mut p, &hid, &clock);
+    assert_eq!(expired.len(), 1);
+    assert_eq!(expired[0].level, None);
+    assert_eq!(expired[0].connection, Connection::Sleeping);
     hid.done();
     let mut steps = vec![Step::Send(razer_request(0x1f, 0x80))];
     for _ in 0..4 {
@@ -720,4 +723,93 @@ fn razer_second_receiver_and_unrelated_model_never_hidden_by_live_cable() {
         assert_eq!(rows.iter().filter(|r| r.online()).count(), 1);
         hid.done();
     }
+}
+
+#[test]
+fn razer_long_sleep_retains_identity_without_expired_level_and_unplug_removes_it() {
+    let mut d = info(0x1532, 0x00b9, 1);
+    d.serial = "mixed-Mouse-Serial".into();
+    let mut steps = razer_success(0x1f, 181, 0);
+    steps.extend(razer_busy(0x1f));
+    steps.extend(razer_busy(0x1f));
+    steps.extend(razer_success(0x1f, 128, 0));
+    let mut hid = FakeHid::new(vec![d], steps);
+    let clock = FakeClock::default();
+    let mut provider = HidProvider::new("razer");
+    let awake = poll(&mut provider, &hid, &clock).remove(0);
+    assert_eq!(awake.level, Some(71));
+    clock.0.store(299000, Ordering::Relaxed);
+    let sleeping = poll(&mut provider, &hid, &clock).remove(0);
+    assert_eq!(sleeping.level, Some(71));
+    assert_eq!(sleeping.connection, Connection::Sleeping);
+    clock.0.store(301000, Ordering::Relaxed);
+    let expired = poll(&mut provider, &hid, &clock).remove(0);
+    assert_eq!((expired.level, expired.charging), (None, None));
+    assert_eq!(expired.timestamp, awake.timestamp);
+    assert_eq!(expired.key, awake.key);
+    assert_eq!(expired.serial, awake.serial);
+    assert_eq!(expired.connection, Connection::Sleeping);
+    clock.0.store(302000, Ordering::Relaxed);
+    let recovered = poll(&mut provider, &hid, &clock).remove(0);
+    assert_eq!(recovered.level, Some(50));
+    assert_eq!(recovered.key, awake.key);
+    assert_eq!(recovered.serial, awake.serial);
+    assert!(recovered.online());
+    hid.infos.clear();
+    let mut engine = Engine::new(Settings::default(), Estimator::default());
+    engine.apply("razer", Ok(vec![recovered]), 0.0, false);
+    for n in 1..=3 {
+        let absent = poll(&mut provider, &hid, &clock);
+        assert!(absent.is_empty());
+        engine.apply("razer", Ok(absent), n as f64, false);
+    }
+    assert!(engine.readings().is_empty());
+    hid.done();
+}
+
+#[test]
+fn razer_exclusive_open_error_remains_explicit_then_backoff_preserves_known_identity() {
+    let mut d = info(0x1532, 0x00b9, 1);
+    d.serial = "known-mouse".into();
+    let path = d.path.clone();
+    let mut hid = FakeHid::new(vec![d], razer_success(0x1f, 181, 0));
+    let clock = FakeClock::default();
+    let mut provider = HidProvider::new("razer");
+    let awake = poll(&mut provider, &hid, &clock).remove(0);
+    let key = awake.key.clone();
+    let mut engine = Engine::new(Settings::default(), Estimator::default());
+    engine.apply("razer", Ok(vec![awake]), 0.0, false);
+    hid.open_errors.insert(path, "exclusive access conflict");
+    let error = provider
+        .poll(&hid, &context(&clock, &AtomicBool::new(false)))
+        .unwrap_err();
+    assert!(error.message.contains("exclusive access conflict"));
+    engine.apply("razer", Err(error), 1.0, false);
+    let stale = engine.readings();
+    assert_eq!(stale.len(), 1);
+    assert_eq!(stale[0].key, key);
+    assert_eq!(stale[0].connection, Connection::Stale);
+    let opened = hid.opened.lock().unwrap().len();
+    clock.0.store(100000, Ordering::Relaxed);
+    let backoff = poll(&mut provider, &hid, &clock);
+    assert_eq!(backoff.len(), 1);
+    assert_eq!(backoff[0].key, key);
+    assert_eq!(backoff[0].connection, Connection::Sleeping);
+    assert_eq!(hid.opened.lock().unwrap().len(), opened);
+    hid.infos.clear();
+    assert!(poll(&mut provider, &hid, &clock).is_empty());
+    hid.done();
+    let unknown = FakeHid::new(vec![info(0x1532, 0x00b9, 1)], vec![]);
+    let mut unknown = unknown;
+    unknown
+        .open_errors
+        .insert(unknown.infos[0].path.clone(), "exclusive access conflict");
+    let mut fresh = HidProvider::new("razer");
+    assert!(
+        fresh
+            .poll(&unknown, &context(&clock, &AtomicBool::new(false)))
+            .is_err()
+    );
+    assert!(poll(&mut fresh, &unknown, &clock).is_empty());
+    unknown.done();
 }
