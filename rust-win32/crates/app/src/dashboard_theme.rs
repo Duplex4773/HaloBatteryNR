@@ -215,7 +215,8 @@ impl DashboardTheme {
                 return None;
             }
             let saved = SaveDC(item.hDC);
-            let selected = item.itemState.0 & ODS_SELECTED.0 != 0;
+            let selected = item.itemState.0 & ODS_SELECTED.0 != 0
+                && item.itemState.0 & ODS_COMBOBOXEDIT.0 == 0;
             let bg = if selected {
                 self.palette.selection
             } else {
@@ -296,7 +297,8 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
         let palette = *(data as *const Palette);
         if matches!(msg, WM_PAINT | WM_PRINTCLIENT | WM_PRINT) && palette.dark {
             let printing = matches!(msg, WM_PRINTCLIENT | WM_PRINT);
-            let combo = class_name(hwnd) == "ComboBox";
+            let class = class_name(hwnd);
+            let combo = class == "ComboBox";
             if combo {
                 let _ = DefSubclassProc(hwnd, msg, wp, lp);
             }
@@ -424,6 +426,10 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
                     | WM_UPDATEUISTATE
                     | WM_SETFOCUS
                     | WM_KILLFOCUS
+                    | CB_SETCURSEL
+                    | CB_RESETCONTENT
+                    | CB_ADDSTRING
+                    | CB_DELETESTRING
             )
         {
             let _ = InvalidateRect(Some(hwnd), None, true);
@@ -435,6 +441,97 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn selected_combo_text_and_static_colors_use_the_dashboard_palette() {
+        let _guard = crate::ui::NATIVE_TEST_LOCK.lock().unwrap();
+        unsafe {
+            let combo = CreateWindowExW(
+                WINDOW_EX_STYLE::default(),
+                w!("COMBOBOX"),
+                w!(""),
+                WS_POPUP
+                    | WINDOW_STYLE((CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS) as u32),
+                0,
+                0,
+                240,
+                200,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            SendMessageW(
+                combo,
+                CB_ADDSTRING,
+                None,
+                Some(LPARAM(w!("Test device").as_ptr() as isize)),
+            );
+            SendMessageW(combo, CB_SETCURSEL, Some(WPARAM(0)), None);
+            let label = CreateWindowExW(
+                WINDOW_EX_STYLE::default(),
+                w!("STATIC"),
+                w!("Ready"),
+                WS_POPUP,
+                0,
+                0,
+                240,
+                40,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let screen = GetDC(None);
+            let dc = CreateCompatibleDC(Some(screen));
+            let bitmap = CreateCompatibleBitmap(screen, 240, 40);
+            let previous = SelectObject(dc, bitmap.into());
+            for (dark, hc) in [(false, false), (true, false), (true, true)] {
+                let theme = DashboardTheme::new(dark, hc);
+                let rect = RECT {
+                    left: 0,
+                    top: 0,
+                    right: 240,
+                    bottom: 40,
+                };
+                for (state, expected) in [
+                    (
+                        ODS_FLAGS(ODS_SELECTED.0 | ODS_COMBOBOXEDIT.0),
+                        theme.palette.surface,
+                    ),
+                    (ODS_SELECTED, theme.palette.selection),
+                ] {
+                    let item = DRAWITEMSTRUCT {
+                        CtlType: ODT_COMBOBOX,
+                        itemID: 0,
+                        itemState: state,
+                        hwndItem: combo,
+                        hDC: dc,
+                        rcItem: rect,
+                        ..Default::default()
+                    };
+                    assert_eq!(
+                        theme.draw_item(LPARAM(&item as *const _ as isize)),
+                        Some(LRESULT(1))
+                    );
+                    assert_eq!(GetPixel(dc, 235, 35), expected);
+                    assert!((0..40).any(|y| (6..150).any(|x| GetPixel(dc, x, y) != expected)));
+                }
+                let brush = theme.control_colors(WM_CTLCOLORSTATIC, dc, label).unwrap();
+                assert_eq!(GetTextColor(dc), theme.palette.text);
+                assert_eq!(GetBkColor(dc), theme.palette.background);
+                FillRect(dc, &rect, HBRUSH(brush.0 as *mut _));
+                assert_eq!(GetPixel(dc, 235, 35), theme.palette.background);
+            }
+            SelectObject(dc, previous);
+            let _ = DeleteObject(bitmap.into());
+            let _ = DeleteDC(dc);
+            ReleaseDC(None, screen);
+            DestroyWindow(label).unwrap();
+            DestroyWindow(combo).unwrap();
+        }
+    }
     #[test]
     fn dark_combo_print_keeps_arrow_surface_dark() {
         let _guard = crate::ui::NATIVE_TEST_LOCK.lock().unwrap();

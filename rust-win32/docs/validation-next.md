@@ -4,6 +4,40 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
+## Dashboard control painting checkpoint, 1 October 2026
+
+Native owner-draw and control-color callbacks could reenter while the dashboard
+held its mutable state during creation, updates or painting. Their fallback to
+default Windows painting left the device selector blank/white and status labels
+with light backgrounds in dark mode. An independent, shared immutable theme now
+services these callbacks before borrowing application state. Its owned brushes
+remain alive through synchronous callbacks and are released when the dashboard
+closes. Closed combo fields use the normal surface/text palette; selected popup
+rows retain their highlight. Page rebuilds and polling-control updates pause
+redraw until the completed controls can repaint, preventing intermediate white
+surfaces during tab changes. Initially hidden dashboards remain hidden.
+
+Formatting, strict workspace Clippy, the optimized release build and **405 Rust
+tests** pass, with one existing optional timing test ignored. The complete
+459-ID upstream coverage audit is unchanged. Native regressions print real
+selected combo, static and edit controls while the parent State is borrowed and
+assert both their background pixels and visible text in light/dark modes.
+Reentrant background erasure also matches the palette. Separate owner-draw tests
+cover selected fields, highlighted popup rows and high-contrast colors. All four
+dashboard pages were rendered without changing system appearance preferences;
+visual inspection confirms the device field and status strip correction.
+
+The release passes keyboard, history, settings and simulated polling checks.
+Forty titlebar-close/reopen cycles, normal/quiet duplicate launches and graceful
+exit pass. Dashboard samples retain **45 USER / 107 GDI** at cycles 1, 20 and 40.
+Forty Insights cycles retain **20 GDI**, with USER counts **16, 17, 17** and private
+memory **5.96 MiB** at those samples. Existing unsaved settings survive theme
+changes. Source/import API restrictions and source/executable privacy checks
+pass. No physical polling changes were requested during this UI validation.
+
+The portable executable is **2,720,256 bytes (2.59 MiB)**, SHA256
+`F720422C06B7DFB09AA85ED780C286488C7E55225C4E3B07D22C8A3787F3E39C`.
+
 ## Polling expansion checkpoint, 1 October 2026
 
 The optional control allowlist adds Viper V3 Pro and Viper Mini Signature Edition

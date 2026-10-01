@@ -10,6 +10,7 @@ use std::{
     cell::{Cell, RefCell},
     collections::BTreeMap,
     path::PathBuf,
+    rc::Rc,
 };
 use windows::{
     Win32::{
@@ -476,6 +477,9 @@ fn charge_cycle_text(cycle: &ChargeCycle) -> String {
 struct UiContext {
     state: RefCell<State>,
     monitor: Cell<HWND>,
+    // Native child painting can reenter while State is being updated. Keep an
+    // immutable, owned theme available without borrowing application state.
+    paint: RefCell<Option<(HWND, Rc<DashboardTheme>)>>,
 }
 struct State {
     context: *const UiContext,
@@ -491,7 +495,7 @@ struct State {
     page: u16,
     selected: usize,
     chart: Option<Chart>,
-    theme: Option<DashboardTheme>,
+    theme: Option<Rc<DashboardTheme>>,
     series: HistorySeries,
     history: HistorySelection,
     request: u64,
@@ -583,6 +587,7 @@ pub fn run(
                 polling_intents: BTreeMap::new(),
             }),
             monitor: Cell::new(HWND::default()),
+            paint: RefCell::new(None),
         });
         let ptr = &*context as *const UiContext;
         let mut state = context.state.borrow_mut();
@@ -669,6 +674,9 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
         if ptr.is_null() {
             return DefWindowProcW(hwnd, msg, wp, lp);
         }
+        if let Some(result) = dashboard_paint_message(&*ptr, hwnd, msg, wp, lp) {
+            return result;
+        }
         if msg == WM_NCDESTROY {
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
             // Destruction is synchronous, including inside native modal loops.
@@ -709,26 +717,6 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             }
             s.sync_trays(update);
             return LRESULT(0);
-        }
-        if Some(hwnd) == s.dashboard
-            && let Some(theme) = &s.theme
-        {
-            if let Some(result) =
-                theme.control_colors(msg, HDC(wp.0 as *mut _), HWND(lp.0 as *mut _))
-            {
-                return result;
-            }
-            if msg == WM_DRAWITEM
-                && let Some(result) = theme.draw_item(lp)
-            {
-                return result;
-            }
-            if msg == WM_ERASEBKGND {
-                let mut rect = RECT::default();
-                let _ = GetClientRect(hwnd, &mut rect);
-                FillRect(HDC(wp.0 as *mut _), &rect, theme.background_brush());
-                return LRESULT(1);
-            }
         }
         match msg {
             WM_THEMECHANGED | WM_SYSCOLORCHANGE => {
@@ -881,16 +869,6 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 s.sync_trays(TrayUpdate::Redraw);
                 LRESULT(0)
             }
-            WM_PRINTCLIENT => {
-                if Some(hwnd) == s.dashboard
-                    && let Some(theme) = &s.theme
-                {
-                    let mut rect = RECT::default();
-                    let _ = GetClientRect(hwnd, &mut rect);
-                    FillRect(HDC(wp.0 as *mut _), &rect, theme.background_brush());
-                }
-                LRESULT(0)
-            }
             WM_PAINT => {
                 let mut ps = PAINTSTRUCT::default();
                 let hdc = BeginPaint(hwnd, &mut ps);
@@ -945,6 +923,80 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
         LRESULT(0)
     })
 }
+unsafe fn dashboard_paint_message(
+    context: &UiContext,
+    hwnd: HWND,
+    msg: u32,
+    wp: WPARAM,
+    lp: LPARAM,
+) -> Option<LRESULT> {
+    if !matches!(
+        msg,
+        WM_DRAWITEM
+            | WM_CTLCOLOREDIT
+            | WM_CTLCOLORLISTBOX
+            | WM_CTLCOLORSTATIC
+            | WM_CTLCOLORBTN
+            | WM_ERASEBKGND
+            | WM_PRINTCLIENT
+    ) {
+        return None;
+    }
+    // Drop the RefCell borrow before calling Windows; owner drawing can itself
+    // send synchronous native messages. Rc retains the brushes through a call.
+    let (owner, theme) = context.paint.borrow().as_ref()?.clone();
+    if hwnd != owner {
+        return None;
+    }
+    if let Some(result) = theme.control_colors(msg, HDC(wp.0 as *mut _), HWND(lp.0 as *mut _)) {
+        return Some(result);
+    }
+    if msg == WM_DRAWITEM {
+        return theme.draw_item(lp);
+    }
+    if matches!(msg, WM_ERASEBKGND | WM_PRINTCLIENT) {
+        unsafe {
+            let mut rect = RECT::default();
+            let _ = GetClientRect(hwnd, &mut rect);
+            FillRect(HDC(wp.0 as *mut _), &rect, theme.background_brush());
+        }
+        return Some(LRESULT(i32::from(msg == WM_ERASEBKGND) as isize));
+    }
+    None
+}
+
+/// Hide intermediate child teardown/creation from the display. An initially
+/// hidden dashboard must remain hidden until open() explicitly shows it.
+struct DashboardRedraw {
+    hwnd: HWND,
+    paused: bool,
+}
+impl DashboardRedraw {
+    fn new(hwnd: HWND) -> Self {
+        let paused = unsafe { IsWindowVisible(hwnd).as_bool() };
+        if paused {
+            unsafe {
+                send(hwnd, WM_SETREDRAW, WPARAM(0), LPARAM(0));
+            }
+        }
+        Self { hwnd, paused }
+    }
+}
+impl Drop for DashboardRedraw {
+    fn drop(&mut self) {
+        unsafe {
+            if self.paused {
+                send(self.hwnd, WM_SETREDRAW, WPARAM(1), LPARAM(0));
+            }
+            let _ = RedrawWindow(
+                Some(self.hwnd),
+                None,
+                None,
+                RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN,
+            );
+        }
+    }
+}
 impl State {
     fn refresh_theme(&mut self) {
         self.apply_theme(DashboardTheme::new(
@@ -956,18 +1008,15 @@ impl State {
         let Some(hwnd) = self.dashboard else {
             return;
         };
+        let _redraw = DashboardRedraw::new(hwnd);
+        let theme = Rc::new(theme);
+        unsafe {
+            (*self.context).paint.replace(Some((hwnd, theme.clone())));
+        }
+        self.theme = Some(theme.clone());
         theme.apply_window(hwnd);
         for control in self.controls.values() {
             theme.apply_control(*control);
-        }
-        self.theme = Some(theme);
-        unsafe {
-            let _ = RedrawWindow(
-                Some(hwnd),
-                None,
-                None,
-                RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN,
-            );
         }
     }
     fn owns_dashboard(&self, hwnd: HWND) -> bool {
@@ -983,6 +1032,9 @@ impl State {
         self.dashboard = None;
         self.chart = None;
         self.theme = None;
+        unsafe {
+            (*self.context).paint.take();
+        }
         self.polling.abandon();
         self.insights.abandon();
         self.controls.clear();
@@ -1166,9 +1218,10 @@ impl State {
         }
     }
     fn build(&mut self) {
-        if self.dashboard.is_none() {
+        let Some(hwnd) = self.dashboard else {
             return;
-        }
+        };
+        let _redraw = DashboardRedraw::new(hwnd);
         self.chart = None;
         let controls = std::mem::take(&mut self.controls);
         unsafe {
@@ -1386,9 +1439,6 @@ impl State {
             }
             6 => self.build_insights(&names),
             _ => {}
-        }
-        unsafe {
-            let _ = InvalidateRect(self.dashboard, None, true);
         }
     }
     fn set_control_text(&self, id: u16, text: &str) {
@@ -1793,6 +1843,7 @@ impl State {
         if self.dashboard.is_none() || self.page != 1 {
             return;
         }
+        let _redraw = DashboardRedraw::new(self.dashboard.unwrap());
         // Update only this group: an asynchronous hardware reply must not discard unsaved device edits.
         for id in (40..=47).chain([98, 99]) {
             if let Some(h) = self.controls.remove(&id) {
@@ -3135,6 +3186,7 @@ mod dashboard_lifecycle_tests {
                     polling_intents: BTreeMap::new(),
                 }),
                 monitor: Cell::new(HWND::default()),
+                paint: RefCell::new(None),
             });
             let ptr = &*context as *const UiContext;
             {
@@ -3168,6 +3220,7 @@ mod dashboard_lifecycle_tests {
             assert!(context.state.borrow().dashboard.is_none());
             assert!(context.state.borrow().controls.is_empty());
             assert!(context.state.borrow().theme.is_none());
+            assert!(context.paint.borrow().is_none());
             assert!(context.state.borrow().font.is_invalid());
             send(monitor, WM_APP + 8, WPARAM(0), LPARAM(0));
             let first = context.state.borrow().dashboard.unwrap();
@@ -3196,6 +3249,20 @@ mod dashboard_lifecycle_tests {
                 send(monitor, WM_COMMAND, WPARAM(500), LPARAM(0));
                 assert_eq!(context.state.borrow().dashboard, Some(reopened));
             }
+            {
+                let mut state = context.state.borrow_mut();
+                let mut reading = Reading::new("synthetic-mouse", "Test mouse", "razer", 0);
+                reading.level = Some(50);
+                state.snapshot.devices = vec![DeviceView {
+                    reading,
+                    name: "Test mouse".into(),
+                    icon: "mouse".into(),
+                    low_alert_at: 20,
+                    seconds_left: None,
+                    text: "Test mouse: 50%".into(),
+                    hidden: false,
+                }];
+            }
             // Exercise each page against actual native brushes/controls without
             // changing the user's Windows appearance or stored settings.
             for dark in [false, true] {
@@ -3207,6 +3274,65 @@ mod dashboard_lifecycle_tests {
                         state.apply_theme(DashboardTheme::new(dark, false));
                         expected = state.theme.as_ref().unwrap().palette.background;
                         state.build();
+                        if page == 1 {
+                            // A combo's selected-item callback and a static's
+                            // color callback reenter the parent while State is
+                            // held, exactly as during a page rebuild. Print the
+                            // real controls, not a direct call to the helper.
+                            let palette = state.theme.as_ref().unwrap().palette;
+                            for (id, background) in [
+                                (10, palette.surface),
+                                (91, palette.background),
+                                (11, palette.surface),
+                            ] {
+                                let child = state.controls[&id];
+                                let source = GetDC(Some(child));
+                                let dc = CreateCompatibleDC(Some(source));
+                                let mut rect = RECT::default();
+                                GetClientRect(child, &mut rect).unwrap();
+                                let bitmap =
+                                    CreateCompatibleBitmap(source, rect.right, rect.bottom);
+                                let old = SelectObject(dc, bitmap.into());
+                                FillRect(
+                                    dc,
+                                    &rect,
+                                    HBRUSH((COLOR_WINDOW.0 + 1) as usize as *mut _),
+                                );
+                                send(
+                                    child,
+                                    WM_PRINTCLIENT,
+                                    WPARAM(dc.0 as usize),
+                                    LPARAM(PRF_CLIENT as isize),
+                                );
+                                assert_eq!(
+                                    GetPixel(dc, rect.right / 2, rect.bottom / 2),
+                                    background,
+                                    "reentrant control {id}, dark={dark}"
+                                );
+                                assert!(
+                                    (3..rect.bottom - 3).any(|y| (8..rect.right / 2 - 4).any(
+                                        |x| {
+                                            let color = GetPixel(dc, x, y);
+                                            let channel = color.0 & 255;
+                                            if dark { channel > 180 } else { channel < 100 }
+                                        }
+                                    )),
+                                    "missing reentrant control text {id}, dark={dark}"
+                                );
+                                SelectObject(dc, old);
+                                let _ = DeleteObject(bitmap.into());
+                                let _ = DeleteDC(dc);
+                                ReleaseDC(Some(child), source);
+                            }
+                            let dc = GetDC(Some(reopened));
+                            send(reopened, WM_ERASEBKGND, WPARAM(dc.0 as usize), LPARAM(0));
+                            assert_eq!(
+                                GetPixel(dc, 4, 4),
+                                palette.background,
+                                "reentrant dashboard erase, dark={dark}"
+                            );
+                            ReleaseDC(Some(reopened), dc);
+                        }
                     }
                     let _ = RedrawWindow(
                         Some(reopened),
