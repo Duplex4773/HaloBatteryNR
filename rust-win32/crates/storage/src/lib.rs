@@ -127,6 +127,161 @@ impl Store {
             .map_err(sql_error)?;
         Ok(())
     }
+    /// Chart history with at most one retained, valid last-known predecessor.
+    /// Raw `HistoryStore::query` remains interval-only. No record is fabricated.
+    pub fn query_with_baseline(
+        &self,
+        key: &str,
+        since: i64,
+        until: i64,
+        max_points: usize,
+    ) -> Result<Vec<Reading>, ProviderError> {
+        let limit = max_points.clamp(2, 4096);
+        let retained_since = until.saturating_sub(30 * 86400);
+        let mut query = self.db.prepare(
+            "SELECT ts,payload FROM readings WHERE device=?1 AND ts>=?2 AND ts<?3 AND level BETWEEN 0 AND 100 ORDER BY ts DESC",
+        ).map_err(sql_error)?;
+        let mut baseline = None;
+        let mut rows = query
+            .query(params![key, retained_since, since.min(until)])
+            .map_err(sql_error)?;
+        while let Some(row) = rows.next().map_err(sql_error)? {
+            let timestamp: i64 = row.get(0).map_err(sql_error)?;
+            let payload: String = row.get(1).map_err(sql_error)?;
+            if let Ok(reading) = serde_json::from_str::<Reading>(&payload)
+                && reading.key == key
+                && reading.timestamp == timestamp
+                && reading.level.is_some_and(|level| level <= 100)
+            {
+                baseline = Some(reading);
+                break;
+            }
+        }
+        let Some(baseline) = baseline else {
+            return self.query(key, since, until, limit);
+        };
+        let mut interval = self.query(key, since, until, limit - 1)?;
+        // The raw query reserves at least two endpoints. With a two-point chart,
+        // retain the latest interval observation alongside the predecessor.
+        if interval.len() > limit - 1 {
+            interval = interval.into_iter().rev().take(limit - 1).collect();
+            interval.reverse();
+        }
+        let mut out = Vec::with_capacity(interval.len() + 1);
+        out.push(baseline);
+        out.extend(interval);
+        Ok(out)
+    }
+    /// Active-use history, summed from raw retained rows before display sampling.
+    pub fn query_usage(
+        &self,
+        key: &str,
+        until: i64,
+        seconds: i64,
+        max_points: usize,
+    ) -> Result<hb_core::HistorySeries, ProviderError> {
+        use hb_core::{HistoryAxis, HistorySample, HistorySeries};
+        let limit = max_points.clamp(2, 4096);
+        let total = self.stream_usage(key, until, |_, _| {})?;
+        let since = total.saturating_sub(seconds.max(1)).max(0);
+        let buckets = limit.saturating_sub(2) / 2;
+        let mut extremes: Vec<Option<(HistorySample, HistorySample)>> = vec![None; buckets];
+        let mut baseline = None;
+        let mut first = None;
+        let mut last = None;
+        self.stream_usage(key, until, |reading, position| {
+            if !reading.level.is_some_and(|level| level <= 100) {
+                return;
+            }
+            let sample = HistorySample { reading, position };
+            if position < since {
+                baseline = Some(sample);
+                return;
+            }
+            if first.is_none() {
+                first = Some(baseline.take().unwrap_or_else(|| sample.clone()));
+            }
+            last = Some(sample.clone());
+            if buckets > 0 {
+                let span = total.saturating_sub(since).max(1);
+                let bucket = ((position.saturating_sub(since) as i128 * buckets as i128)
+                    / span as i128)
+                    .min(buckets as i128 - 1) as usize;
+                if let Some((low, high)) = &mut extremes[bucket] {
+                    if sample.reading.level < low.reading.level {
+                        *low = sample.clone();
+                    }
+                    if sample.reading.level > high.reading.level {
+                        *high = sample;
+                    }
+                } else {
+                    extremes[bucket] = Some((sample.clone(), sample));
+                }
+            }
+        })?;
+        let mut samples = Vec::with_capacity(limit);
+        if let Some(sample) = first {
+            samples.push(sample);
+        }
+        for (low, high) in extremes.into_iter().flatten() {
+            samples.extend([low, high]);
+        }
+        if let Some(sample) = last {
+            samples.push(sample);
+        }
+        samples.sort_by_key(|sample| sample.reading.timestamp);
+        samples.dedup_by_key(|sample| sample.reading.timestamp);
+        Ok(HistorySeries {
+            samples,
+            axis: HistoryAxis::Usage,
+            since,
+            until: total,
+        })
+    }
+    fn stream_usage(
+        &self,
+        key: &str,
+        until: i64,
+        mut visit: impl FnMut(Reading, i64),
+    ) -> Result<i64, ProviderError> {
+        let mut query = self.db.prepare(
+            "SELECT ts,payload FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3 ORDER BY ts",
+        ).map_err(sql_error)?;
+        let mut rows = query
+            .query(params![key, until.saturating_sub(30 * 86400), until])
+            .map_err(sql_error)?;
+        let mut previous: Option<Reading> = None;
+        let mut total = 0i64;
+        while let Some(row) = rows.next().map_err(sql_error)? {
+            let timestamp: i64 = row.get(0).map_err(sql_error)?;
+            let payload: String = row.get(1).map_err(sql_error)?;
+            let Ok(reading) = serde_json::from_str::<Reading>(&payload) else {
+                previous = None;
+                continue;
+            };
+            if reading.key != key || reading.timestamp != timestamp {
+                previous = None;
+                continue;
+            }
+            let awake = |r: &Reading| {
+                r.online() && r.level.is_some_and(|level| level <= 100) && r.charging != Some(true)
+            };
+            if let Some(before) = &previous
+                && awake(before)
+                && awake(&reading)
+            {
+                total = total.saturating_add(
+                    reading
+                        .timestamp
+                        .saturating_sub(before.timestamp)
+                        .clamp(0, 600),
+                );
+            }
+            visit(reading.clone(), total);
+            previous = Some(reading);
+        }
+        Ok(total)
+    }
     pub fn load_estimator(&self) -> Estimator {
         self.db
             .query_row("SELECT payload FROM state WHERE key='estimator'", [], |r| {
@@ -487,5 +642,250 @@ mod tests {
         let value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert_eq!(value["devices"], serde_json::json!([]));
         assert_eq!(value["running"], false);
+    }
+    fn baseline_store() -> (tempfile::TempDir, Store) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("baseline.db")).unwrap();
+        (dir, store)
+    }
+    fn seed(store: &mut Store, key: &str, timestamp: i64, level: Option<u8>) {
+        let mut reading = Reading::new(key, "Mouse", "test", timestamp);
+        reading.level = level;
+        reading.connection = hb_core::Connection::Sleeping;
+        store.record(&reading).unwrap();
+        store.flush().unwrap();
+    }
+    #[test]
+    fn sleeping_interval_receives_original_last_known_baseline_only() {
+        let (_dir, mut store) = baseline_store();
+        seed(&mut store, "a", 90, Some(73));
+        let result = store.query_with_baseline("a", 100, 200, 100).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].timestamp, 90);
+        assert_eq!(result[0].level, Some(73));
+        assert_eq!(result[0].connection, hb_core::Connection::Sleeping);
+        assert!(store.query("a", 100, 200, 100).unwrap().is_empty());
+    }
+    #[test]
+    fn baseline_skips_unknown_invalid_and_corrupt_predecessors_and_other_devices() {
+        let (_dir, mut store) = baseline_store();
+        seed(&mut store, "a", 70, Some(60));
+        seed(&mut store, "a", 80, Some(101));
+        seed(&mut store, "a", 90, None);
+        seed(&mut store, "b", 99, Some(95));
+        store
+            .db
+            .execute("INSERT INTO readings VALUES('a',95,50,'broken')", [])
+            .unwrap();
+        let result = store.query_with_baseline("a", 100, 200, 2).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            (result[0].key.as_str(), result[0].timestamp, result[0].level),
+            ("a", 70, Some(60))
+        );
+    }
+    #[test]
+    fn baseline_retention_is_relative_to_interval_end_and_inclusive() {
+        let (_dir, mut store) = baseline_store();
+        let until = 30 * 86400 + 100;
+        seed(&mut store, "a", 99, Some(50));
+        assert!(
+            store
+                .query_with_baseline("a", until - 20, until, 20)
+                .unwrap()
+                .is_empty()
+        );
+        seed(&mut store, "a", 100, Some(40));
+        assert_eq!(
+            store
+                .query_with_baseline("a", until - 20, until, 20)
+                .unwrap()[0]
+                .timestamp,
+            100
+        );
+    }
+    #[test]
+    fn baseline_budget_preserves_interval_endpoints_and_never_exceeds_cap() {
+        let (_dir, mut store) = baseline_store();
+        seed(&mut store, "a", 90, Some(80));
+        for ts in 100..120 {
+            seed(&mut store, "a", ts, Some((ts - 50) as u8));
+        }
+        let two = store.query_with_baseline("a", 100, 119, 2).unwrap();
+        assert_eq!(
+            two.iter().map(|r| r.timestamp).collect::<Vec<_>>(),
+            vec![90, 119]
+        );
+        let three = store.query_with_baseline("a", 100, 119, 3).unwrap();
+        assert_eq!(
+            three.iter().map(|r| r.timestamp).collect::<Vec<_>>(),
+            vec![90, 100, 119]
+        );
+        let all = store.query_with_baseline("a", 100, 119, 30).unwrap();
+        assert_eq!(all.len(), 21);
+        assert_eq!(all[1].timestamp, 100);
+        assert_eq!(all.last().unwrap().timestamp, 119);
+        for cap in [0, 1, 2, 3, 4, 8, 4096, 5000] {
+            let result = store.query_with_baseline("a", 100, 119, cap).unwrap();
+            assert!(result.len() <= cap.clamp(2, 4096));
+            assert_eq!(result[0].timestamp, 90);
+        }
+    }
+    fn usage_seed(
+        store: &mut Store,
+        ts: i64,
+        level: Option<u8>,
+        connection: hb_core::Connection,
+        charging: Option<bool>,
+    ) {
+        let mut r = Reading::new("usage", "Mouse", "test", ts);
+        r.level = level;
+        r.connection = connection;
+        r.charging = charging;
+        store.record(&r).unwrap();
+        store.flush().unwrap();
+    }
+    #[test]
+    fn usage_pauses_sleep_charging_unknown_and_resumes_after_wake() {
+        use hb_core::Connection::{Online, Sleeping};
+        let (_dir, mut store) = baseline_store();
+        for (ts, level, connection, charging) in [
+            (0, Some(80), Online, None),
+            (60, Some(79), Online, None),
+            (120, Some(79), Sleeping, None),
+            (10000, Some(79), Sleeping, None),
+            (10060, Some(79), Online, None),
+            (10120, Some(78), Online, None),
+            (10180, Some(78), Online, Some(true)),
+            (10240, Some(80), Online, Some(true)),
+            (10300, Some(80), Online, None),
+            (10360, None, Online, None),
+            (10420, Some(79), Online, None),
+            (10480, Some(78), Online, None),
+        ] {
+            usage_seed(&mut store, ts, level, connection, charging);
+        }
+        let series = store.query_usage("usage", 10480, 3600, 100).unwrap();
+        assert_eq!((series.since, series.until), (0, 180));
+        assert_eq!(series.axis, hb_core::HistoryAxis::Usage);
+        assert_eq!(series.samples.last().unwrap().reading.timestamp, 10480);
+        assert_eq!(series.samples.last().unwrap().position, 180);
+    }
+    #[test]
+    fn usage_clamps_app_gaps_and_sampling_does_not_change_total_or_device_scope() {
+        let (_dir, mut store) = baseline_store();
+        usage_seed(&mut store, 0, Some(100), hb_core::Connection::Online, None);
+        usage_seed(
+            &mut store,
+            10000,
+            Some(90),
+            hb_core::Connection::Online,
+            None,
+        );
+        for i in 1..101 {
+            usage_seed(
+                &mut store,
+                10000 + i * 60,
+                Some((90 - i % 80) as u8),
+                hb_core::Connection::Online,
+                None,
+            );
+        }
+        seed(&mut store, "other", 16001, Some(50));
+        for cap in [2, 3, 4, 10, 4096] {
+            let series = store.query_usage("usage", 16001, 1200, cap).unwrap();
+            assert_eq!((series.since, series.until), (5400, 6600));
+            assert!(series.samples.len() <= cap);
+            assert_eq!(series.samples.last().unwrap().reading.timestamp, 16000);
+            assert_eq!(series.samples.last().unwrap().position, 6600);
+            assert!(series.samples.iter().all(|s| s.reading.key == "usage"));
+            assert!(series.samples.first().unwrap().position <= 5400);
+        }
+    }
+    #[test]
+    fn usage_empty_sleep_only_and_retention_are_safe() {
+        let (_dir, mut store) = baseline_store();
+        assert!(
+            store
+                .query_usage("usage", 100, 0, 0)
+                .unwrap()
+                .samples
+                .is_empty()
+        );
+        usage_seed(
+            &mut store,
+            10,
+            Some(50),
+            hb_core::Connection::Sleeping,
+            None,
+        );
+        let series = store.query_usage("usage", 100, 0, 2).unwrap();
+        assert_eq!((series.since, series.until), (0, 0));
+        assert_eq!(series.samples[0].reading.timestamp, 10);
+        assert!(
+            store
+                .query_usage("usage", 30 * 86400 + 11, 100, 10)
+                .unwrap()
+                .samples
+                .is_empty()
+        );
+    }
+    #[test]
+    fn usage_stale_invalid_and_corrupt_rows_break_interval_continuity() {
+        let (_dir, mut store) = baseline_store();
+        for (ts, level, state) in [
+            (0, Some(50), hb_core::Connection::Online),
+            (60, Some(101), hb_core::Connection::Online),
+            (120, Some(50), hb_core::Connection::Online),
+            (180, Some(50), hb_core::Connection::Stale),
+            (240, Some(50), hb_core::Connection::Online),
+            (360, Some(50), hb_core::Connection::Online),
+            (420, Some(49), hb_core::Connection::Online),
+        ] {
+            usage_seed(&mut store, ts, level, state, None);
+        }
+        store
+            .db
+            .execute("INSERT INTO readings VALUES('usage',300,50,'broken')", [])
+            .unwrap();
+        let series = store.query_usage("usage", 420, 3600, 20).unwrap();
+        assert_eq!(series.until, 60);
+        assert!(
+            series
+                .samples
+                .iter()
+                .all(|s| s.reading.level.is_some_and(|level| level <= 100))
+        );
+    }
+    #[test]
+    #[ignore = "explicit synthetic 30-day query timing; no hardware"]
+    fn usage_thirty_day_stream_timing() {
+        let (_dir, mut store) = baseline_store();
+        let transaction = store.db.transaction().unwrap();
+        {
+            let mut insert = transaction
+                .prepare("INSERT INTO readings VALUES(?1,?2,?3,?4)")
+                .unwrap();
+            for i in 0..43200i64 {
+                let mut r = Reading::new("usage", "Mouse", "test", i * 60);
+                r.level = Some((100 - i % 100) as u8);
+                insert
+                    .execute(params![
+                        r.key,
+                        r.timestamp,
+                        r.level,
+                        serde_json::to_string(&r).unwrap()
+                    ])
+                    .unwrap();
+            }
+        }
+        transaction.commit().unwrap();
+        let start = std::time::Instant::now();
+        let series = store
+            .query_usage("usage", 43199 * 60, 12 * 3600, 1000)
+            .unwrap();
+        println!("43200 rows, two passes: {:?}", start.elapsed());
+        assert_eq!(series.until, 43199 * 60);
+        assert!(series.samples.len() <= 1000);
     }
 }

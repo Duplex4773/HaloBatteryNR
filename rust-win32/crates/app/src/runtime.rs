@@ -31,6 +31,13 @@ pub enum Command {
         width: usize,
         request: u64,
     },
+    UsageHistory {
+        key: String,
+        seconds: i64,
+        until: i64,
+        width: usize,
+        request: u64,
+    },
     Polling(ControlRequest, u64),
     SettingsChanged,
     EpochSuspend(u64),
@@ -42,7 +49,7 @@ pub enum Event {
     PollingInvalidated(u64),
     Snapshot(Snapshot),
     Alert(Notification),
-    History(u64, Result<Vec<Reading>, ProviderError>),
+    History(u64, Result<HistorySeries, ProviderError>),
     Error(String),
     Diagnostics(BTreeMap<String, Vec<String>>),
 }
@@ -53,6 +60,7 @@ pub(super) enum Storage {
     Status(Snapshot, bool),
     RemoveStatus,
     History(String, i64, i64, usize, u64),
+    UsageHistory(String, i64, i64, usize, u64),
     Quit,
 }
 struct Job {
@@ -976,6 +984,15 @@ fn run(
             })) => {
                 let _ = storage.send(Storage::History(key, since, until, width, request));
             }
+            Work::Command(Ok(Command::UsageHistory {
+                key,
+                seconds,
+                until,
+                width,
+                request,
+            })) => {
+                let _ = storage.send(Storage::UsageHistory(key, seconds, until, width, request));
+            }
             Work::ConnectionEvent => {
                 hid.invalidate();
                 let _ = events.send(Event::PollingInvalidated(hid.generation()));
@@ -1620,6 +1637,33 @@ mod tests {
         );
     }
     #[test]
+    fn usage_history_flushes_pending_rows_and_preserves_real_timestamps() {
+        let d = tempfile::tempdir().unwrap();
+        let (tx, events, worker) = storage(d.path().to_owned());
+        for (timestamp, level) in [(100, 80), (160, 79), (220, 78)] {
+            let mut reading = Reading::new("mouse", "Mouse", "razer", timestamp);
+            reading.level = Some(level);
+            reading.charging = Some(false);
+            tx.send(Storage::Sample(vec![reading])).unwrap();
+        }
+        tx.send(Storage::UsageHistory("mouse".into(), 3600, 220, 40, 11))
+            .unwrap();
+        loop {
+            if let Event::History(11, result) = events.recv_timeout(Duration::from_secs(5)).unwrap()
+            {
+                let series = result.unwrap();
+                assert_eq!(series.axis, HistoryAxis::Usage);
+                assert_eq!(series.until, 120);
+                assert_eq!(series.samples.first().unwrap().reading.timestamp, 100);
+                assert_eq!(series.samples.last().unwrap().reading.timestamp, 220);
+                assert_eq!(series.samples.last().unwrap().position, 120);
+                break;
+            }
+        }
+        tx.send(Storage::Quit).unwrap();
+        worker.join().unwrap();
+    }
+    #[test]
     fn queued_history_flushes_and_status_can_be_disabled() {
         let d = tempfile::tempdir().unwrap();
         let (tx, events, worker) = storage(d.path().to_owned());
@@ -1633,7 +1677,7 @@ mod tests {
         loop {
             if let Event::History(10, result) = events.recv_timeout(Duration::from_secs(5)).unwrap()
             {
-                assert_eq!(result.unwrap()[0].level, Some(80));
+                assert_eq!(result.unwrap().samples[0].reading.level, Some(80));
                 break;
             }
         }

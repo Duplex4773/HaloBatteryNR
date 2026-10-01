@@ -3,6 +3,8 @@ if(Get-Process HaloBatteryNext -ErrorAction SilentlyContinue){throw 'Close the e
 $repo=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $folder=Join-Path $repo 'validation-local/screenshots'
 [IO.Directory]::CreateDirectory($folder)|Out-Null
+python (Join-Path $PSScriptRoot 'seed-history-test.py') $folder
+if ($LASTEXITCODE -ne 0) { throw 'Synthetic history fixture failed.' }
 @{animation=$true;status_file=$true}|ConvertTo-Json|Set-Content (Join-Path $folder 'config.json')
 Add-Type -TypeDefinition @"
 using System;
@@ -53,6 +55,32 @@ Start-Sleep -Seconds 2
 $dashboard=[HaloShot]::FindWindow($null,'Halo Battery Next')
 if($dashboard -eq [IntPtr]::Zero){throw 'Missing dashboard'}
 foreach($page in 1..3){[HaloShot]::PostMessage($dashboard,273,[UIntPtr]$page,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 350;[HaloShot]::Save($dashboard,(Join-Path $folder "$page.png"))}
+# Native history defaults to awake usage; both modes preserve their own ranges.
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]2,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 250
+$axis=[HaloShot]::GetDlgItem($dashboard,21);$range=[HaloShot]::GetDlgItem($dashboard,20)
+if([HaloShot]::SendMessage($axis,327,[UIntPtr]::Zero,[IntPtr]::Zero).ToInt32()-ne0-or[HaloShot]::SendMessage($range,327,[UIntPtr]::Zero,[IntPtr]::Zero).ToInt32()-ne2){throw 'History must default to Time used/24hours used'}
+if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,96))-notlike'*Estimated awake time*pauses*'){throw 'Usage explanation missing'}
+[HaloShot]::Save($dashboard,(Join-Path $folder 'history-usage.png'))
+# CBN_SELCHANGE=1 in the high word invokes the actual native selection handler.
+[HaloShot]::SendMessage($axis,334,[UIntPtr]1,[IntPtr]::Zero)|Out-Null
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr](65536+21),[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 250
+if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,96))-notlike'*Last known level held*'){throw 'Calendar explanation missing'}
+$range=[HaloShot]::GetDlgItem($dashboard,20)
+if([HaloShot]::SendMessage($range,327,[UIntPtr]::Zero,[IntPtr]::Zero).ToInt32()-ne0){throw 'Calendar must initially select24hours'}
+[HaloShot]::Save($dashboard,(Join-Path $folder 'history-calendar-24h.png'))
+[HaloShot]::SendMessage($range,334,[UIntPtr]1,[IntPtr]::Zero)|Out-Null
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr](65536+20),[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 250
+[HaloShot]::Save($dashboard,(Join-Path $folder 'history-calendar.png'))
+[HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,21),334,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr](65536+21),[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 200
+if([HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,20),327,[UIntPtr]::Zero,[IntPtr]::Zero).ToInt32()-ne2){throw 'Usage range lost when returning from Calendar'}
+[HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,20),334,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr](65536+20),[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
+[HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,21),334,[UIntPtr]1,[IntPtr]::Zero)|Out-Null
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr](65536+21),[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
+if([HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,20),327,[UIntPtr]::Zero,[IntPtr]::Zero).ToInt32()-ne1){throw 'Calendar7days range lost'}
+[HaloShot]::PostMessage($dashboard,273,[UIntPtr]3,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
+Write-Output 'History defaults to Time used24hours; Calendar/7days and Usage/2hours controls, independent ranges and explanations passed.'
 [HaloShot]::SendMessage($dashboard,40,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
 $focusBefore=[HaloShot]::Focus($dashboard);[HaloShot]::PostMessage($dashboard,256,[UIntPtr]9,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 400;$focusAfter=[HaloShot]::Focus($dashboard);if($focusBefore -eq $focusAfter -or $focusAfter -eq [IntPtr]::Zero){throw "Tab navigation failed"}
 [HaloShot]::PostMessage($dashboard,262,[UIntPtr]104,[IntPtr]536870912)|Out-Null;Start-Sleep -Milliseconds 400;if([HaloShot]::GetDlgItem($dashboard,20)-eq [IntPtr]::Zero){throw "Alt H history mnemonic failed"}

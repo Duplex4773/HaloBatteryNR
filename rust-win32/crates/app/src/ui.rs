@@ -237,6 +237,71 @@ fn polling_timestamp(timestamp: i64) -> String {
         seconds % 60
     )
 }
+struct HistorySelection {
+    axis: HistoryAxis,
+    usage_index: usize,
+    calendar_index: usize,
+}
+impl Default for HistorySelection {
+    fn default() -> Self {
+        Self {
+            axis: HistoryAxis::Usage,
+            usage_index: 2,
+            calendar_index: 0,
+        }
+    }
+}
+impl HistorySelection {
+    fn index(&self) -> usize {
+        match self.axis {
+            HistoryAxis::Usage => self.usage_index,
+            HistoryAxis::Calendar => self.calendar_index,
+        }
+    }
+    fn set_index(&mut self, index: usize) {
+        match self.axis {
+            HistoryAxis::Usage => self.usage_index = index.min(2),
+            HistoryAxis::Calendar => self.calendar_index = index.min(2),
+        }
+    }
+    fn labels(&self) -> Vec<String> {
+        match self.axis {
+            HistoryAxis::Usage => ["2 hours used", "8 hours used", "24 hours used"],
+            HistoryAxis::Calendar => ["24 hours", "7 days", "30 days"],
+        }
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+    }
+    fn description(&self) -> &'static str {
+        match self.axis {
+            HistoryAxis::Usage => {
+                "Battery level: 0–100% · Estimated awake time; pauses sleeping, unavailable or charging"
+            }
+            HistoryAxis::Calendar => {
+                "Battery level: 0–100% · Last known level held between readings"
+            }
+        }
+    }
+    fn command(&self, key: String, until: i64, width: usize, request: u64) -> Command {
+        match self.axis {
+            HistoryAxis::Usage => Command::UsageHistory {
+                key,
+                seconds: [2, 8, 24][self.index()] * 3600,
+                until,
+                width,
+                request,
+            },
+            HistoryAxis::Calendar => Command::History {
+                key,
+                since: until - [1, 7, 30][self.index()] * 86400,
+                until,
+                width,
+                request,
+            },
+        }
+    }
+}
 struct State {
     context: *const RefCell<State>,
     runtime: Runtime,
@@ -251,11 +316,9 @@ struct State {
     page: u16,
     selected: usize,
     chart: Option<Chart>,
-    points: Vec<Reading>,
-    since: i64,
-    until: i64,
+    series: HistorySeries,
+    history: HistorySelection,
     request: u64,
-    days: i64,
     taskbar: u32,
     notify: Option<HDEVNOTIFY>,
     animating: bool,
@@ -328,11 +391,9 @@ pub fn run(
             page: 1,
             selected: 0,
             chart: None,
-            points: vec![],
-            since: 0,
-            until: 0,
+            series: HistorySeries::default(),
+            history: HistorySelection::default(),
             request: 0,
-            days: 1,
             taskbar: RegisterWindowMessageW(w!("TaskbarCreated")),
             notify: None,
             animating: false,
@@ -581,8 +642,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                         s.chart = Chart::new(hwnd, r.right as u32, r.bottom as u32).ok()
                     }
                     if let Some(c) = &s.chart
-                        && c.paint(r.right as u32, r.bottom as u32, &s.points, s.since, s.until)
-                            .is_err()
+                        && c.paint(r.right as u32, r.bottom as u32, &s.series).is_err()
                     {
                         s.chart = None;
                     }
@@ -863,27 +923,31 @@ impl State {
                 self.button(5, "Export &diagnostics", 20, 725, 200);
             }
             2 => {
-                self.combo(10, &names, self.selected, 20, 65, 530);
+                self.combo(10, &names, self.selected, 20, 65, 380);
+                self.combo(
+                    21,
+                    &["Time used".into(), "Calendar time".into()],
+                    usize::from(self.history.axis == HistoryAxis::Calendar),
+                    420,
+                    65,
+                    160,
+                );
                 self.combo(
                     20,
-                    &["24 hours".into(), "7 days".into(), "30 days".into()],
-                    match self.days {
-                        7 => 1,
-                        30 => 2,
-                        _ => 0,
-                    },
-                    570,
+                    &self.history.labels(),
+                    self.history.index(),
+                    600,
                     65,
-                    210,
+                    180,
                 );
+                self.label(96, self.history.description(), 20, 105, 750);
                 self.label(
-                    96,
-                    "Battery level: 0–100% · gaps represent unavailable readings",
+                    97,
+                    "30-day retention · Estimated device awake time · No input tracking",
                     20,
-                    105,
-                    750,
+                    735,
+                    760,
                 );
-                self.label(97,"History uses the selected interval and graph width. Refresh to load latest samples.",20,735,760);
                 self.query();
             }
             3 => {
@@ -1016,8 +1080,16 @@ impl State {
             41 => self.read_polling(),
             42 => self.apply_polling(true),
             20 if notification == CBN_SELCHANGE as u16 => {
-                self.days = [1, 7, 30][self.choice(20).min(2)];
-                self.query()
+                self.history.set_index(self.choice(20));
+                self.build()
+            }
+            21 if notification == CBN_SELCHANGE as u16 => {
+                self.history.axis = if self.choice(21) == 0 {
+                    HistoryAxis::Usage
+                } else {
+                    HistoryAxis::Calendar
+                };
+                self.build()
             }
             15 => {
                 if let Some(d) = self.snapshot.devices.get(self.selected) {
@@ -1373,25 +1445,28 @@ impl State {
         }
     }
     fn query(&mut self) {
+        self.request = self.request.wrapping_add(1);
+        self.series = HistorySeries {
+            axis: self.history.axis,
+            ..Default::default()
+        };
         let Some(d) = self.snapshot.devices.get(self.selected) else {
             return;
         };
-        self.until = SystemClock::default().unix();
-        self.since = self.until - self.days * 86400;
-        self.request += 1;
+        let until = SystemClock::default().unix();
         let mut r = RECT::default();
         unsafe {
             if let Some(h) = self.dashboard {
                 let _ = GetClientRect(h, &mut r);
+                let _ = InvalidateRect(Some(h), None, false);
             }
         }
-        self.runtime.send(Command::History {
-            key: d.reading.key.clone(),
-            since: self.since,
-            until: self.until,
-            width: (r.right - 80).max(20) as usize,
-            request: self.request,
-        });
+        self.runtime.send(self.history.command(
+            d.reading.key.clone(),
+            until,
+            (r.right - 80).max(20) as usize,
+            self.request,
+        ));
     }
     fn drain(&mut self) {
         let mut latest = None;
@@ -1419,7 +1494,7 @@ impl State {
                 }
                 Event::History(id, result) if id == self.request => {
                     match result {
-                        Ok(points) => self.points = points,
+                        Ok(series) => self.series = series,
                         Err(e) => self.error = e.to_string(),
                     }
                     unsafe {
@@ -2175,5 +2250,59 @@ mod polling_tests {
         assert_eq!(polling_timestamp(0), "1970-01-01 00:00:00 UTC");
         assert_eq!(polling_timestamp(-1), "1969-12-31 23:59:59 UTC");
         assert_eq!(polling_timestamp(1709210096), "2024-02-29 12:34:56 UTC");
+    }
+}
+
+#[cfg(test)]
+mod history_tests {
+    use super::*;
+    #[test]
+    fn time_used_is_default_and_routes_24_hours_to_usage_query() {
+        let selection = HistorySelection::default();
+        assert_eq!(selection.axis, HistoryAxis::Usage);
+        assert_eq!(selection.index(), 2);
+        assert_eq!(selection.labels()[2], "24 hours used");
+        let Command::UsageHistory {
+            key,
+            seconds,
+            until,
+            width,
+            request,
+        } = selection.command("mouse".into(), 123456, 640, 7)
+        else {
+            panic!("Usage history must not use calendar timestamps")
+        };
+        assert_eq!(
+            (key.as_str(), seconds, until, width, request),
+            ("mouse", 86400, 123456, 640, 7)
+        );
+        assert!(selection.description().contains("pauses"));
+    }
+    #[test]
+    fn calendar_and_usage_keep_independent_ranges_and_route_the_requested_width() {
+        let mut selection = HistorySelection::default();
+        selection.set_index(0);
+        selection.axis = HistoryAxis::Calendar;
+        assert_eq!(selection.index(), 0);
+        selection.set_index(1);
+        let Command::History {
+            since,
+            until,
+            width,
+            request,
+            ..
+        } = selection.command("mouse".into(), 1_000_000, 333, 8)
+        else {
+            panic!("Calendar history must use timestamps")
+        };
+        assert_eq!((since, until, width, request), (395200, 1_000_000, 333, 8));
+        assert!(selection.description().contains("Last known level held"));
+        selection.axis = HistoryAxis::Usage;
+        assert_eq!(selection.index(), 0);
+        assert_eq!(selection.labels()[0], "2 hours used");
+        selection.set_index(99);
+        assert_eq!(selection.index(), 2);
+        selection.axis = HistoryAxis::Calendar;
+        assert_eq!(selection.index(), 1);
     }
 }

@@ -72,7 +72,20 @@ pub(super) fn run(
             }
             Ok(Storage::History(key, since, until, width, id)) => {
                 let result = match &mut database {
-                    Ok(db) => db.flush().and_then(|_| db.query(&key, since, until, width)),
+                    Ok(db) => db
+                        .flush()
+                        .and_then(|_| db.query_with_baseline(&key, since, until, width))
+                        .map(|readings| HistorySeries::calendar(readings, since, until)),
+                    Err(e) => Err(e.clone()),
+                };
+                let _ = events.send(Event::History(id, result));
+                Ok(())
+            }
+            Ok(Storage::UsageHistory(key, seconds, until, width, id)) => {
+                let result = match &mut database {
+                    Ok(db) => db
+                        .flush()
+                        .and_then(|_| db.query_usage(&key, until, seconds, width)),
                     Err(e) => Err(e.clone()),
                 };
                 let _ = events.send(Event::History(id, result));

@@ -1,5 +1,5 @@
 //! Direct2D resources only exist while the History page exists.
-use hb_core::Reading;
+use hb_core::{HistoryAxis, HistorySample, HistorySeries};
 use windows::Win32::{
     Foundation::HWND,
     Graphics::Direct2D::{Common::*, *},
@@ -9,6 +9,87 @@ use windows::{
     core::w,
 };
 use windows_numerics::Vector2;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct HistoryVertex {
+    timestamp: i64,
+    level: u8,
+    measured: bool,
+}
+
+/// Display a last-known-value step trace, without turning missing readings into
+/// measurements. A predecessor can seed the left boundary; no value is invented
+/// before the first available percentage. Cached sleeping levels seed an empty
+/// trace but cannot replace a level already observed in this interval.
+fn history_trace(points: &[HistorySample], since: i64, until: i64) -> Vec<HistoryVertex> {
+    if until < since {
+        return Vec::new();
+    }
+    let mut trace = Vec::with_capacity(points.len().saturating_mul(2).saturating_add(1));
+    let mut previous: Option<HistoryVertex> = None;
+    for sample in points {
+        let reading = &sample.reading;
+        if sample.position > until {
+            continue;
+        }
+        let timestamp = sample.position.max(since);
+        if previous.is_some_and(|p| timestamp < p.timestamp) {
+            continue;
+        }
+        if previous.is_some() && !reading.online() {
+            continue;
+        }
+        let Some(level) = reading.level.filter(|level| *level <= 100) else {
+            continue;
+        };
+        if let Some(p) = previous {
+            trace.push(HistoryVertex {
+                timestamp,
+                measured: false,
+                ..p
+            });
+        }
+        let point = HistoryVertex {
+            timestamp,
+            level,
+            measured: reading.online() && sample.position >= since,
+        };
+        trace.push(point);
+        previous = Some(point);
+    }
+    if let Some(p) = previous {
+        trace.push(HistoryVertex {
+            timestamp: until,
+            measured: false,
+            ..p
+        });
+    }
+    trace
+}
+
+fn duration_label(seconds: i64, use_days: bool) -> String {
+    if use_days && seconds >= 86400 {
+        format!("{:.1} d", seconds as f64 / 86400.)
+    } else if seconds >= 3600 {
+        format!("{:.1} h", seconds as f64 / 3600.)
+    } else {
+        format!("{} min", seconds.max(0) / 60)
+    }
+}
+
+fn axis_labels(axis: HistoryAxis, span: i64) -> [String; 5] {
+    std::array::from_fn(|index| match axis {
+        HistoryAxis::Usage => duration_label(span.saturating_mul(index as i64) / 4, false),
+        HistoryAxis::Calendar if index == 4 => "Now".into(),
+        HistoryAxis::Calendar => {
+            format!(
+                "{} ago",
+                duration_label(span.saturating_mul(4 - index as i64) / 4, true)
+            )
+        }
+    })
+}
+
 pub struct Chart {
     target: ID2D1HwndRenderTarget,
     font: IDWriteTextFormat,
@@ -53,10 +134,10 @@ impl Chart {
         &self,
         width: u32,
         height: u32,
-        points: &[Reading],
-        since: i64,
-        until: i64,
+        series: &HistorySeries,
     ) -> windows::core::Result<()> {
+        let since = series.since;
+        let until = series.until;
         unsafe {
             self.target.Resize(&D2D_SIZE_U { width, height })?;
             self.target.BeginDraw();
@@ -132,53 +213,56 @@ impl Chart {
                     48. * self.scale,
                 );
             }
-            text(
-                &format!("{} days ago", (until - since) / 86400),
-                left,
-                bottom + 12. * self.scale,
-                150. * self.scale,
-            );
-            text(
-                "Now",
-                right - 36. * self.scale,
-                bottom + 12. * self.scale,
-                40. * self.scale,
-            );
-            if !points.iter().any(|r| r.level.is_some()) {
+            for (index, caption) in axis_labels(series.axis, until.saturating_sub(since))
+                .iter()
+                .enumerate()
+            {
+                let x = left + (right - left) * index as f32 / 4.;
+                let x = match index {
+                    0 => x,
+                    4 => x - 85. * self.scale,
+                    _ => x - 42. * self.scale,
+                };
+                text(caption, x, bottom + 12. * self.scale, 100. * self.scale);
+            }
+            let trace = if series.axis == HistoryAxis::Usage && until <= since {
+                Vec::new()
+            } else {
+                history_trace(&series.samples, since, until)
+            };
+            if trace.is_empty() {
                 text(
-                    "No recorded readings in this interval.",
+                    if series.axis == HistoryAxis::Usage {
+                        "Not enough recorded awake time yet."
+                    } else {
+                        "No recorded readings in this interval."
+                    },
                     left + 40. * self.scale,
                     top + 50. * self.scale,
                     420. * self.scale,
                 );
             }
             let mut previous = None;
-            for r in points {
-                if !r.online() {
-                    previous = None;
-                    continue;
-                }
-                let Some(level) = r.level else {
-                    previous = None;
-                    continue;
-                };
+            for point in trace {
                 let p = Vector2 {
                     X: left
-                        + (right - left) * (r.timestamp - since) as f32
+                        + (right - left) * (point.timestamp - since) as f32
                             / (until - since).max(1) as f32,
-                    Y: bottom - (bottom - top) * level as f32 / 100.,
+                    Y: bottom - (bottom - top) * point.level as f32 / 100.,
                 };
                 if let Some(a) = previous {
                     self.target.DrawLine(a, p, &line, 2., None);
                 }
-                self.target.FillEllipse(
-                    &D2D1_ELLIPSE {
-                        point: p,
-                        radiusX: 2. * self.scale,
-                        radiusY: 2. * self.scale,
-                    },
-                    &line,
-                );
+                if point.measured {
+                    self.target.FillEllipse(
+                        &D2D1_ELLIPSE {
+                            point: p,
+                            radiusX: 2. * self.scale,
+                            radiusY: 2. * self.scale,
+                        },
+                        &line,
+                    );
+                }
                 previous = Some(p);
             }
             self.target.EndDraw(None, None)
@@ -189,7 +273,125 @@ impl Chart {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hb_core::{Connection, Reading};
     use windows::Win32::UI::WindowsAndMessaging::*;
+
+    fn sample(timestamp: i64, level: Option<u8>, connection: Connection) -> Reading {
+        let mut reading = Reading::new("test:mouse", "Test mouse", "test", timestamp);
+        reading.level = level;
+        reading.connection = connection;
+        reading
+    }
+
+    fn calendar_trace(points: &[Reading], since: i64, until: i64) -> Vec<HistoryVertex> {
+        let series = HistorySeries::calendar(points.to_vec(), since, until);
+        history_trace(&series.samples, since, until)
+    }
+
+    #[test]
+    fn sleep_and_missing_samples_hold_the_last_level_until_wake_and_now() {
+        let rows = [
+            sample(10, Some(80), Connection::Online),
+            sample(20, Some(65), Connection::Sleeping),
+            sample(30, None, Connection::Stale),
+            sample(60, Some(75), Connection::Online),
+            sample(90, None, Connection::Sleeping),
+        ];
+        let trace = calendar_trace(&rows, 0, 100);
+        assert_eq!(
+            trace
+                .iter()
+                .map(|p| (p.timestamp, p.level, p.measured))
+                .collect::<Vec<_>>(),
+            [
+                (10, 80, true),
+                (60, 80, false),
+                (60, 75, true),
+                (100, 75, false)
+            ]
+        );
+    }
+
+    #[test]
+    fn predecessor_seeds_a_completely_sleeping_interval_without_measured_dots() {
+        let rows = [
+            sample(5, Some(27), Connection::Sleeping),
+            sample(30, None, Connection::Sleeping),
+            sample(90, None, Connection::Stale),
+        ];
+        let trace = calendar_trace(&rows, 10, 100);
+        assert_eq!(trace.len(), 2);
+        assert_eq!((trace[0].timestamp, trace[0].level), (10, 27));
+        assert_eq!((trace[1].timestamp, trace[1].level), (100, 27));
+        assert!(trace.iter().all(|p| !p.measured));
+    }
+
+    #[test]
+    fn unknown_invalid_and_future_readings_do_not_invent_an_initial_level() {
+        let rows = [
+            sample(10, None, Connection::Online),
+            sample(20, Some(101), Connection::Online),
+            sample(110, Some(70), Connection::Online),
+        ];
+        assert!(calendar_trace(&rows, 0, 100).is_empty());
+        assert!(calendar_trace(&rows, 100, 0).is_empty());
+        let rows = [sample(30, Some(0), Connection::Online)];
+        let trace = calendar_trace(&rows, 0, 100);
+        assert_eq!((trace[0].timestamp, trace[0].level), (30, 0));
+        assert_eq!((trace[1].timestamp, trace[1].level), (100, 0));
+    }
+
+    #[test]
+    fn charging_and_discharge_changes_are_steps_at_actual_reading_times() {
+        let rows = [
+            sample(0, Some(25), Connection::Online),
+            sample(20, Some(100), Connection::Online),
+            sample(40, Some(99), Connection::Online),
+        ];
+        let trace = calendar_trace(&rows, 0, 50);
+        assert_eq!(
+            trace
+                .iter()
+                .map(|p| (p.timestamp, p.level))
+                .collect::<Vec<_>>(),
+            [(0, 25), (20, 25), (20, 100), (40, 100), (40, 99), (50, 99)]
+        );
+        assert_eq!(trace.iter().filter(|p| p.measured).count(), 3);
+    }
+
+    #[test]
+    fn usage_positions_do_not_overwrite_real_timestamps_or_use_day_labels() {
+        let samples = [
+            HistorySample {
+                reading: sample(1000, Some(30), Connection::Online),
+                position: 0,
+            },
+            HistorySample {
+                reading: sample(10000, None, Connection::Sleeping),
+                position: 60,
+            },
+            HistorySample {
+                reading: sample(20000, Some(27), Connection::Online),
+                position: 60,
+            },
+        ];
+        let trace = history_trace(&samples, 0, 120);
+        assert_eq!(
+            trace
+                .iter()
+                .map(|p| (p.timestamp, p.level))
+                .collect::<Vec<_>>(),
+            [(0, 30), (60, 30), (60, 27), (120, 27)]
+        );
+        assert_eq!(samples[2].reading.timestamp, 20000);
+        assert_eq!(
+            axis_labels(HistoryAxis::Usage, 86400),
+            ["0 min", "6.0 h", "12.0 h", "18.0 h", "24.0 h"]
+        );
+        assert_eq!(axis_labels(HistoryAxis::Calendar, 86400)[0], "1.0 d ago");
+        assert_eq!(axis_labels(HistoryAxis::Calendar, 86400)[4], "Now");
+    }
+
     #[test]
     fn history_target_can_paint_and_release_repeatedly() {
         let _guard = crate::ui::NATIVE_TEST_LOCK.lock().unwrap();
@@ -211,7 +413,22 @@ mod tests {
             .unwrap();
             for _ in 0..5 {
                 let chart = Chart::new(hwnd, 840, 820).unwrap();
-                chart.paint(840, 820, &[], 0, 86400).unwrap();
+                chart.paint(840, 820, &HistorySeries::default()).unwrap();
+                chart
+                    .paint(
+                        840,
+                        820,
+                        &HistorySeries::calendar(
+                            vec![
+                                sample(0, Some(30), Connection::Online),
+                                sample(3600, None, Connection::Sleeping),
+                                sample(7200, Some(27), Connection::Online),
+                            ],
+                            0,
+                            86400,
+                        ),
+                    )
+                    .unwrap();
                 drop(chart);
             }
             DestroyWindow(hwnd).unwrap();

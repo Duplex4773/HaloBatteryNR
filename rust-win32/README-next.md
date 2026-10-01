@@ -33,9 +33,16 @@ The release script also removes local build paths from embedded compiler message
 | `hb-storage` | Atomic JSON and bounded, batched SQLite history |
 | `halo-battery-next` | One state owner, two HID workers, one WinRT worker, one storage worker and one native UI thread |
 
-Providers return either successful discovery (possibly empty) or an explicit communication error. Errors retain stale device readings instead of treating failures as disconnects. Immutable snapshots cross to the UI; commands cross back to the engine. Queues and worker counts are bounded. Charging HICON frames are cached; the 100 ms timer runs only while an animated charging icon exists. Dashboard graphics are created on demand and released on close. History queries select only the requested interval and downsample in SQLite.
+Providers return either successful discovery (possibly empty) or an explicit communication error. Errors retain stale device readings instead of treating failures as disconnects. Immutable snapshots cross to the UI; commands cross back to the engine. Queues and worker counts are bounded. Charging HICON frames are cached; the 100 ms timer runs only while an animated charging icon exists. Dashboard graphics are created on demand and released on close. Calendar history selects the requested interval; use-time history streams retained observations to calculate awake time before bounded display sampling.
 
 History retains 30 days, batches writes once per minute and flushes on normal exit. Changed readings are queued immediately; unchanged readings are accepted at most once per minute. Usage estimates need at least 30 minutes of awake discharge and a three-point percentage drop. Coarse readings do not produce estimates.
+
+The History page defaults to **Time used**, with 2/8/24-hour use ranges. Estimated
+awake time pauses across sleeping, unavailable and charging observations; it does
+not track cursor activity. **Calendar time** retains 24-hour/7-day/30-day views
+and carries the last known level through missing readings instead of drawing
+gaps. Original observations and timestamps remain intact. See
+[`docs/history.md`](docs/history.md) for the calculation and display limits.
 
 PlayStation Bluetooth full mode is opt-in. 8BitDo mode switching is disabled. Unknown devices are excluded from command allowlists. Update checking remains disabled pending an independently configured release repository.
 

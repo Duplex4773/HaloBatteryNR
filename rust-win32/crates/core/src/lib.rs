@@ -3,10 +3,12 @@ pub mod controls;
 pub mod engine;
 pub use controls::*;
 pub mod history;
+pub mod history_plot;
 pub mod settings;
 
 pub use engine::{DeviceView, Engine, Notification, NotificationKind, Snapshot};
 pub use history::Estimator;
+pub use history_plot::{HistoryAxis, HistorySample, HistorySeries};
 use serde::{Deserialize, Serialize};
 pub use settings::{DevicePreferences, Settings};
 use std::sync::atomic::{AtomicBool, Ordering};

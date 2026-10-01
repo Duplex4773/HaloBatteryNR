@@ -4,7 +4,40 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
-## Polling-control checkpoint, 1 October 2026
+## History checkpoint, 1 October 2026
+
+Formatting, strict workspace Clippy, the optimized release build and **342 Rust
+tests** pass locally. The optional synthetic timing test also passes when run
+explicitly. The executable is **2,642,944 bytes (2.52 MiB)**, SHA256
+`A7D3415C8F9BE075C7A70E79C65EA40BDA18BBDD3D9255A331BC952342DF86CF`.
+Production API/import restrictions and source/release privacy scans pass.
+
+History now defaults to estimated awake-use time, with 2/8/24-hour ranges;
+calendar time remains available with 24-hour/7-day/30-day ranges. Sleep, stale,
+unknown and charging observations pause use time. Calendar history carries the
+last known level through missing observations and can seed the selected interval
+from a retained earlier sample. Display coordinates remain separate from real
+observation timestamps, and graph changes do not modify stored readings or the
+discharge estimator. Tests cover boundary seeding, malformed levels, sleep/wake,
+charging, empty history, bounded sampling, and timing independent of graph width.
+
+A synthetic 43,200-row history (one reading per minute over 30 days) queried in
+**87.34 ms** in the optimized storage test on this machine. The two indexed
+streaming passes retain bounded display memory; the result is a local latency
+measurement, not a guarantee for every history database.
+
+Native UI validation used an invented 18-hour history containing awake, sleeping
+and unavailable periods. Both graphs rendered continuously; the use axis
+compressed it to about five hours. Default mode, switching views/ranges,
+independent range selections, keyboard navigation and existing device controls
+passed. Forty complete warm dashboard cycles kept USER/GDI handles at **44/102**;
+private memory was 16.14 MiB at cycle 1 and 17.72 MiB at cycle 40. Graceful quit
+returned zero. No physical device configuration was used by these checks.
+A 15.03-second animated background smoke run averaged 6.01 MiB private memory
+and 0.104% of one logical core, with stable handles and graceful shutdown. The
+earlier five-minute measurements below precede this history revision.
+
+## Earlier polling-control checkpoint, 1 October 2026
 
 Formatting, strict workspace Clippy, the optimized release build and **325 Rust
 tests** pass locally. The original 459-ID coverage audit remains complete. The
