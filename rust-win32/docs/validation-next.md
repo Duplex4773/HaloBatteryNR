@@ -4,6 +4,20 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
+## Tooltip retention checkpoint, 2 October 2026
+
+The portable executable is **2,831,872 bytes (2.70 MiB)**,
+SHA256 `CD46E22E8071BB31E41780DD04277289BE5C3A1CD5E1346EC082FB251D471D10`. Formatting, strict workspace Clippy,
+all **506 behavioral tests**, release build and production API checks pass.
+
+The native regression starts with a confirmed startup rate, performs Refresh,
+checks that actionable observations are revoked, and checks the actual tray
+notification tooltip still contains its last-confirmed rate. A sleeping-device
+update also preserves the label. Missing/stale/replaced identities, explicit
+writes, failed readbacks and disabling controls still remove it. This fixes
+unrelated Windows device updates or Refresh hiding the mouse's historical rate.
+No additional queries, timers, workers or automatic writes are introduced.
+
 ## Razer verification labels checkpoint, 2 October 2026
 
 The updated portable executable is **2,832,384 bytes (2.70 MiB)**,

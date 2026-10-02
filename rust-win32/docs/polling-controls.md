@@ -41,8 +41,10 @@ added. The initial queue is bounded to 512 saved devices.
 
 Device hover tooltips append the last successfully read-back polling rate. They
 use a bounded cached observation, never a saved/requested rate. Pending manual
-writes, failed readbacks, stale/changed identities, connection epochs or disabling
-controls remove that confirmation. Hovering performs no hardware reads, allocation
+writes, failed readbacks, missing/stale/changed identities or disabling
+controls remove that confirmation. Enumeration epoch changes and Refresh revoke
+Apply/Restore evidence but preserve the labelled last-confirmed tooltip when the
+physical identity still matches. Sleeping cached devices retain that label. Hovering performs no hardware reads, allocation
 or timer work. Other software can still change hardware after a readback.
 
 Reconnection invalidates the observed target and the

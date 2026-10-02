@@ -2717,8 +2717,9 @@ impl State {
                 }
                 Event::Polling(outcome) => polling_outcomes.push(*outcome),
                 Event::PollingInvalidated(generation) => {
-                    self.tooltip_rates.clear();
-                    self.sync_trays(TrayUpdate::Changed);
+                    // Epoch changes revoke actionable evidence, not the labelled
+                    // last-confirmed tooltip for a still-matching physical device.
+                    // Snapshots remove missing/stale/replaced identities separately.
                     self.polling.invalidate(generation);
                     self.tray_polling.invalidate(generation);
                     polling_invalidated = true;
@@ -5249,7 +5250,16 @@ mod dashboard_lifecycle_tests {
     #[test]
     fn native_dashboard_reopens_after_nested_close_and_external_destruction() {
         let _guard = NATIVE_TEST_LOCK.lock().unwrap();
-        let settings = Settings::default();
+        let mut settings = Settings {
+            polling_controls: true,
+            restore_polling_on_startup: true,
+            ..Settings::default()
+        };
+        settings
+            .devices
+            .entry("simulated:mouse".into())
+            .or_default()
+            .requested_polling_rate = Some(PollingRate::try_from(2000).unwrap());
         let test_directory = tempfile::tempdir().unwrap();
         let dir = test_directory.path().to_path_buf();
         let runtime = Runtime::start(dir.clone(), settings.clone(), true).unwrap();
@@ -5324,6 +5334,43 @@ mod dashboard_lifecycle_tests {
                 )
                 .unwrap();
                 context.monitor.set(state.monitor);
+                let deadline = Instant::now() + Duration::from_secs(5);
+                while !state.tooltip_rates.contains_key("simulated:mouse")
+                    && Instant::now() < deadline
+                {
+                    std::thread::sleep(Duration::from_millis(20));
+                    state.drain();
+                }
+                assert!(state.tooltip_rates.contains_key("simulated:mouse"));
+                let previous_generation = state.tray_polling.generation;
+                state.runtime.send(Command::Refresh);
+                let deadline = Instant::now() + Duration::from_secs(5);
+                while state.tray_polling.generation == previous_generation
+                    && Instant::now() < deadline
+                {
+                    std::thread::sleep(Duration::from_millis(20));
+                    state.drain();
+                }
+                assert!(state.tray_polling.generation > previous_generation);
+                assert!(state.tray_polling.observations.is_empty());
+                let tray = state.trays.get("simulated:mouse").unwrap();
+                let text =
+                    String::from_utf16(tray.data.szTip.split(|u| *u == 0).next().unwrap()).unwrap();
+                assert!(text.contains("Polling: 2000 Hz (last confirmed)"), "{text}");
+                state.snapshot.devices[0].reading.connection = Connection::Sleeping;
+                state.snapshot.devices[0].text = "Simulated mouse: sleeping".into();
+                state.sync_trays(TrayUpdate::Changed);
+                let tray = state.trays.get("simulated:mouse").unwrap();
+                let text =
+                    String::from_utf16(tray.data.szTip.split(|u| *u == 0).next().unwrap()).unwrap();
+                assert!(text.contains("Polling: 2000 Hz (last confirmed)"), "{text}");
+                // Restore the empty-inventory baseline for the lifecycle scenarios below.
+                state.settings = Settings::default();
+                state.polling = PollingUi::default();
+                state.tray_polling = PollingUi::default();
+                state.snapshot = Snapshot::default();
+                state.tooltip_rates.clear();
+                state.sync_trays(TrayUpdate::Changed);
                 state.open();
                 let dashboard = state.dashboard.unwrap();
                 let popup = popup_menu(&Snapshot::default(), &Settings::default(), None).unwrap();
