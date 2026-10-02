@@ -2586,23 +2586,36 @@ impl State {
         );
         self.sync_trays(TrayUpdate::Changed);
         if outcome.request & crate::runtime::STARTUP_POLLING_REQUEST_BIT != 0 {
+            let initial_read = outcome.request & crate::runtime::STARTUP_POLLING_READ_BIT != 0;
             if let Some(observation) = self.tooltip_rates.get(&outcome.key) {
                 self.tray_polling
                     .observations
                     .insert(outcome.key.clone(), observation.clone());
-                self.tray_polling
-                    .status
-                    .insert(outcome.key.clone(), "Saved startup rate verified.".into());
-                if let Some(previous) = outcome.previous {
+                self.tray_polling.status.insert(
+                    outcome.key.clone(),
+                    if initial_read {
+                        "Startup rate read."
+                    } else {
+                        "Saved startup rate verified."
+                    }
+                    .into(),
+                );
+                if !initial_read && let Some(previous) = outcome.previous {
                     self.tray_polling
                         .previous
                         .insert(outcome.key.clone(), previous);
                 }
             } else if let Some(failure) = &outcome.failure {
-                self.tray_polling
-                    .status
-                    .insert(outcome.key.clone(), format!("Startup restore: {failure}"));
-                self.tray_polling_feedback(&outcome.key);
+                self.tray_polling.status.insert(
+                    outcome.key.clone(),
+                    format!(
+                        "Startup {}: {failure}",
+                        if initial_read { "rate read" } else { "restore" }
+                    ),
+                );
+                if !initial_read {
+                    self.tray_polling_feedback(&outcome.key);
+                }
             }
             return;
         }
@@ -5250,9 +5263,14 @@ mod dashboard_lifecycle_tests {
     #[test]
     fn native_dashboard_reopens_after_nested_close_and_external_destruction() {
         let _guard = NATIVE_TEST_LOCK.lock().unwrap();
+        for restore in [false, true] {
+            exercise_native_dashboard(restore);
+        }
+    }
+    fn exercise_native_dashboard(restore: bool) {
         let mut settings = Settings {
             polling_controls: true,
-            restore_polling_on_startup: true,
+            restore_polling_on_startup: restore,
             ..Settings::default()
         };
         settings
@@ -5342,6 +5360,18 @@ mod dashboard_lifecycle_tests {
                     state.drain();
                 }
                 assert!(state.tooltip_rates.contains_key("simulated:mouse"));
+                assert!(state.dashboard.is_none());
+                assert!(state.controls.is_empty());
+                let hz = if restore { 2000 } else { 1000 };
+                let expected_tip = format!("Polling: {hz} Hz (last confirmed)");
+                assert_eq!(
+                    state.tray_polling.previous.contains_key("simulated:mouse"),
+                    restore
+                );
+                let tray = state.trays.get("simulated:mouse").unwrap();
+                let text =
+                    String::from_utf16(tray.data.szTip.split(|u| *u == 0).next().unwrap()).unwrap();
+                assert!(text.contains(&expected_tip), "{text}");
                 let previous_generation = state.tray_polling.generation;
                 state.runtime.send(Command::Refresh);
                 let deadline = Instant::now() + Duration::from_secs(5);
@@ -5356,14 +5386,14 @@ mod dashboard_lifecycle_tests {
                 let tray = state.trays.get("simulated:mouse").unwrap();
                 let text =
                     String::from_utf16(tray.data.szTip.split(|u| *u == 0).next().unwrap()).unwrap();
-                assert!(text.contains("Polling: 2000 Hz (last confirmed)"), "{text}");
+                assert!(text.contains(&expected_tip), "{text}");
                 state.snapshot.devices[0].reading.connection = Connection::Sleeping;
                 state.snapshot.devices[0].text = "Simulated mouse: sleeping".into();
                 state.sync_trays(TrayUpdate::Changed);
                 let tray = state.trays.get("simulated:mouse").unwrap();
                 let text =
                     String::from_utf16(tray.data.szTip.split(|u| *u == 0).next().unwrap()).unwrap();
-                assert!(text.contains("Polling: 2000 Hz (last confirmed)"), "{text}");
+                assert!(text.contains(&expected_tip), "{text}");
                 // Restore the empty-inventory baseline for the lifecycle scenarios below.
                 state.settings = Settings::default();
                 state.polling = PollingUi::default();

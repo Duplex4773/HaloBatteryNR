@@ -28,6 +28,8 @@ Python application is maintained externally as a reference.
   Logitech and MCHOSE mice and five wired Razer keyboards. Supported mouse tray
   menus select a rate directly; tooltips retain the last confirmed rate without
   querying on hover. Optional startup restore applies saved selections once.
+  With controls enabled, a one-time startup read fills mouse tooltips without
+  opening the dashboard; sleeping or inaccessible devices may need Refresh later.
 - **Batteryless keyboards:** appear on Devices without battery tray icons, alerts,
   history or estimates. Recognized Corsair models, including K70 RGB Pro, explain
   why polling changes are unavailable under the one-time-only configuration policy.

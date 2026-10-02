@@ -13,6 +13,9 @@
   batched SQLite history with 30-day retention and awake-use estimates.
 - Optional guarded polling controls, tray mouse rate selection, default-off
   startup restoration, and separately scoped batteryless keyboard inventory.
+- Supported mouse rates are read once during startup discovery when controls are
+  enabled, so tray tooltips populate without dashboard/flyout interaction. Startup
+  transactions wait for local worker capacity before being consumed.
 - Wireless DeathAdder V4 Pro configured-rate changes user verified at 125,
   500, 1000, 2000, 4000 and 8000 Hz on 2 October 2026. Parent battery reports
   remain separately labelled; no other-model or certification claim is implied.

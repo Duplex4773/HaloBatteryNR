@@ -147,13 +147,14 @@ try {
   Close-Menu
   Start-Sleep -Milliseconds 500
   $popup = Open-PollingMenu
-  if ([HaloPollingProbe]::Text($popup.menu,0) -like 'Last confirmed:*') { throw 'Opening the menu unexpectedly confirmed a rate without an explicit request.' }
+  if ([HaloPollingProbe]::Text($popup.menu,0) -ne 'Last confirmed: 1000 Hz') { throw 'Startup read did not populate the tray rate without dashboard interaction.' }
+  if ([HaloPollingProbe]::Position($popup.menu,511) -ge 0) { throw 'A read-only startup must not offer Restore previous.' }
   $rates = @(125,500,1000,2000,4000,8000)
   for ($i=0;$i -lt $rates.Count;$i++) {
     $id = [uint32](520+$i)
     $position = [HaloPollingProbe]::Position($popup.menu,$id)
     if ($position -lt 0 -or [HaloPollingProbe]::Text($popup.menu,$position) -ne "$($rates[$i]) Hz" -or ![HaloPollingProbe]::Enabled($popup.menu,$id)) { throw 'Submenu does not immediately offer the candidate simulation rates.' }
-    if ([HaloPollingProbe]::Checked($popup.menu,$id)) { throw 'An unobserved candidate rate must not have a confirmation checkmark.' }
+    if ([HaloPollingProbe]::Checked($popup.menu,$id) -ne ($rates[$i] -eq 1000)) { throw 'Startup readback must check only the confirmed 1000 Hz rate.' }
   }
   [HaloShot]::Save($popup.window,(Join-Path $folder 'polling-submenu.png'))
   $image = [Drawing.Bitmap]::new((Join-Path $folder 'polling-submenu.png'))

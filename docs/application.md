@@ -50,6 +50,11 @@ polling controls once in Settings; no preliminary Refresh is needed. The worker
 reads and validates the hardware before changing it, then verifies readback.
 Opening the submenu performs no hardware I/O. Last-confirmed checkmarks, optional
 Refresh and Restore previous are available; the submenu shares the system theme.
+With polling controls enabled, supported online mice get one guarded rate read
+during the first 60 seconds after launch, including background launch. Tooltips
+therefore fill without opening a dashboard or flyout. Saved startup restoration
+supplies its own readback; its request waits for local worker capacity. No recurring
+rate queries are added, and sleeping or inaccessible devices may need Refresh later.
 
 Noncharging battery rings turn orange at **30%** by default, then red at the
 device's configured low-alert threshold (20% by default). Charging remains green.

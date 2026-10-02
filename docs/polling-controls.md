@@ -32,15 +32,23 @@ the observation. **Restore saved rates at startup** is a second, default-off
 option. When both options are enabled at launch, each supported online device
 discovered in the first 60 seconds gets one attempt to restore its saved selection.
 The normal GET-before / SET / GET-after path validates it; an already matching
-rate performs no SET. Busy, gaming-blocked, unavailable or uncertain attempts are
-not retried. Settings changes or suspend cancel remaining startup attempts.
+rate performs no SET. Requests wait for a free local worker-queue slot before
+dispatch. Once dispatched, device BUSY, gaming-blocked, unavailable or uncertain
+attempts are not retried. Settings changes or suspend cancel remaining startup attempts.
 Opening another instance, later reconnects, scheduled refreshes and closing the
 dashboard do not enforce rates. Keyboards still require Devices to be visible
 and discovered within that startup window; no background keyboard discovery is
 added. The initial queue is bounded to 512 saved devices.
 
 Device hover tooltips append the last successfully read-back polling rate. They
-use a bounded cached observation, never a saved/requested rate. Pending manual
+are populated by one guarded, read-only startup query per supported online mouse
+when polling controls are enabled, even with startup restoration disabled. The
+mouse must be discovered within the first 60 seconds; a sleeping or inaccessible
+device may need an explicit Refresh rate later. A startup restore already includes
+readback and does not trigger a duplicate query. Keyboard-only discovery remains
+limited to visible Devices. No recurring rate polling or hover queries are added.
+
+Tooltips use a bounded cached observation, never a saved/requested rate. Pending manual
 writes, failed readbacks, missing/stale/changed identities or disabling
 controls remove that confirmation. Enumeration epoch changes and Refresh revoke
 Apply/Restore evidence but preserve the labelled last-confirmed tooltip when the

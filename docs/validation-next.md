@@ -4,6 +4,43 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro. Inherited parent battery reports and Rust
 hardware checks are labelled separately in [device support](device-support.md).
 
+## Startup tooltip checkpoint, 2 October 2026
+
+The portable executable is **2,835,456 bytes (2.70 MiB)**,
+SHA256 `5B87049516921E69A45ADE8A68132A39A74D8F5C117170237C18A8FD246425C4`.
+Formatting, strict Clippy, **508 tests**, release build, production API restrictions
+and the 459-ID coverage gate pass.
+
+Supported online battery mice get one guarded startup rate read when controls are
+enabled, independent of saved-rate restoration. The native test checks the actual
+tray tooltip before any dashboard exists, with restoration both off and on; it
+also checks refresh/sleep retention. Read-only startup creates no Restore previous
+value. Saved requests never become evidence. Unknown devices, keyboards, sleeping
+devices, disabled controls, cancellation and startup-window expiry are excluded.
+
+Startup requests now wait for local worker-queue capacity before being consumed.
+Once dispatched, failed or uncertain transactions are not retried automatically.
+Tests cover repeated local backpressure and verify that releasing the queue emits
+only the intended single Read or Apply. Restore readback suppresses a duplicate
+startup read. Existing workers, waits and connection epochs are reused.
+
+The isolated native tray tests pass for read-only startup, startup restoration,
+direct selection, Restore previous and explicit Refresh, with the dashboard closed.
+All automated rate changes use simulation; these checks establish no new hardware
+verification. There is no recurring rate polling or hover I/O.
+
+A separate read-only hardware smoke received verified DeathAdder V4 Pro readback
+with startup restoration disabled and without opening the dashboard or flyout.
+It used isolated settings, battery discovery and a GET request; no rate changes
+were attempted. This does not measure effective USB reporting frequency.
+
+A **120-second** controlled background run used one simulated charging mouse,
+animation off, controls enabled, five dashboard cycles and Explorer/resume event
+replays. Private memory averaged **5.54 MiB** (peak **14.08 MiB** while native caches
+settled); CPU averaged **0.065% of one logical core**. GDI handles remained 17 and
+USER handles went from 18 to 17 across the cycles. This is a separate smoke
+measurement, not a replacement for the historical comparison workloads below.
+
 ## Standalone repository checkpoint, 2 October 2026
 
 The workspace, build scripts and portable output now live at repository root.
