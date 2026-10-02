@@ -6,6 +6,27 @@ and press **Apply rate** for a read–write–read transaction. Success requires
 required acknowledgments and matching fresh device readback. This is a configured
 rate, not an independent measurement of effective USB reporting frequency.
 
+For supported mice, right-click their tray icon and open **Polling rate**, then
+select a rate directly. No preliminary Refresh is required. With controls disabled,
+the submenu links to Settings to enable the existing opt-in. Opening the menu uses
+cached device metadata only; it adds no HID queries, timer or background work.
+The selected rate goes through the existing worker's exact-device/capability checks,
+GET-before → SET → GET-after transaction and gaming-state restrictions.
+
+Before a hardware read, rates are model-based choices, not confirmed capabilities
+of the connected receiver/firmware. Unsupported choices are rejected before a
+rate-changing command. After a successful readback the submenu uses the reported
+rate list and checks the last confirmed rate. **Refresh hardware rate** remains
+available to read without changing anything; **Restore previous** uses the verified
+before-value from the last change in that tray session. The dashboard remains closed,
+and the tray reports success or failure. Neither opening the menu nor selecting a
+saved device preference applies a rate automatically. Keyboard controls remain on
+Devices because batteryless keyboards do not have tray icons.
+
+Dashboard and tray writes clear each other's cached confirmation. A pending write
+continues to block another configuration request even if its dashboard page closes.
+Connection changes invalidate confirmations and previous-rate recovery values.
+
 The setting defaults off. The last requested selection is stored separately from
 the observation; startup, reconnect, scheduled battery refresh and closing the
 dashboard never apply it. Reconnection invalidates the observed target and the

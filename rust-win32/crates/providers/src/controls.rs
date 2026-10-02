@@ -10,6 +10,95 @@ use std::time::Duration;
 /// support must never grant permission to send configuration commands.
 pub const POLLING_PROVIDERS: &[&str] = &["razer", "logitech", "mchose"];
 
+/// Pure menu visibility hint for a battery mouse. This neither discovers a
+/// capability nor authorizes commands: the controller must still resolve the
+/// exact collection and verify connection capabilities when executing a request.
+/// `name` is the provider's reading name, never the user's display-name override.
+pub fn polling_menu_candidate(device: &ConfigurationDevice) -> bool {
+    if device.kind != "mouse" || !matches!(device.capability, PollingCapability::ReadWrite) {
+        return false;
+    }
+    if device.source == "simulation" {
+        return device.via.is_empty() || device.via == "usb";
+    }
+    match device.source.as_str() {
+        "razer" if device.via == "usb" => {
+            let Some(rest) = device.key.strip_prefix("razer:") else {
+                return false;
+            };
+            let Some((pid, identity)) = rest.split_once(':') else {
+                return false;
+            };
+            // Mirrors the mouse-only PID scope in razer_controls::protocol.
+            !identity.trim().is_empty()
+                && matches!(pid, "00be" | "00bf" | "009f" | "00c1" | "00b6" | "00b7")
+        }
+        "logitech" if device.via.is_empty() || device.via == "usb" => {
+            // The HID++ battery provider currently leaves `via` empty and keeps
+            // the unit identity, but not the model pair, in ConfigurationDevice.
+            // Exact provider names are only hints for an explicit guarded request.
+            let Some(unit) = device.serial.as_deref().map(str::trim) else {
+                return false;
+            };
+            unit.len() == 8
+                && unit.bytes().all(|b| b.is_ascii_hexdigit())
+                && unit.bytes().any(|b| b != b'0')
+                && device.key.eq_ignore_ascii_case(&format!("logitech:{unit}"))
+                && matches!(
+                    device.name.trim().to_ascii_uppercase().as_str(),
+                    "PRO X 2"
+                        | "LOGITECH PRO X 2"
+                        | "PRO X SUPERLIGHT 2"
+                        | "LOGITECH G PRO X SUPERLIGHT 2"
+                        | "PRO X 2 DEX"
+                        | "LOGITECH PRO X 2 DEX"
+                        | "PRO X SUPERLIGHT 2 DEX"
+                        | "LOGITECH G PRO X SUPERLIGHT 2 DEX"
+                        | "PRO X2 SUPERSTRIKE"
+                        | "PRO X 2 SUPERSTRIKE"
+                        | "LOGITECH PRO X2 SUPERSTRIKE"
+                        | "LOGITECH G PRO X2 SUPERSTRIKE"
+                )
+        }
+        "mchose" if device.via == "usb" => {
+            device
+                .key
+                .strip_prefix("mchose:3837:")
+                .is_some_and(|identity| !identity.trim().is_empty())
+                && matches!(
+                    device.name.trim().to_ascii_uppercase().as_str(),
+                    "MCHOSE A7 V2 ULTRA" | "MCHOSE A7 V2 ULTRA+"
+                )
+        }
+        _ => false,
+    }
+}
+
+/// Possible menu choices from passive metadata, without HID discovery or I/O.
+/// These hints are not observed supported rates: the selected model, advertised
+/// mask, connection ceiling and control mode are verified during execution.
+/// In particular, Logitech's stable unit key does not identify its receiver, so
+/// a hint above that connection's ceiling may be refused without sending a SET.
+pub fn polling_menu_rates(device: &ConfigurationDevice) -> &'static [u32] {
+    if !polling_menu_candidate(device) {
+        return &[];
+    }
+    match device.source.as_str() {
+        "razer"
+            if device.key.starts_with("razer:00b6:") || device.key.starts_with("razer:00b7:") =>
+        {
+            razer_controls::LEGACY_RATES
+        }
+        "razer" => razer_controls::EXTENDED_RATES,
+        "mchose" => crate::mchose_controls::RATES,
+        // Mirrors the possible indexed mask values in logitech_controls. The
+        // selected connection may expose only a subset, which execution checks.
+        "logitech" => &[125, 250, 500, 1000, 2000, 4000, 8000],
+        "simulation" => &[125, 500, 1000, 2000, 4000, 8000],
+        _ => &[],
+    }
+}
+
 #[derive(Default)]
 pub struct HidDeviceController;
 

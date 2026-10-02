@@ -40,6 +40,12 @@ including native controls, history graphics and the tray context menu. Windows h
 take priority. Tray appearance remains independently configurable. Unplugged
 or hidden devices still follow the existing per-device tray identity rules.
 
+Supported mouse tray icons also offer **Polling rate → desired rate**. Enable
+polling controls once in Settings; no preliminary Refresh is needed. The worker
+reads and validates the hardware before changing it, then verifies readback.
+Opening the submenu performs no hardware I/O. Last-confirmed checkmarks, optional
+Refresh and Restore previous are available; the submenu shares the system theme.
+
 Noncharging battery rings turn orange at **30%** by default, then red at the
 device's configured low-alert threshold (20% by default). Charging remains green.
 Settings → Orange warning % adjusts the visual band; zero disables orange.

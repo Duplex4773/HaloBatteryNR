@@ -4,9 +4,40 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
+## Direct tray polling checkpoint, 2 October 2026
+
+The current portable executable is **2,785,280 bytes (2.66 MiB)**,
+SHA256 `44F39252F369A1C43A5293077577BA66161D16D8D8049FC5D03EECF463356E6F`.
+Formatting, strict workspace Clippy, **461 behavioral tests**, the optimized
+release build and production API restrictions pass. Two optional timing tests
+remain ignored; the 459-ID upstream coverage mapping is unchanged.
+
+Supported mouse tray menus offer model-based rate choices immediately, without
+an initial Refresh. These choices grant no hardware authorization: execution
+retains exact-device and connection checks, GET-before, SET and verified readback.
+Opening or hovering the menu performs no device I/O and adds no timers. Tests
+cover offline/pending states, identity and generation changes, unsupported
+devices, checkmarks based only on observations, and abandoned dashboard writes.
+
+The isolated native-menu validator opens and reopens the submenu without reading
+a rate, selects 2000 Hz directly, confirms it, restores the observed previous
+1000 Hz and optionally refreshes. The dashboard stays closed throughout. The
+submenu matches the system app palette; nested-menu ownership, keyboard routing
+and fallback styling have regression coverage. No physical rate was changed.
+
+The release also passes the existing dashboard theme, navigation, settings and
+polling regression checks, forty dashboard close/reopen cycles and duplicate
+launch recovery. USER/GDI counts are stable across the warm dashboard cycles;
+eight ordinary tray popup cycles retain 15 GDI handles. Source and executable
+privacy checks pass. GitHub workflows remain disabled.
+
+The resource figures below remain measurements of the earlier optimization
+build. This feature build has not had another three-minute CPU/memory comparison;
+the new menu performs work only when opened or explicitly used.
+
 ## Performance follow-up checkpoint, 2 October 2026
 
-The current portable executable is **2,767,872 bytes (2.64 MiB)**,
+At this checkpoint, the portable executable was **2,767,872 bytes (2.64 MiB)**,
 SHA256 `3D2CF85FDCDB3B6616431D448BB72B28C5F7B19120B28C11981064290454266F`.
 Formatting, strict workspace Clippy, **451 behavioral tests**, the optimized
 release build and production API restrictions pass. Two optional timing tests

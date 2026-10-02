@@ -22,8 +22,8 @@ use windows::{
         System::LibraryLoader::GetModuleHandleW,
         UI::{
             Controls::{
-                DRAWITEMSTRUCT, MEASUREITEMSTRUCT, ODS_DISABLED, ODS_GRAYED, ODS_NOACCEL,
-                ODS_SELECTED, ODT_MENU,
+                DRAWITEMSTRUCT, MEASUREITEMSTRUCT, ODS_CHECKED, ODS_DISABLED, ODS_GRAYED,
+                ODS_NOACCEL, ODS_SELECTED, ODT_MENU,
             },
             HiDpi::*,
             Input::KeyboardAndMouse::EnableWindow,
@@ -195,6 +195,11 @@ struct PollingUi {
     status: BTreeMap<String, String>,
 }
 impl PollingUi {
+    fn revoke_observation(&mut self, key: &str) {
+        self.observations.remove(key);
+        self.status
+            .insert(key.into(), "Hardware rate needs verification.".into());
+    }
     fn abandon(&mut self) {
         self.pending = None;
     }
@@ -244,6 +249,21 @@ impl PollingUi {
         reading: ConfigurationDevice,
         intent: PollingIntent,
     ) -> Result<ControlRequest, &'static str> {
+        self.begin_inner(reading, intent, false)
+    }
+    fn begin_tray(
+        &mut self,
+        reading: ConfigurationDevice,
+        intent: PollingIntent,
+    ) -> Result<ControlRequest, &'static str> {
+        self.begin_inner(reading, intent, true)
+    }
+    fn begin_inner(
+        &mut self,
+        reading: ConfigurationDevice,
+        intent: PollingIntent,
+        tray: bool,
+    ) -> Result<ControlRequest, &'static str> {
         if self.pending.is_some() {
             return Err("A device request is already pending");
         }
@@ -258,19 +278,34 @@ impl PollingUi {
                 },
                 ControlAction::Read,
             ),
-            PollingIntent::Apply { rate, .. } => {
-                let observation = self
-                    .observations
-                    .get(&reading.key)
-                    .ok_or("Refresh the hardware rate before applying")?;
-                if observation.target.device != reading
-                    || observation.target.generation != self.generation
-                    || observation.rate.is_none()
-                    || !observation.supported.contains(&rate)
+            PollingIntent::Apply { rate, restore } => {
+                let observation = self.observations.get(&reading.key).filter(|o| {
+                    o.target.device == reading && o.target.generation == self.generation
+                });
+                if let Some(observation) = observation {
+                    if !observation.supported.contains(&rate)
+                        || (observation.rate.is_none() && (!tray || restore))
+                    {
+                        return Err("Select a rate supported by this connection");
+                    }
+                    (observation.target.clone(), ControlAction::Apply(rate))
+                } else if tray
+                    && !restore
+                    && hb_providers::controls::polling_menu_rates(&reading).contains(&rate.hz())
                 {
+                    // This is an explicit user selection, not an observed rate.
+                    // Existing controllers resolve exact hardware capabilities,
+                    // GET the current value, then SET and verify in one job.
+                    (
+                        ControlTarget {
+                            device: reading,
+                            generation: self.generation,
+                        },
+                        ControlAction::Apply(rate),
+                    )
+                } else {
                     return Err("Refresh the hardware rate and select a supported value");
                 }
-                (observation.target.clone(), ControlAction::Apply(rate))
             }
         };
         self.sequence = self.sequence.wrapping_add(1).max(1);
@@ -693,6 +728,7 @@ struct State {
     error: String,
     font: HFONT,
     polling: PollingUi,
+    tray_polling: PollingUi,
     insights: InsightsUi,
     polling_intents: BTreeMap<String, (u64, PollingRate)>,
 }
@@ -778,6 +814,7 @@ pub fn run(
                 error: initial_error.unwrap_or_default(),
                 font,
                 polling: PollingUi::default(),
+                tray_polling: PollingUi::default(),
                 insights: InsightsUi::default(),
                 polling_intents: BTreeMap::new(),
             }),
@@ -2075,6 +2112,7 @@ impl State {
                 self.polling.abandon();
                 if !self.settings.polling_controls {
                     self.polling.observations.clear();
+                    self.tray_polling.invalidate(self.tray_polling.generation);
                 }
                 self.build()
             }
@@ -2373,12 +2411,21 @@ impl State {
         self.request_polling(reading, PollingIntent::Apply { rate, restore });
     }
     fn request_polling(&mut self, reading: ConfigurationDevice, intent: PollingIntent) {
+        if self.tray_polling.pending.is_some() || !self.polling_intents.is_empty() {
+            self.polling.status.insert(
+                reading.key,
+                "A hardware configuration request is already pending".into(),
+            );
+            self.polling_controls();
+            return;
+        }
+        self.polling.sequence = self.polling.sequence.max(self.tray_polling.sequence);
         let key = reading.key.clone();
         match self.polling.begin(reading, intent) {
             Ok(request) => match self.runtime.submit_control(request.clone()) {
                 Ok(()) => {
                     if let PollingIntent::Apply { rate, .. } = intent {
-                        self.polling_intents.insert(key, (request.request, rate));
+                        self.record_polling_intent(&key, request.request, rate);
                     }
                 }
                 Err(error) => {
@@ -2392,12 +2439,21 @@ impl State {
         }
         self.polling_controls();
     }
+    fn record_polling_intent(&mut self, key: &str, request: u64, rate: PollingRate) {
+        self.polling_intents.insert(key.into(), (request, rate));
+        // A page close can abandon its UI request while a submitted write still
+        // completes. Revoke evidence in both surfaces before the worker replies.
+        self.polling.revoke_observation(key);
+        self.tray_polling.revoke_observation(key);
+    }
     fn polling_outcome(&mut self, outcome: ControlOutcome) {
         // Preserve explicit intent even when the user has left the page; never use an observation as a setting.
         if let Some(&(request, rate)) = self.polling_intents.get(&outcome.key)
             && request == outcome.request
         {
             self.polling_intents.remove(&outcome.key);
+            self.polling.revoke_observation(&outcome.key);
+            self.tray_polling.revoke_observation(&outcome.key);
             self.settings
                 .devices
                 .entry(outcome.key.clone())
@@ -2405,8 +2461,38 @@ impl State {
                 .requested_polling_rate = Some(rate);
             self.save();
         }
+        let tray_key = self
+            .tray_polling
+            .pending
+            .as_ref()
+            .filter(|p| p.request == outcome.request && p.key == outcome.key)
+            .map(|p| (p.key.clone(), p.intent));
+        if let Some((key, intent)) = tray_key {
+            if self.tray_polling.accept(&outcome, Some(&key)) {
+                if intent == PollingIntent::Read
+                    && outcome.failure.is_none()
+                    && self
+                        .tray_polling
+                        .observations
+                        .get(&key)
+                        .is_some_and(|o| o.rate.is_some())
+                {
+                    self.tray_polling.status.insert(
+                        key.clone(),
+                        "Hardware rate read. Select a rate in the polling menu to apply.".into(),
+                    );
+                }
+                // A tray operation invalidates the dashboard's cached read so it
+                // cannot present the previous rate as the newly confirmed value.
+                self.polling.observations.remove(&key);
+                self.tray_polling_feedback(&key);
+                self.polling_controls();
+            }
+            return;
+        }
         let key = self.visible_polling_device().map(|r| r.key);
         if self.polling.accept(&outcome, key.as_deref()) {
+            self.tray_polling.observations.remove(&outcome.key);
             self.polling_controls();
         }
     }
@@ -2472,6 +2558,7 @@ impl State {
                 Event::Polling(outcome) => self.polling_outcome(*outcome),
                 Event::PollingInvalidated(generation) => {
                     self.polling.invalidate(generation);
+                    self.tray_polling.invalidate(generation);
                     polling_invalidated = true;
                 }
                 Event::Diagnostics(d) => self.diagnostics = d,
@@ -2529,6 +2616,8 @@ impl State {
                 .map(|d| d.reading.key.clone());
             let previous_device = self.current_device().map(|(d, _)| d);
             self.snapshot = s;
+            self.tray_polling
+                .retain_inventory(&self.snapshot.devices, &[]);
             let current_device = self.current_device().map(|(d, _)| d);
             self.selected_device = current_device.as_ref().map(|d| d.key.clone());
             if previous_device != current_device {
@@ -2702,6 +2791,22 @@ impl State {
             let Ok(menu) = popup_menu(&self.snapshot, &self.settings, key.as_deref()) else {
                 return;
             };
+            // Build from cached metadata only; opening/hovering never performs HID I/O.
+            let choices = key
+                .as_deref()
+                .and_then(|key| self.tray_polling_device(key))
+                .map(|device| {
+                    tray_polling_choices(
+                        &device,
+                        &self.settings,
+                        &self.tray_polling,
+                        self.polling.pending.is_some() || !self.polling_intents.is_empty(),
+                    )
+                })
+                .unwrap_or_default();
+            if !choices.is_empty() && append_polling_menu(menu.0, &choices).is_err() {
+                return;
+            }
             let palette = Palette::new(
                 hb_windows::system::dashboard_dark_theme(),
                 hb_windows::system::high_contrast(),
@@ -2723,10 +2828,90 @@ impl State {
             // Destroy the native menu before releasing the brush it references.
             drop(menu);
             (*self.context).popup.take();
-            if chosen.0 != 0 {
+            if let Some(choice) = choices
+                .iter()
+                .find(|choice| choice.id == chosen.0 as u16 && choice.enabled && choice.id != 0)
+            {
+                if let Some(key) = key.as_deref() {
+                    self.tray_polling_command(key, choice.action);
+                }
+            } else if chosen.0 != 0 {
                 self.command(chosen.0 as u16, 0)
             }
             let _ = PostMessageW(Some(self.monitor), WM_APP + 7, WPARAM(0), LPARAM(0));
+        }
+    }
+    fn tray_polling_device(&self, key: &str) -> Option<ConfigurationDevice> {
+        let reading = &self
+            .snapshot
+            .devices
+            .iter()
+            .find(|d| d.reading.key == key && !d.hidden)?
+            .reading;
+        let device = ConfigurationDevice::from_reading(reading);
+        hb_providers::controls::polling_menu_candidate(&device).then_some(device)
+    }
+    fn tray_polling_command(&mut self, key: &str, action: TrayPollingAction) {
+        if action == TrayPollingAction::Settings {
+            self.page = 3;
+            self.configuration_visibility();
+            self.open();
+            self.build();
+            return;
+        }
+        let Some(device) = self.tray_polling_device(key) else {
+            return;
+        };
+        if !self.settings.polling_controls
+            || self.polling.pending.is_some()
+            || !self.polling_intents.is_empty()
+        {
+            return;
+        }
+        let intent = match action {
+            TrayPollingAction::Read => PollingIntent::Read,
+            TrayPollingAction::Apply(rate) => PollingIntent::Apply {
+                rate,
+                restore: false,
+            },
+            TrayPollingAction::Restore => {
+                let Some(&rate) = self.tray_polling.previous.get(key) else {
+                    return;
+                };
+                PollingIntent::Apply {
+                    rate,
+                    restore: true,
+                }
+            }
+            TrayPollingAction::Settings | TrayPollingAction::None => return,
+        };
+        self.tray_polling.sequence = self.tray_polling.sequence.max(self.polling.sequence);
+        match self.tray_polling.begin_tray(device, intent) {
+            Ok(request) => match self.runtime.submit_control(request.clone()) {
+                Ok(()) => {
+                    if let PollingIntent::Apply { rate, .. } = intent {
+                        self.record_polling_intent(key, request.request, rate);
+                    }
+                }
+                Err(error) => {
+                    self.tray_polling.abandon();
+                    self.tray_polling
+                        .status
+                        .insert(key.into(), error.to_string());
+                    self.tray_polling_feedback(key);
+                }
+            },
+            Err(error) => {
+                self.tray_polling.status.insert(key.into(), error.into());
+                self.tray_polling_feedback(key);
+            }
+        }
+    }
+    fn tray_polling_feedback(&mut self, key: &str) {
+        if let Some(message) = self.tray_polling.status.get(key)
+            && let Some(tray) = self.trays.get_mut(key)
+        {
+            let _ = tray.show_message("Polling rate", message);
         }
     }
 }
@@ -2818,10 +3003,15 @@ fn tray_dark(settings: &Settings) -> bool {
 
 impl NotificationSink for Tray {
     fn deliver(&mut self, n: &Notification) -> Result<(), ProviderError> {
+        self.show_message(&n.title, &n.text)
+    }
+}
+impl Tray {
+    fn show_message(&mut self, title: &str, text: &str) -> Result<(), ProviderError> {
         let mut data = self.data;
         data.uFlags = NIF_GUID | NIF_INFO;
-        copy(&mut data.szInfoTitle, &n.title);
-        copy(&mut data.szInfo, &n.text);
+        copy(&mut data.szInfoTitle, title);
+        copy(&mut data.szInfo, text);
         data.dwInfoFlags = NIIF_INFO;
         if unsafe { Shell_NotifyIconW(NIM_MODIFY, &data) }.as_bool() {
             Ok(())
@@ -3105,12 +3295,18 @@ mod behaviour_tests {
 /// Documented owner drawing keeps native popup navigation, command IDs, item
 /// strings and accessibility. High contrast retains the system's native menu.
 struct PopupItem {
+    menu: HMENU,
+    position: u32,
+    submenu: bool,
+    native_type: MENU_ITEM_TYPE,
+    native_data: usize,
     text: Vec<u16>,
     separator: bool,
     enabled: bool,
 }
 struct PopupAppearance {
     menu: HMENU,
+    menus: Vec<(HMENU, HBRUSH)>,
     palette: Palette,
     items: Vec<PopupItem>,
     font: HFONT,
@@ -3168,6 +3364,7 @@ impl PopupAppearance {
             );
             let mut appearance = Self {
                 menu,
+                menus: Vec::new(),
                 palette,
                 items: Vec::new(),
                 font,
@@ -3189,34 +3386,59 @@ impl PopupAppearance {
                 return None;
             }
             SelectObject(hdc, font.into());
-            for index in 0..GetMenuItemCount(Some(menu)).max(0) as u32 {
-                let mut info = MENUITEMINFOW {
-                    cbSize: size_of::<MENUITEMINFOW>() as u32,
-                    fMask: MIIM_FTYPE | MIIM_STATE,
+            let mut pending_menus = vec![menu];
+            let mut next_menu = 0;
+            while next_menu < pending_menus.len() {
+                let menu = pending_menus[next_menu];
+                next_menu += 1;
+                let mut native_menu = MENUINFO {
+                    cbSize: size_of::<MENUINFO>() as u32,
+                    fMask: MIM_BACKGROUND,
                     ..Default::default()
                 };
-                if GetMenuItemInfoW(menu, index, true, &mut info).is_err() {
+                if GetMenuInfo(menu, &mut native_menu).is_err() {
                     let _ = RestoreDC(hdc, saved);
                     ReleaseDC(Some(owner), hdc);
                     return None;
                 }
-                let mut text = [0u16; 2048];
-                let length =
-                    GetMenuStringW(menu, index, Some(&mut text), MF_BYPOSITION).max(0) as usize;
-                let text = text[..length].to_vec();
-                let mut rect = RECT::default();
-                let mut measure = text.clone();
-                if !measure.is_empty() {
-                    DrawTextW(hdc, &mut measure, &mut rect, DT_SINGLELINE | DT_CALCRECT);
+                appearance.menus.push((menu, native_menu.hbrBack));
+                for index in 0..GetMenuItemCount(Some(menu)).max(0) as u32 {
+                    let mut info = MENUITEMINFOW {
+                        cbSize: size_of::<MENUITEMINFOW>() as u32,
+                        fMask: MIIM_FTYPE | MIIM_STATE | MIIM_SUBMENU | MIIM_DATA,
+                        ..Default::default()
+                    };
+                    if GetMenuItemInfoW(menu, index, true, &mut info).is_err() {
+                        let _ = RestoreDC(hdc, saved);
+                        ReleaseDC(Some(owner), hdc);
+                        return None;
+                    }
+                    let mut text = [0u16; 2048];
+                    let length =
+                        GetMenuStringW(menu, index, Some(&mut text), MF_BYPOSITION).max(0) as usize;
+                    let text = text[..length].to_vec();
+                    let mut rect = RECT::default();
+                    let mut measure = text.clone();
+                    if !measure.is_empty() {
+                        DrawTextW(hdc, &mut measure, &mut rect, DT_SINGLELINE | DT_CALCRECT);
+                    }
+                    appearance.width = appearance
+                        .width
+                        .max((rect.right - rect.left).max(0) as u32 + (padding * 2) as u32);
+                    appearance.items.push(PopupItem {
+                        menu,
+                        position: index,
+                        submenu: !info.hSubMenu.is_invalid(),
+                        native_type: info.fType,
+                        native_data: info.dwItemData,
+                        text,
+                        separator: info.fType.0 & MFT_SEPARATOR.0 != 0,
+                        enabled: info.fState.0 & (MFS_DISABLED.0 | MFS_GRAYED.0) == 0,
+                    });
+                    if !info.hSubMenu.is_invalid() && !pending_menus.contains(&info.hSubMenu) {
+                        pending_menus.push(info.hSubMenu);
+                    }
                 }
-                appearance.width = appearance
-                    .width
-                    .max((rect.right - rect.left).max(0) as u32 + (padding * 2) as u32);
-                appearance.items.push(PopupItem {
-                    text,
-                    separator: info.fType.0 & MFT_SEPARATOR.0 != 0,
-                    enabled: info.fState.0 & (MFS_DISABLED.0 | MFS_GRAYED.0) == 0,
-                });
             }
             let _ = RestoreDC(hdc, saved);
             ReleaseDC(Some(owner), hdc);
@@ -3234,7 +3456,7 @@ impl PopupAppearance {
                     dwItemData: index + 1,
                     ..Default::default()
                 };
-                if SetMenuItemInfoW(menu, index as u32, true, &info).is_err() {
+                if SetMenuItemInfoW(item.menu, item.position, true, &info).is_err() {
                     appearance.restore_native();
                     return None;
                 }
@@ -3245,46 +3467,58 @@ impl PopupAppearance {
                 hbrBack: appearance.background,
                 ..Default::default()
             };
-            if SetMenuInfo(menu, &info).is_err() {
-                appearance.restore_native();
-                return None;
+            for (menu, _) in &appearance.menus {
+                if SetMenuInfo(*menu, &info).is_err() {
+                    appearance.restore_native();
+                    return None;
+                }
             }
             Some(Rc::new(appearance))
         }
     }
     fn restore_native(&self) {
         unsafe {
-            for (index, item) in self.items.iter().enumerate() {
+            for item in &self.items {
                 let info = MENUITEMINFOW {
                     cbSize: size_of::<MENUITEMINFOW>() as u32,
                     fMask: MIIM_FTYPE | MIIM_DATA,
-                    fType: if item.separator {
-                        MFT_SEPARATOR
-                    } else {
-                        MFT_STRING
-                    },
-                    dwItemData: 0,
+                    fType: item.native_type,
+                    dwItemData: item.native_data,
                     ..Default::default()
                 };
-                let _ = SetMenuItemInfoW(self.menu, index as u32, true, &info);
+                let _ = SetMenuItemInfoW(item.menu, item.position, true, &info);
+            }
+            // Original brushes belong to the menus' caller; never delete them.
+            for (menu, background) in &self.menus {
+                let info = MENUINFO {
+                    cbSize: size_of::<MENUINFO>() as u32,
+                    fMask: MIM_BACKGROUND,
+                    hbrBack: *background,
+                    ..Default::default()
+                };
+                let _ = SetMenuInfo(*menu, &info);
             }
         }
     }
     fn mnemonic(&self, character: char) -> LRESULT {
+        self.mnemonic_in(self.menu, character)
+    }
+    fn mnemonic_in(&self, menu: HMENU, character: char) -> LRESULT {
         let matches = self
             .items
             .iter()
-            .enumerate()
-            .filter(|(_, item)| {
-                item.enabled && menu_mnemonic(&item.text) == Some(character.to_ascii_lowercase())
+            .filter(|item| {
+                item.menu == menu
+                    && item.enabled
+                    && menu_mnemonic(&item.text) == Some(character.to_ascii_lowercase())
             })
-            .map(|(index, _)| index)
+            .map(|item| item.position)
             .collect::<Vec<_>>();
         if matches.is_empty() {
             return LRESULT((MNC_IGNORE << 16) as isize);
         }
         let selected = matches.iter().position(|index| unsafe {
-            GetMenuState(self.menu, *index as u32, MF_BYPOSITION) & MF_HILITE.0 != 0
+            GetMenuState(menu, *index, MF_BYPOSITION) & MF_HILITE.0 != 0
         });
         let index = matches[selected.map_or(0, |selected| (selected + 1) % matches.len())];
         let action = if matches.len() == 1 {
@@ -3292,7 +3526,7 @@ impl PopupAppearance {
         } else {
             MNC_SELECT
         };
-        LRESULT((index as u32 | action << 16) as isize)
+        LRESULT((index | action << 16) as isize)
     }
     fn message(&self, message: u32, wp: WPARAM, lp: LPARAM) -> Option<LRESULT> {
         if !matches!(message, WM_DRAWITEM | WM_MEASUREITEM | WM_MENUCHAR) {
@@ -3300,10 +3534,16 @@ impl PopupAppearance {
         }
         unsafe {
             if message == WM_MENUCHAR {
-                if HMENU(lp.0 as *mut _) != self.menu {
+                let menu = HMENU(lp.0 as *mut _);
+                if !self.menus.iter().any(|(registered, _)| *registered == menu) {
                     return None;
                 }
-                return Some(self.mnemonic(char::from_u32((wp.0 & 0xffff) as u32)?));
+                let character = char::from_u32((wp.0 & 0xffff) as u32)?;
+                return Some(if menu == self.menu {
+                    self.mnemonic(character)
+                } else {
+                    self.mnemonic_in(menu, character)
+                });
             }
             if lp.0 == 0 {
                 return None;
@@ -3323,10 +3563,13 @@ impl PopupAppearance {
                 return Some(LRESULT(1));
             }
             let item = &*(lp.0 as *const DRAWITEMSTRUCT);
-            if item.CtlType != ODT_MENU || item.hwndItem.0 != self.menu.0 {
+            if item.CtlType != ODT_MENU {
                 return None;
             }
             let entry = self.items.get(item.itemData.checked_sub(1)?)?;
+            if item.hwndItem.0 != entry.menu.0 {
+                return None;
+            }
             let saved = SaveDC(item.hDC);
             SelectObject(item.hDC, self.font.into());
             let selected = item.itemState.0 & ODS_SELECTED.0 != 0;
@@ -3370,6 +3613,28 @@ impl PopupAppearance {
                 if !text.is_empty() {
                     DrawTextW(item.hDC, &mut text, &mut rect, flags);
                 }
+                if item.itemState.0 & ODS_CHECKED.0 != 0 {
+                    let mut check_rect = item.rcItem;
+                    check_rect.right = check_rect.left + self.padding;
+                    let mut check = ['✓' as u16];
+                    DrawTextW(
+                        item.hDC,
+                        &mut check,
+                        &mut check_rect,
+                        DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX,
+                    );
+                }
+                if entry.submenu {
+                    let mut arrow_rect = item.rcItem;
+                    arrow_rect.left = arrow_rect.right - self.padding;
+                    let mut arrow = ['›' as u16];
+                    DrawTextW(
+                        item.hDC,
+                        &mut arrow,
+                        &mut arrow_rect,
+                        DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX,
+                    );
+                }
             }
             let _ = RestoreDC(item.hDC, saved);
             Some(LRESULT(1))
@@ -3382,6 +3647,146 @@ impl Drop for Popup {
         unsafe {
             let _ = DestroyMenu(self.0);
         }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TrayPollingAction {
+    None,
+    Settings,
+    Read,
+    Apply(PollingRate),
+    Restore,
+}
+struct TrayPollingChoice {
+    id: u16,
+    text: String,
+    enabled: bool,
+    checked: bool,
+    action: TrayPollingAction,
+}
+fn tray_polling_choices(
+    device: &ConfigurationDevice,
+    settings: &Settings,
+    polling: &PollingUi,
+    dashboard_pending: bool,
+) -> Vec<TrayPollingChoice> {
+    let choice = |id, text: String, enabled, action| TrayPollingChoice {
+        id,
+        text,
+        enabled,
+        checked: false,
+        action,
+    };
+    if !settings.polling_controls {
+        return vec![choice(
+            512,
+            "Enable polling controls in &Settings…".into(),
+            true,
+            TrayPollingAction::Settings,
+        )];
+    }
+    let available = device.online() && polling.pending.is_none() && !dashboard_pending;
+    let observed = polling
+        .observations
+        .get(&device.key)
+        .filter(|o| o.target.device == *device && o.target.generation == polling.generation);
+    let current = observed.and_then(|o| o.rate);
+    let mut choices = vec![
+        choice(
+            0,
+            if !device.online() {
+                "Device is sleeping or unavailable".into()
+            } else if polling.pending.is_some() || dashboard_pending {
+                "Device request in progress…".into()
+            } else {
+                current.map_or_else(
+                    || "Select a rate; hardware support is checked before changing".into(),
+                    |r| format!("Last confirmed: {} Hz", r.hz()),
+                )
+            },
+            false,
+            TrayPollingAction::None,
+        ),
+        choice(
+            510,
+            "&Refresh hardware rate".into(),
+            available,
+            TrayPollingAction::Read,
+        ),
+    ];
+    let rates = observed.map_or_else(
+        || {
+            hb_providers::controls::polling_menu_rates(device)
+                .iter()
+                .filter_map(|rate| PollingRate::try_from(*rate).ok())
+                .collect::<Vec<_>>()
+        },
+        |o| o.supported.clone(),
+    );
+    for (index, rate) in rates.iter().take(7).enumerate() {
+        let mut row = choice(
+            520 + index as u16,
+            format!("{} Hz", rate.hz()),
+            available,
+            TrayPollingAction::Apply(*rate),
+        );
+        row.checked = current == Some(*rate);
+        choices.push(row);
+    }
+    if let Some(observation) = observed
+        && let Some(previous) = polling.previous.get(&device.key)
+        && observation.supported.contains(previous)
+    {
+        choices.push(choice(
+            511,
+            format!("Restore &previous ({} Hz)", previous.hz()),
+            available && current.is_some() && current != Some(*previous),
+            TrayPollingAction::Restore,
+        ));
+    }
+    if let Some(status) = polling.status.get(&device.key) {
+        let mut text: String = status.chars().take(90).collect();
+        if status.chars().count() > 90 {
+            text.push('…');
+        }
+        // Status text is data, never a keyboard mnemonic.
+        choices.push(choice(
+            0,
+            text.replace('&', "&&"),
+            false,
+            TrayPollingAction::None,
+        ));
+    }
+    choices
+}
+fn append_polling_menu(menu: HMENU, choices: &[TrayPollingChoice]) -> windows::core::Result<()> {
+    unsafe {
+        let submenu = Popup(CreatePopupMenu()?);
+        for choice in choices {
+            let text = wide(&choice.text);
+            let flags = MF_STRING
+                | if choice.enabled {
+                    MF_ENABLED
+                } else {
+                    MF_GRAYED
+                }
+                | if choice.checked {
+                    MF_CHECKED
+                } else {
+                    MF_UNCHECKED
+                };
+            AppendMenuW(submenu.0, flags, choice.id as usize, PCWSTR(text.as_ptr()))?;
+        }
+        InsertMenuW(
+            menu,
+            4,
+            MF_BYPOSITION | MF_POPUP,
+            submenu.0.0 as usize,
+            w!("&Polling rate"),
+        )?;
+        // DestroyMenu on the parent now owns the entire submenu tree.
+        std::mem::forget(submenu);
+        Ok(())
     }
 }
 fn popup_menu(
@@ -3423,6 +3828,199 @@ fn popup_menu(
 #[cfg(test)]
 mod popup_tests {
     use super::*;
+    fn polling_fixture() -> (ConfigurationDevice, Settings, PollingUi) {
+        let mut reading = Reading::new("simulated:mouse", "Simulated mouse", "simulation", 0);
+        reading.kind = "mouse".into();
+        let device = ConfigurationDevice::from_reading(&reading);
+        let settings = Settings {
+            polling_controls: true,
+            ..Default::default()
+        };
+        (device, settings, PollingUi::default())
+    }
+    #[test]
+    fn tray_rate_hints_are_immediate_but_only_readback_is_checked() {
+        let (device, settings, mut polling) = polling_fixture();
+        let choices = tray_polling_choices(&device, &settings, &polling, false);
+        assert!(
+            choices
+                .iter()
+                .any(|c| c.enabled && c.action == TrayPollingAction::Read)
+        );
+        assert!(
+            choices
+                .iter()
+                .any(|c| c.enabled && matches!(c.action, TrayPollingAction::Apply(_)))
+        );
+        assert!(choices.iter().all(|c| !c.checked));
+        let requested = PollingRate::try_from(2000).unwrap();
+        let direct = polling
+            .begin_tray(
+                device.clone(),
+                PollingIntent::Apply {
+                    rate: requested,
+                    restore: false,
+                },
+            )
+            .unwrap();
+        assert_eq!(direct.action, ControlAction::Apply(requested));
+        assert_eq!(direct.target.generation, polling.generation);
+        assert!(polling.observations.is_empty());
+        polling.abandon();
+        let request = polling.begin(device.clone(), PollingIntent::Read).unwrap();
+        let rate = PollingRate::try_from(1000).unwrap();
+        let outcome = ControlOutcome {
+            request: request.request,
+            key: device.key.clone(),
+            observation: Some(PollingObservation {
+                target: ControlTarget {
+                    device: device.clone(),
+                    generation: 3,
+                },
+                supported: vec![rate, PollingRate::try_from(8000).unwrap()],
+                rate: Some(rate),
+                timestamp: 5,
+                evidence: "Invented readback".into(),
+            }),
+            previous: None,
+            may_have_changed: false,
+            failure: None,
+        };
+        assert!(polling.accept(&outcome, Some(&device.key)));
+        let choices = tray_polling_choices(&device, &settings, &polling, false);
+        assert_eq!(
+            choices
+                .iter()
+                .filter(|c| matches!(c.action, TrayPollingAction::Apply(_)))
+                .count(),
+            2
+        );
+        assert!(
+            choices
+                .iter()
+                .any(|c| c.checked && c.action == TrayPollingAction::Apply(rate))
+        );
+        assert!(
+            !tray_polling_choices(&device, &settings, &polling, true)
+                .iter()
+                .any(|c| c.enabled)
+        );
+        let mut sleeping = device.clone();
+        sleeping.connection = Connection::Sleeping;
+        assert!(
+            !tray_polling_choices(&sleeping, &settings, &polling, false)
+                .iter()
+                .any(|c| c.enabled)
+        );
+        let mut replaced = device.clone();
+        replaced.serial = Some("invented-replacement".into());
+        assert!(
+            !tray_polling_choices(&replaced, &settings, &polling, false)
+                .iter()
+                .any(|c| c.checked)
+        );
+        polling
+            .previous
+            .insert(device.key.clone(), PollingRate::try_from(8000).unwrap());
+        assert!(
+            tray_polling_choices(&device, &settings, &polling, false)
+                .iter()
+                .any(|c| c.enabled && c.action == TrayPollingAction::Restore)
+        );
+        polling.invalidate(4);
+        assert!(
+            !tray_polling_choices(&device, &settings, &polling, false)
+                .iter()
+                .any(|c| matches!(c.action, TrayPollingAction::Restore))
+        );
+        let disabled = tray_polling_choices(&device, &Settings::default(), &polling, false);
+        assert_eq!(disabled.len(), 1);
+        assert_eq!(disabled[0].action, TrayPollingAction::Settings);
+    }
+    #[test]
+    fn revoked_polling_evidence_cannot_survive_abandoned_ui_write() {
+        let (device, settings, mut polling) = polling_fixture();
+        let rate = PollingRate::try_from(1000).unwrap();
+        polling.observations.insert(
+            device.key.clone(),
+            PollingObservation {
+                target: ControlTarget {
+                    device: device.clone(),
+                    generation: 0,
+                },
+                supported: vec![rate],
+                rate: Some(rate),
+                timestamp: 0,
+                evidence: "Invented".into(),
+            },
+        );
+        polling
+            .begin(
+                device.clone(),
+                PollingIntent::Apply {
+                    rate,
+                    restore: false,
+                },
+            )
+            .unwrap();
+        polling.revoke_observation(&device.key);
+        assert!(polling.pending.is_some());
+        polling.abandon();
+        assert!(
+            !tray_polling_choices(&device, &settings, &polling, false)
+                .iter()
+                .any(|c| c.checked)
+        );
+        assert!(
+            polling
+                .begin(
+                    device,
+                    PollingIntent::Apply {
+                        rate,
+                        restore: false
+                    }
+                )
+                .is_err()
+        );
+    }
+    #[test]
+    fn native_polling_submenu_keeps_ids_disabled_states_and_checkmarks() {
+        let _guard = NATIVE_TEST_LOCK.lock().unwrap();
+        let menu = popup_menu(&Snapshot::default(), &Settings::default(), None).unwrap();
+        let rate = PollingRate::try_from(8000).unwrap();
+        let choices = vec![
+            TrayPollingChoice {
+                id: 0,
+                text: "Read first".into(),
+                enabled: false,
+                checked: false,
+                action: TrayPollingAction::None,
+            },
+            TrayPollingChoice {
+                id: 510,
+                text: "&Refresh".into(),
+                enabled: true,
+                checked: false,
+                action: TrayPollingAction::Read,
+            },
+            TrayPollingChoice {
+                id: 520,
+                text: "8000 Hz".into(),
+                enabled: true,
+                checked: true,
+                action: TrayPollingAction::Apply(rate),
+            },
+        ];
+        append_polling_menu(menu.0, &choices).unwrap();
+        unsafe {
+            let child = GetSubMenu(menu.0, GetMenuItemCount(Some(menu.0)) - 1);
+            assert!(!child.is_invalid());
+            assert_eq!(GetMenuItemCount(Some(child)), 3);
+            assert_ne!(GetMenuState(child, 0, MF_BYPOSITION) & MF_GRAYED.0, 0);
+            assert_eq!(GetMenuItemID(child, 1), 510);
+            assert_ne!(GetMenuState(child, 520, MF_BYCOMMAND) & MF_CHECKED.0, 0);
+        }
+    }
     fn menu_text(menu: HMENU, index: u32) -> String {
         unsafe {
             let mut text = [0u16; 256];
@@ -3485,6 +4083,80 @@ mod popup_theme_tests {
         System::Threading::{GR_GDIOBJECTS, GetGuiResources},
         UI::Controls::ODS_FLAGS,
     };
+    #[test]
+    fn nested_popups_register_unique_items_and_restore_native_metadata() {
+        let _guard = NATIVE_TEST_LOCK.lock().unwrap();
+        unsafe {
+            let menu = Popup(CreatePopupMenu().unwrap());
+            let submenu = CreatePopupMenu().unwrap();
+            let nested = CreatePopupMenu().unwrap();
+            AppendMenuW(nested, MF_STRING, 703, w!("&Refresh")).unwrap();
+            AppendMenuW(submenu, MF_STRING, 702, w!("&Rate")).unwrap();
+            AppendMenuW(submenu, MF_POPUP, nested.0 as usize, w!("&More")).unwrap();
+            AppendMenuW(menu.0, MF_STRING, 700, w!("&Root")).unwrap();
+            AppendMenuW(menu.0, MF_POPUP, submenu.0 as usize, w!("&Polling rate")).unwrap();
+            let native = MENUITEMINFOW {
+                cbSize: size_of::<MENUITEMINFOW>() as u32,
+                fMask: MIIM_DATA,
+                dwItemData: 77,
+                ..Default::default()
+            };
+            SetMenuItemInfoW(submenu, 0, true, &native).unwrap();
+            let appearance =
+                PopupAppearance::new(menu.0, HWND::default(), Palette::new(true, false)).unwrap();
+            assert_eq!(appearance.menus.len(), 3);
+            assert_eq!(appearance.items.len(), 5);
+            let mut data = std::collections::BTreeSet::new();
+            for (handle, _) in &appearance.menus {
+                let mut background = MENUINFO {
+                    cbSize: size_of::<MENUINFO>() as u32,
+                    fMask: MIM_BACKGROUND,
+                    ..Default::default()
+                };
+                GetMenuInfo(*handle, &mut background).unwrap();
+                assert_eq!(background.hbrBack, appearance.background);
+                for position in 0..GetMenuItemCount(Some(*handle)) as u32 {
+                    let mut info = MENUITEMINFOW {
+                        cbSize: size_of::<MENUITEMINFOW>() as u32,
+                        fMask: MIIM_FTYPE | MIIM_DATA,
+                        ..Default::default()
+                    };
+                    GetMenuItemInfoW(*handle, position, true, &mut info).unwrap();
+                    assert_ne!(info.fType.0 & MFT_OWNERDRAW.0, 0);
+                    assert!(data.insert(info.dwItemData));
+                }
+            }
+            for handle in [menu.0, submenu, nested] {
+                let result = appearance
+                    .message(WM_MENUCHAR, WPARAM('r' as usize), LPARAM(handle.0 as isize))
+                    .unwrap()
+                    .0 as u32;
+                assert_eq!(result >> 16, MNC_EXECUTE);
+                assert_eq!(result & 0xffff, 0);
+            }
+            assert_eq!(appearance.mnemonic('m').0 as u32 >> 16, MNC_IGNORE);
+            appearance.restore_native();
+            let mut restored = MENUITEMINFOW {
+                cbSize: size_of::<MENUITEMINFOW>() as u32,
+                fMask: MIIM_FTYPE | MIIM_DATA,
+                ..Default::default()
+            };
+            GetMenuItemInfoW(submenu, 0, true, &mut restored).unwrap();
+            assert_eq!(restored.dwItemData, 77);
+            assert_eq!(restored.fType.0 & MFT_OWNERDRAW.0, 0);
+            for (handle, original) in &appearance.menus {
+                let mut background = MENUINFO {
+                    cbSize: size_of::<MENUINFO>() as u32,
+                    fMask: MIM_BACKGROUND,
+                    ..Default::default()
+                };
+                GetMenuInfo(*handle, &mut background).unwrap();
+                assert_eq!(background.hbrBack, *original);
+            }
+            drop(menu);
+            drop(appearance);
+        }
+    }
     #[test]
     fn menu_mnemonics_skip_escaped_ampersands() {
         assert_eq!(
@@ -4328,6 +5000,7 @@ mod dashboard_lifecycle_tests {
                     error: String::new(),
                     font: HFONT::default(),
                     polling: PollingUi::default(),
+                    tray_polling: PollingUi::default(),
                     insights: InsightsUi::default(),
                     polling_intents: BTreeMap::new(),
                 }),
