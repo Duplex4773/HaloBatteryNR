@@ -4,9 +4,35 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
+## Startup polling and tray tooltip checkpoint, 2 October 2026
+
+The portable executable is **2,831,872 bytes (2.70 MiB)**,
+SHA256 `C6D3B021A6B85829C1B4B90074C891B2FF79FC8654352B50FEE1A7296D974923`.
+Formatting, strict workspace Clippy, **505 behavioral tests**, optimized release
+build, production API restrictions and source privacy checks pass. Two optional
+timing tests remain ignored. All 459 upstream IDs remain accounted for.
+
+Startup restore is separately opt-in and defaults off. Tests cover persisted
+settings, permission/connection cancellation, expiry, one attempt only, keyboard
+visibility and no-op writes. A simulated native launch restores saved 2000 Hz,
+displays its confirmed value in the tray menu with the dashboard closed, and
+allows a subsequent explicit 1000 Hz change. The normal direct tray selection,
+readback and Restore previous regression also passes. No physical SET is sent
+by these tests; hardware support labels remain unchanged. Native Settings confirms
+the new checkbox persists independently; theme, keyboard navigation and forty
+dashboard close/reopen cycles pass with stable USER/GDI handles.
+
+Tooltip tests validate confirmed evidence, failed/stale readbacks, identity and
+generation changes, long Unicode names and the fixed Shell buffer. Hover adds
+no queries or timers. Initial Windows watcher inventory events no longer trigger
+a refresh/invalidation per installed device; real connection events remain active.
+Startup uses existing workers and a bounded queue, with no ongoing enforcement.
+The earlier three-minute resource measurement below belongs to its checkpoint;
+this build has not been assigned a new CPU or memory benchmark.
+
 ## Insights and prediction checkpoint, 2 October 2026
 
-The current portable executable is **2,811,392 bytes (2.68 MiB)**,
+That checkpoint's portable executable was **2,811,392 bytes (2.68 MiB)**,
 SHA256 `A947E0A6E805A7EB0AD549D7FF7457500D28AF54F87CDE6736CD32B79DB32AEC`.
 Formatting, strict workspace Clippy, **493 behavioral tests**, the optimized
 release build and production API restrictions pass; two optional timing tests

@@ -308,7 +308,8 @@ impl PollingUi {
                 }
             }
         };
-        self.sequence = self.sequence.wrapping_add(1).max(1);
+        self.sequence =
+            (self.sequence.wrapping_add(1) & !crate::runtime::STARTUP_POLLING_REQUEST_BIT).max(1);
         self.pending = Some(PendingPolling {
             request: self.sequence,
             key: target.device.key.clone(),
@@ -779,6 +780,7 @@ struct State {
     tray_polling: PollingUi,
     insights: InsightsUi,
     polling_intents: BTreeMap<String, (u64, PollingRate)>,
+    tooltip_rates: BTreeMap<String, PollingObservation>,
 }
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
@@ -788,6 +790,68 @@ fn copy(dst: &mut [u16], s: &str) {
     let limit = dst.len().saturating_sub(1);
     for (target, character) in dst.iter_mut().take(limit).zip(s.encode_utf16()) {
         *target = character;
+    }
+}
+fn cache_tooltip_rate(
+    cache: &mut BTreeMap<String, PollingObservation>,
+    outcome: &ControlOutcome,
+    generation: u64,
+    enabled: bool,
+) {
+    cache.remove(&outcome.key);
+    if enabled
+        && outcome.failure.is_none()
+        && let Some(observation) = &outcome.observation
+        && observation.target.generation == generation
+        && observation.target.device.key == outcome.key
+        && observation.rate.is_some()
+    {
+        if cache.len() >= 512 {
+            cache.pop_first();
+        }
+        cache.insert(outcome.key.clone(), observation.clone());
+    }
+}
+/// Fixed Shell buffer; reserve the rate line even for a long renamed device.
+/// Hover itself does no allocation, device I/O or timer work.
+fn copy_tray_tooltip(
+    dst: &mut [u16],
+    device: &DeviceView,
+    observation: Option<&PollingObservation>,
+) {
+    let rate = observation
+        .filter(|o| {
+            device.reading.connection != Connection::Stale
+                && o.target.device.matches_reading(&device.reading)
+        })
+        .and_then(|o| o.rate);
+    let suffix = match rate.map(|r| r.hz()) {
+        Some(125) => "\nPolling: 125 Hz (last confirmed)",
+        Some(250) => "\nPolling: 250 Hz (last confirmed)",
+        Some(500) => "\nPolling: 500 Hz (last confirmed)",
+        Some(1000) => "\nPolling: 1000 Hz (last confirmed)",
+        Some(2000) => "\nPolling: 2000 Hz (last confirmed)",
+        Some(4000) => "\nPolling: 4000 Hz (last confirmed)",
+        Some(8000) => "\nPolling: 8000 Hz (last confirmed)",
+        _ => "",
+    };
+    dst.fill(0);
+    let available = dst.len().saturating_sub(1);
+    let suffix_len = suffix.len().min(available);
+    let prefix_limit = available - suffix_len;
+    let mut position = 0;
+    for character in device.text.chars() {
+        let mut encoded = [0; 2];
+        let units = character.encode_utf16(&mut encoded);
+        if position + units.len() > prefix_limit {
+            break;
+        }
+        dst[position..position + units.len()].copy_from_slice(units);
+        position += units.len();
+    }
+    for unit in suffix.encode_utf16().take(suffix_len) {
+        dst[position] = unit;
+        position += 1;
     }
 }
 
@@ -865,6 +929,7 @@ pub fn run(
                 tray_polling: PollingUi::default(),
                 insights: InsightsUi::default(),
                 polling_intents: BTreeMap::new(),
+                tooltip_rates: BTreeMap::new(),
             }),
             monitor: Cell::new(HWND::default()),
             paint: RefCell::new(None),
@@ -908,7 +973,8 @@ pub fn run(
         if !background {
             state.open();
         }
-        state.runtime.send(Command::Refresh);
+        // Runtime schedules initial discovery itself. Refresh here would invalidate
+        // a startup restore that completed while the window was being created.
         drop(state);
         let mut message = MSG::default();
         loop {
@@ -1713,7 +1779,15 @@ impl State {
                     self.settings.polling_controls,
                     20,
                     258,
-                    740,
+                    365,
+                );
+                self.check(
+                    113,
+                    "Restore saved rates at startup",
+                    self.settings.restore_polling_on_startup,
+                    410,
+                    258,
+                    370,
                 );
                 self.label(200, "Battery refresh interval", 20, 302, 230);
                 self.edit(201, &self.settings.interval.to_string(), 260, 298, 100);
@@ -2134,6 +2208,7 @@ impl State {
                     return;
                 }
                 value["polling_controls"] = self.checked(112).into();
+                value["restore_polling_on_startup"] = self.checked(113).into();
                 value["interval"] = interval.unwrap().into();
                 value["low"] = low.unwrap().into();
                 value["warning_level"] = warning.unwrap().into();
@@ -2164,6 +2239,7 @@ impl State {
                 self.save();
                 self.polling.abandon();
                 if !self.settings.polling_controls {
+                    self.tooltip_rates.clear();
                     self.polling.observations.clear();
                     self.tray_polling.invalidate(self.tray_polling.generation);
                 }
@@ -2498,8 +2574,38 @@ impl State {
         // completes. Revoke evidence in both surfaces before the worker replies.
         self.polling.revoke_observation(key);
         self.tray_polling.revoke_observation(key);
+        self.tooltip_rates.remove(key);
+        self.sync_trays(TrayUpdate::Changed);
     }
     fn polling_outcome(&mut self, outcome: ControlOutcome) {
+        cache_tooltip_rate(
+            &mut self.tooltip_rates,
+            &outcome,
+            self.polling.generation.max(self.tray_polling.generation),
+            self.settings.polling_controls,
+        );
+        self.sync_trays(TrayUpdate::Changed);
+        if outcome.request & crate::runtime::STARTUP_POLLING_REQUEST_BIT != 0 {
+            if let Some(observation) = self.tooltip_rates.get(&outcome.key) {
+                self.tray_polling
+                    .observations
+                    .insert(outcome.key.clone(), observation.clone());
+                self.tray_polling
+                    .status
+                    .insert(outcome.key.clone(), "Saved startup rate verified.".into());
+                if let Some(previous) = outcome.previous {
+                    self.tray_polling
+                        .previous
+                        .insert(outcome.key.clone(), previous);
+                }
+            } else if let Some(failure) = &outcome.failure {
+                self.tray_polling
+                    .status
+                    .insert(outcome.key.clone(), format!("Startup restore: {failure}"));
+                self.tray_polling_feedback(&outcome.key);
+            }
+            return;
+        }
         // Preserve explicit intent even when the user has left the page; never use an observation as a setting.
         if let Some(&(request, rate)) = self.polling_intents.get(&outcome.key)
             && request == outcome.request
@@ -2596,6 +2702,7 @@ impl State {
     }
     fn drain(&mut self) {
         let mut latest = None;
+        let mut polling_outcomes = Vec::new();
         let mut polling_invalidated = false;
         let mut polling_selection_changed = false;
         while let Ok(e) = self.runtime.events.try_recv() {
@@ -2608,8 +2715,10 @@ impl State {
                 } => {
                     self.configuration_inventory(generation, devices, failure);
                 }
-                Event::Polling(outcome) => self.polling_outcome(*outcome),
+                Event::Polling(outcome) => polling_outcomes.push(*outcome),
                 Event::PollingInvalidated(generation) => {
+                    self.tooltip_rates.clear();
+                    self.sync_trays(TrayUpdate::Changed);
                     self.polling.invalidate(generation);
                     self.tray_polling.invalidate(generation);
                     polling_invalidated = true;
@@ -2669,6 +2778,13 @@ impl State {
                 .map(|d| d.reading.key.clone());
             let previous_device = self.current_device().map(|(d, _)| d);
             self.snapshot = s;
+            self.tooltip_rates.retain(|key, observation| {
+                self.snapshot.devices.iter().any(|d| {
+                    &d.reading.key == key
+                        && d.reading.connection != Connection::Stale
+                        && observation.target.device.matches_reading(&d.reading)
+                })
+            });
             self.tray_polling
                 .retain_inventory(&self.snapshot.devices, &[]);
             let current_device = self.current_device().map(|(d, _)| d);
@@ -2745,6 +2861,11 @@ impl State {
                 }
             }
         }
+        // Startup readback can arrive before its first battery snapshot. Apply
+        // the inventory first; generation checks still reject invalidated replies.
+        for outcome in polling_outcomes {
+            self.polling_outcome(outcome);
+        }
         if polling_invalidated || polling_selection_changed {
             self.polling_controls();
             self.read_polling();
@@ -2785,7 +2906,13 @@ impl State {
                     changed = true
                 }
                 let old = t.data.szTip;
-                copy(&mut t.data.szTip, &d.text);
+                copy_tray_tooltip(
+                    &mut t.data.szTip,
+                    d,
+                    self.tooltip_rates
+                        .get(&d.reading.key)
+                        .filter(|_| settings.polling_controls),
+                );
                 changed |= old != t.data.szTip;
                 t.data.hIcon = t.frames[t.frame].0;
                 t.registration
@@ -2801,7 +2928,13 @@ impl State {
                     guidItem: GUID::from_u128(stable_guid(&d.reading.key)),
                     ..Default::default()
                 };
-                copy(&mut data.szTip, &d.text);
+                copy_tray_tooltip(
+                    &mut data.szTip,
+                    d,
+                    self.tooltip_rates
+                        .get(&d.reading.key)
+                        .filter(|_| settings.polling_controls),
+                );
                 let mut registration = TrayRegistration::default();
                 registration.update_with(&data, update, true, &mut shell_notify);
                 self.trays.insert(
@@ -4899,6 +5032,86 @@ mod tray_registration_tests {
 }
 
 #[cfg(test)]
+mod tooltip_polling_tests {
+    use super::*;
+    fn fixture() -> (DeviceView, ControlOutcome) {
+        let mut reading = Reading::new("synthetic", "Test mouse", "simulation", 10);
+        reading.kind = "mouse".into();
+        reading.level = Some(100);
+        let device = DeviceView {
+            reading: reading.clone(),
+            name: reading.name.clone(),
+            icon: "mouse".into(),
+            low_alert_at: 15,
+            seconds_left: None,
+            text: "Test mouse: 100%".into(),
+            hidden: false,
+        };
+        let observation = PollingObservation {
+            target: ControlTarget {
+                device: ConfigurationDevice::from_reading(&reading),
+                generation: 3,
+            },
+            supported: vec![PollingRate::try_from(2000).unwrap()],
+            rate: Some(PollingRate::try_from(2000).unwrap()),
+            timestamp: 10,
+            evidence: "Simulation".into(),
+        };
+        (
+            device,
+            ControlOutcome {
+                request: 1,
+                key: reading.key,
+                observation: Some(observation),
+                previous: None,
+                may_have_changed: false,
+                failure: None,
+            },
+        )
+    }
+    fn text(buffer: &[u16]) -> String {
+        String::from_utf16(buffer.split(|u| *u == 0).next().unwrap()).unwrap()
+    }
+    #[test]
+    fn tooltip_uses_confirmed_rate_and_drops_failed_or_revoked_evidence() {
+        let (device, mut outcome) = fixture();
+        let mut cache = BTreeMap::new();
+        let mut tip = [0u16; 128];
+        cache_tooltip_rate(&mut cache, &outcome, 3, true);
+        copy_tray_tooltip(&mut tip, &device, cache.get("synthetic"));
+        assert_eq!(
+            text(&tip),
+            "Test mouse: 100%\nPolling: 2000 Hz (last confirmed)"
+        );
+        outcome.failure = Some("Readback failed".into());
+        cache_tooltip_rate(&mut cache, &outcome, 3, true);
+        copy_tray_tooltip(&mut tip, &device, cache.get("synthetic"));
+        assert_eq!(text(&tip), device.text);
+        outcome.failure = None;
+        for (generation, enabled) in [(4, true), (3, false)] {
+            cache_tooltip_rate(&mut cache, &outcome, generation, enabled);
+            assert!(cache.is_empty());
+        }
+    }
+    #[test]
+    fn tooltip_reserves_rate_line_without_splitting_unicode_and_matches_identity() {
+        let (mut device, outcome) = fixture();
+        device.text = "🖱".repeat(128);
+        let mut tip = [0u16; 128];
+        copy_tray_tooltip(&mut tip, &device, outcome.observation.as_ref());
+        assert_eq!(tip[127], 0);
+        assert!(text(&tip).ends_with("Polling: 2000 Hz (last confirmed)"));
+        device.reading.serial = Some("other-synthetic-unit".into());
+        copy_tray_tooltip(&mut tip, &device, outcome.observation.as_ref());
+        assert!(!text(&tip).contains("Polling:"));
+        device.reading.serial = None;
+        device.reading.connection = Connection::Stale;
+        copy_tray_tooltip(&mut tip, &device, outcome.observation.as_ref());
+        assert!(!text(&tip).contains("Polling:"));
+    }
+}
+
+#[cfg(test)]
 mod insights_tests {
     use super::*;
     #[test]
@@ -5085,6 +5298,7 @@ mod dashboard_lifecycle_tests {
                     tray_polling: PollingUi::default(),
                     insights: InsightsUi::default(),
                     polling_intents: BTreeMap::new(),
+                    tooltip_rates: BTreeMap::new(),
                 }),
                 monitor: Cell::new(HWND::default()),
                 paint: RefCell::new(None),

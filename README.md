@@ -26,11 +26,13 @@ Added features include:
 - Optional read/apply/restore polling-rate controls for supported Razer, Logitech
   and MCHOSE mice and five wired Razer keyboard models, including supported
   8000 Hz routes. Controls use ordinary
-  user-mode HID, default off and never apply saved rates automatically. See
+  user-mode HID and default off. Optional startup restore reapplies saved selections
+  once through verified transactions; it does not enforce rates continuously. See
   [supported models and limits](rust-win32/docs/polling-controls.md).
 - Direct polling-rate selection from supported mouse tray menus, with hardware
   validation and readback in one action. No preliminary Refresh or additional
   background polling; optional Refresh and Restore previous remain available.
+  Tray tooltips include the last hardware-confirmed rate without querying on hover.
 - Wired keyboards appear on Devices without battery rings, alerts or battery
   history. Known Corsair high-rate keyboards, including K70 RGB Pro, are listed
   with polling changes unavailable because their maintained software session

@@ -1,6 +1,6 @@
 # Native simulation only. Uses actual TrackPopupMenu selection, never WM_COMMAND.
 # All saved settings and screenshots belong to an isolated validation fixture.
-param([string]$Executable = '')
+param([string]$Executable = '', [switch]$Startup)
 $ErrorActionPreference = 'Stop'
 if (Get-Process HaloBatteryNext -ErrorAction SilentlyContinue) {
   throw 'Close the existing app before running this isolated polling test.'
@@ -8,7 +8,9 @@ if (Get-Process HaloBatteryNext -ErrorAction SilentlyContinue) {
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $folder = Join-Path $repo ('validation-local/tray-polling-' + [Guid]::NewGuid().ToString())
 [IO.Directory]::CreateDirectory($folder) | Out-Null
-@{animation=$false;status_file=$true;polling_controls=$true} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $folder 'config.json')
+$fixture = @{animation=$false;status_file=$true;polling_controls=$true;restore_polling_on_startup=[bool]$Startup}
+if ($Startup) { $fixture.devices = @{'simulated:mouse'=@{requested_polling_rate=2000}} }
+$fixture | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $folder 'config.json')
 # Reuse the same screenshot/process-scoped helpers as validate-tray-menu.ps1.
 if (-not ('HaloShot' -as [type])) {
   $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'validate-ui.ps1') -Raw
@@ -129,6 +131,18 @@ try {
   do { Start-Sleep -Milliseconds 100;$monitor=[HaloShot]::FindWindow($null,'Halo Battery Next monitor') } while ($monitor -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline)
   if ($monitor -eq [IntPtr]::Zero) { throw 'Simulation monitor missing.' }
   Start-Sleep -Seconds 3
+  if ($Startup) {
+    $popup = Wait-Confirmed 2000
+    if (![HaloPollingProbe]::Checked($popup.menu,523)) { throw 'Startup did not confirm saved 2000 Hz.' }
+    [HaloShot]::Save($popup.window,(Join-Path $folder 'startup-confirmed.png'))
+    Select-MenuAction $popup 522
+    $popup = Wait-Confirmed 1000
+    if (![HaloPollingProbe]::Checked($popup.menu,522)) { throw 'Explicit change after startup failed.' }
+    Close-Menu
+    Assert-DashboardClosed
+    'Saved 2000 Hz restored and confirmed at startup without opening dashboard; later explicit 1000 Hz change succeeded.'
+    return
+  }
   $popup = Open-PollingMenu
   Close-Menu
   Start-Sleep -Milliseconds 500

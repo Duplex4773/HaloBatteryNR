@@ -202,6 +202,16 @@ if($config.warning_level-ne35){throw 'Orange warning setting did not persist'}
 [HaloShot]::SendText([HaloShot]::GetDlgItem($dashboard,215),12,[UIntPtr]::Zero,'30')|Out-Null
 [HaloShot]::PostMessage($dashboard,273,[UIntPtr]210,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
 Write-Output 'Visual orange warning threshold persists independently of low-alert settings.'
+foreach($enabled in 1,0){
+ $startup=[HaloShot]::GetDlgItem($dashboard,113)
+ if($startup-eq[IntPtr]::Zero){throw 'Startup restore setting missing'}
+ [HaloShot]::SendMessage($startup,241,[UIntPtr]$enabled,[IntPtr]::Zero)|Out-Null
+ [HaloShot]::PostMessage($dashboard,273,[UIntPtr]210,[IntPtr]::Zero)|Out-Null
+ Start-Sleep -Milliseconds 300
+ $config=Get-Content (Join-Path $folder 'config.json') -Raw|ConvertFrom-Json
+ if($config.restore_polling_on_startup-ne[bool]$enabled){throw 'Startup restore checkbox did not persist'}
+}
+Write-Output 'Startup restore checkbox persists independently of polling permission.'
 
 [HaloShot]::PostMessage($monitor,32777,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 200
 if([HaloShot]::FindWindow($null,'Halo Battery Next')-ne[IntPtr]::Zero){throw 'Dashboard did not close'}

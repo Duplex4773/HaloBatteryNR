@@ -116,7 +116,11 @@ with software control mode required; legacy C53A and direct USB are limited to
 1000 Hz. MCHOSE A7 V2 Ultra+ has an 8000-Hz wireless route restricted to its
 100B receiver, exact paired model and firmware 5.46.2.4. Other receivers/models
 remain unavailable until their target identity and protocol are established.
-Saved selections are never applied automatically. Readback verifies configuration,
+Enable **Restore saved rates at startup** to make one guarded attempt per saved
+device discovered during the first minute. This is separate from polling controls
+and defaults off; failed or blocked attempts do not retry. There is no ongoing
+rate enforcement. Tray tooltips show the last hardware-confirmed rate, with no
+queries on hover. Readback verifies configuration,
 not independently measured effective frequency. See `docs/polling-controls.md`.
 
 Wired keyboard controls support Huntsman V2/Tenkeyless and BlackWidow V4/Pro/75%

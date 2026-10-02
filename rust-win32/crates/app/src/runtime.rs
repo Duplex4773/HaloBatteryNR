@@ -491,40 +491,61 @@ fn relevant_device_event(id: &str) -> bool {
     let id = id.to_ascii_uppercase();
     id.contains("BTH") || id.contains("HID#") || id.contains("BLUETOOTH")
 }
+/// The watcher's initial listing is discovery, not a connection transition.
+/// Providers already perform startup discovery; forwarding that listing would
+/// revoke a startup polling readback once for every installed HID device.
+#[derive(Default)]
+struct DeviceEventGate {
+    enumeration_completed: AtomicBool,
+}
+impl DeviceEventGate {
+    fn forward(&self, commands: &Sender<Command>, id: &str) {
+        if self.enumeration_completed.load(Ordering::Acquire) && relevant_device_event(id) {
+            let _ = commands.try_send(Command::Refresh);
+        }
+    }
+}
 struct DeviceEvents {
     watcher: DeviceWatcher,
     added: Option<i64>,
     updated: Option<i64>,
     removed: Option<i64>,
+    enumeration_completed: Option<i64>,
 }
 impl DeviceEvents {
     fn new(commands: &Sender<Command>) -> Option<Self> {
         let watcher = DeviceInformation::CreateWatcher().ok()?;
+        let gate = Arc::new(DeviceEventGate::default());
+        let completed_gate = gate.clone();
+        let enumeration_completed = watcher
+            .EnumerationCompleted(&TypedEventHandler::<_, windows::core::IInspectable>::new(
+                move |_, _| {
+                    completed_gate
+                        .enumeration_completed
+                        .store(true, Ordering::Release);
+                    Ok(())
+                },
+            ))
+            .ok()?;
         let tx = commands.clone();
+        let added_gate = gate.clone();
         let added = watcher
             .Added(&TypedEventHandler::<_, DeviceInformation>::new(
                 move |_, args| {
-                    if args
-                        .as_ref()
-                        .and_then(|a| a.Id().ok())
-                        .is_some_and(|id| relevant_device_event(&id.to_string()))
-                    {
-                        let _ = tx.try_send(Command::Refresh);
+                    if let Some(id) = args.as_ref().and_then(|a| a.Id().ok()) {
+                        added_gate.forward(&tx, &id.to_string());
                     }
                     Ok(())
                 },
             ))
             .ok();
         let tx = commands.clone();
+        let updated_gate = gate.clone();
         let updated = watcher
             .Updated(&TypedEventHandler::<_, DeviceInformationUpdate>::new(
                 move |_, args| {
-                    if args
-                        .as_ref()
-                        .and_then(|a| a.Id().ok())
-                        .is_some_and(|id| relevant_device_event(&id.to_string()))
-                    {
-                        let _ = tx.try_send(Command::Refresh);
+                    if let Some(id) = args.as_ref().and_then(|a| a.Id().ok()) {
+                        updated_gate.forward(&tx, &id.to_string());
                     }
                     Ok(())
                 },
@@ -534,12 +555,8 @@ impl DeviceEvents {
         let removed = watcher
             .Removed(&TypedEventHandler::<_, DeviceInformationUpdate>::new(
                 move |_, args| {
-                    if args
-                        .as_ref()
-                        .and_then(|a| a.Id().ok())
-                        .is_some_and(|id| relevant_device_event(&id.to_string()))
-                    {
-                        let _ = tx.try_send(Command::Refresh);
+                    if let Some(id) = args.as_ref().and_then(|a| a.Id().ok()) {
+                        gate.forward(&tx, &id.to_string());
                     }
                     Ok(())
                 },
@@ -550,6 +567,7 @@ impl DeviceEvents {
             added,
             updated,
             removed,
+            enumeration_completed: Some(enumeration_completed),
         };
         events.watcher.Start().ok()?;
         Some(events)
@@ -566,6 +584,9 @@ impl Drop for DeviceEvents {
         }
         if let Some(token) = self.removed.take() {
             let _ = self.watcher.RemoveRemoved(token);
+        }
+        if let Some(token) = self.enumeration_completed.take() {
+            let _ = self.watcher.RemoveEnumerationCompleted(token);
         }
     }
 }
@@ -768,6 +789,83 @@ fn configuration_matches(target: &ConfigurationDevice, observed: &ConfigurationD
         && target.container == observed.container
         && target.capability == observed.capability
         && observed.online()
+}
+/// Reserved request-ID space for process startup restoration.
+pub(super) const STARTUP_POLLING_REQUEST_BIT: u64 = 1 << 63;
+
+/// Process-local, one-shot restoration. Saved choices are requests, never
+/// evidence of hardware state. All requests use the ordinary guarded controller.
+struct StartupPollingRestore {
+    until: Instant,
+    pending: BTreeMap<String, PollingRate>,
+    next_request: u64,
+}
+impl StartupPollingRestore {
+    fn new(settings: &Settings, now: Instant) -> Self {
+        Self {
+            until: now + Duration::from_secs(60),
+            pending: if settings.polling_controls && settings.restore_polling_on_startup {
+                settings
+                    .devices
+                    .iter()
+                    .filter_map(|(key, settings)| {
+                        settings
+                            .requested_polling_rate
+                            .map(|rate| (key.clone(), rate))
+                    })
+                    .take(512)
+                    .collect()
+            } else {
+                BTreeMap::new()
+            },
+            // UI request IDs use the low half of the sequence space.
+            next_request: STARTUP_POLLING_REQUEST_BIT,
+        }
+    }
+    fn cancel(&mut self) {
+        self.pending.clear();
+    }
+    fn next(
+        &mut self,
+        now: Instant,
+        epoch: u64,
+        generation: u64,
+        devices: impl Iterator<Item = ConfigurationDevice>,
+        keyboard_epoch: Option<u64>,
+    ) -> Option<Command> {
+        if now >= self.until {
+            self.cancel();
+            return None;
+        }
+        for device in devices {
+            let supported = if device.kind == "keyboard" {
+                keyboard_epoch.is_some()
+                    && matches!(device.capability, PollingCapability::ReadWrite)
+                    && hb_providers::controls::POLLING_PROVIDERS.contains(&device.source.as_str())
+            } else {
+                hb_providers::controls::polling_menu_candidate(&device)
+            };
+            if !device.online() || !supported {
+                continue;
+            }
+            let Some(rate) = self.pending.remove(&device.key) else {
+                continue;
+            };
+            let configuration_epoch = (device.kind == "keyboard")
+                .then_some(keyboard_epoch)
+                .flatten();
+            let request = ControlRequest {
+                request: self.next_request,
+                target: ControlTarget { device, generation },
+                action: ControlAction::Apply(rate),
+            };
+            self.next_request += 1;
+            // Consume before dispatch: busy, blocked, cancelled, uncertain or
+            // failed requests are never retried, including after reconnection.
+            return Some(Command::Polling(request, epoch, configuration_epoch));
+        }
+        None
+    }
 }
 fn simulated_keyboards() -> Vec<ConfigurationDevice> {
     [
@@ -1237,6 +1335,7 @@ fn run(
     commands: Receiver<Command>,
     events: Events,
 ) {
+    let mut startup_polling = StartupPollingRestore::new(&settings, Instant::now());
     let Lifecycle {
         cancel,
         permission,
@@ -1336,6 +1435,7 @@ fn run(
     loop {
         if cancel.load(Ordering::Relaxed) {
             stop = true;
+            startup_polling.cancel();
             control_cancel.store(true, Ordering::Relaxed);
         }
         let latest_settings = permission
@@ -1344,6 +1444,7 @@ fn run(
             .unwrap_or_else(|p| p.into_inner())
             .take();
         if let Some((s, epoch)) = latest_settings {
+            startup_polling.cancel();
             let previous = engine.readings();
             snapshots.changed = true;
             let remove = engine.settings.status_file && !s.status_file;
@@ -1375,6 +1476,11 @@ fn run(
             permission.acknowledged.store(epoch, Ordering::Release);
         }
         let requested_suspend = permission.suspended.load(Ordering::Acquire);
+        // Revocation is immediate even if its command/settings acknowledgment
+        // is queued. Re-enabling during this process cannot restart restoration.
+        if permission.epoch.load(Ordering::Acquire) != 0 || requested_suspend {
+            startup_polling.cancel();
+        }
         if requested_suspend != suspended {
             snapshots.changed = true;
             suspended = requested_suspend;
@@ -1553,7 +1659,30 @@ fn run(
             .min(Duration::from_secs(5))
             .min(snapshots.delay(Instant::now()))
             .max(Duration::from_millis(20));
-        let work = select! {recv(commands)->m=>Work::Command(m),recv(event_rx)->_=>Work::ConnectionEvent,recv(result_rx)->r=>Work::Completed(r),default(wait)=>Work::Idle};
+        let keyboard_epoch =
+            (visible && configuration_valid && configuration_generation == hid.generation())
+                .then(|| configuration.epoch.load(Ordering::Acquire));
+        let startup_command = if startup_polling.pending.is_empty() {
+            None
+        } else {
+            startup_polling.next(
+                Instant::now(),
+                permission.epoch.load(Ordering::Acquire),
+                hid.generation(),
+                engine
+                    .readings()
+                    .iter()
+                    .filter(|reading| reading.kind == "mouse")
+                    .map(ConfigurationDevice::from_reading)
+                    .chain(configuration_devices.iter().cloned()),
+                keyboard_epoch,
+            )
+        };
+        let work = if let Some(command) = startup_command {
+            Work::Command(Ok(command))
+        } else {
+            select! {recv(commands)->m=>Work::Command(m),recv(event_rx)->_=>Work::ConnectionEvent,recv(result_rx)->r=>Work::Completed(r),default(wait)=>Work::Idle}
+        };
         match work {
             Work::Command(Ok(Command::Quit)) | Work::Command(Err(_)) => {
                 stop = true;
@@ -2632,6 +2761,245 @@ mod tests {
             },
             action,
         }
+    }
+    fn startup_settings() -> Settings {
+        let mut settings = Settings {
+            polling_controls: true,
+            restore_polling_on_startup: true,
+            ..Default::default()
+        };
+        settings
+            .devices
+            .entry("simulated:mouse".into())
+            .or_default()
+            .requested_polling_rate = PollingRate::try_from(8000).ok();
+        settings
+    }
+    #[test]
+    fn device_watcher_initial_inventory_does_not_invalidate_startup_readback() {
+        let (commands, received) = bounded(8);
+        let gate = DeviceEventGate::default();
+        for id in [
+            "HID#initial-mouse",
+            "BTH-initial-controller",
+            "Bluetooth-initial-keyboard",
+        ] {
+            gate.forward(&commands, id);
+        }
+        assert!(received.try_recv().is_err());
+        // Added, Updated and Removed callbacks share this same gate. Once the
+        // initial enumeration finishes, real HID/Bluetooth transitions retain
+        // their existing refresh/invalidation behavior.
+        gate.enumeration_completed.store(true, Ordering::Release);
+        for id in [
+            "HID#new-mouse",
+            "BTH-changed-controller",
+            "Bluetooth-removed-keyboard",
+        ] {
+            gate.forward(&commands, id);
+            assert!(matches!(received.try_recv(), Ok(Command::Refresh)));
+        }
+        gate.forward(&commands, "USB-unrelated-storage");
+        assert!(received.try_recv().is_err());
+    }
+    #[test]
+    fn startup_restore_requires_both_opt_ins_and_a_saved_choice() {
+        let now = Instant::now();
+        for (controls, restore) in [(false, false), (true, false), (false, true)] {
+            let mut settings = startup_settings();
+            settings.polling_controls = controls;
+            settings.restore_polling_on_startup = restore;
+            let mut startup = StartupPollingRestore::new(&settings, now);
+            assert!(
+                startup
+                    .next(
+                        now,
+                        0,
+                        1,
+                        std::iter::once(ConfigurationDevice::from_reading(&control_reading())),
+                        None
+                    )
+                    .is_none()
+            );
+        }
+        let mut settings = startup_settings();
+        settings.devices.clear();
+        let mut startup = StartupPollingRestore::new(&settings, now);
+        assert!(
+            startup
+                .next(
+                    now,
+                    0,
+                    1,
+                    std::iter::once(ConfigurationDevice::from_reading(&control_reading())),
+                    None
+                )
+                .is_none()
+        );
+    }
+    #[test]
+    fn startup_restore_applies_once_without_retry_or_reconnect_enforcement() {
+        let now = Instant::now();
+        let mut startup = StartupPollingRestore::new(&startup_settings(), now);
+        let device = ConfigurationDevice::from_reading(&control_reading());
+        let Command::Polling(request, epoch, keyboard_epoch) = startup
+            .next(now, 0, 7, std::iter::once(device.clone()), None)
+            .unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(epoch, 0);
+        assert_eq!(keyboard_epoch, None);
+        assert!(request.request >= 1 << 63);
+        assert_eq!(request.target.generation, 7);
+        let mut current = PollingRate::try_from(1000).unwrap();
+        let outcome = simulate_control(&request, &mut current, 7, 10);
+        assert!(outcome.confirmed_change());
+        assert_eq!(current.hz(), 8000);
+        // Success, busy/failure, or uncertain outcome does not feed the
+        // scheduler. A new generation cannot make a consumed choice eligible.
+        assert!(
+            startup
+                .next(now, 0, 8, std::iter::once(device.clone()), None)
+                .is_none()
+        );
+        let mut startup = StartupPollingRestore::new(&startup_settings(), now);
+        let Command::Polling(request, _, _) = startup
+            .next(now, 0, 7, std::iter::once(device.clone()), None)
+            .unwrap()
+        else {
+            panic!()
+        };
+        let failed = ControlOutcome::failed(&request, "Device workers are busy");
+        assert!(failed.failure.is_some());
+        assert!(
+            startup
+                .next(now, 0, 8, std::iter::once(device), None)
+                .is_none()
+        );
+    }
+    #[test]
+    fn startup_restore_same_rate_is_confirmed_without_change() {
+        let now = Instant::now();
+        let mut startup = StartupPollingRestore::new(&startup_settings(), now);
+        let Command::Polling(request, _, _) = startup
+            .next(
+                now,
+                0,
+                1,
+                std::iter::once(ConfigurationDevice::from_reading(&control_reading())),
+                None,
+            )
+            .unwrap()
+        else {
+            panic!()
+        };
+        let mut current = PollingRate::try_from(8000).unwrap();
+        let outcome = simulate_control(&request, &mut current, 1, 10);
+        assert!(outcome.failure.is_none());
+        assert!(!outcome.may_have_changed);
+        assert_eq!(outcome.observation.unwrap().rate, Some(current));
+    }
+    #[test]
+    fn startup_restore_simulated_runtime_emits_confirmed_unsolicited_outcome() {
+        let _native_guard = crate::ui::NATIVE_TEST_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let mut runtime = Runtime::start(dir.path().to_owned(), startup_settings(), true).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut confirmed = None;
+        while Instant::now() < deadline {
+            if let Ok(Event::Polling(outcome)) =
+                runtime.events.recv_timeout(Duration::from_millis(100))
+                && outcome.request & STARTUP_POLLING_REQUEST_BIT != 0
+            {
+                confirmed = Some(outcome);
+                break;
+            }
+        }
+        runtime.stop();
+        let outcome = confirmed.expect("startup restore must emit an unsolicited polling outcome");
+        assert!(outcome.failure.is_none(), "{:?}", outcome.failure);
+        assert_eq!(
+            outcome.observation.as_ref().unwrap().rate.unwrap().hz(),
+            8000
+        );
+    }
+    #[test]
+    fn startup_restore_expires_and_cancellation_is_permanent() {
+        let now = Instant::now();
+        let device = ConfigurationDevice::from_reading(&control_reading());
+        let mut startup = StartupPollingRestore::new(&startup_settings(), now);
+        assert!(
+            startup
+                .next(
+                    now + Duration::from_secs(60),
+                    0,
+                    1,
+                    std::iter::once(device.clone()),
+                    None
+                )
+                .is_none()
+        );
+        assert!(startup.pending.is_empty());
+        let mut startup = StartupPollingRestore::new(&startup_settings(), now);
+        startup.cancel();
+        assert!(
+            startup
+                .next(now, 1, 2, std::iter::once(device), None)
+                .is_none()
+        );
+    }
+    #[test]
+    fn startup_restore_waits_for_online_supported_devices_and_visible_keyboard_inventory() {
+        let now = Instant::now();
+        let mut settings = startup_settings();
+        let mut keyboard = simulated_keyboards().remove(0);
+        settings
+            .devices
+            .entry(keyboard.key.clone())
+            .or_default()
+            .requested_polling_rate = PollingRate::try_from(1000).ok();
+        let mut startup = StartupPollingRestore::new(&settings, now);
+        let mut mouse = ConfigurationDevice::from_reading(&control_reading());
+        mouse.connection = Connection::Stale;
+        assert!(
+            startup
+                .next(
+                    now,
+                    0,
+                    1,
+                    [mouse.clone(), keyboard.clone()].into_iter(),
+                    None
+                )
+                .is_none()
+        );
+        mouse.connection = Connection::Online;
+        mouse.source = "unknown".into();
+        assert!(
+            startup
+                .next(now, 0, 1, std::iter::once(mouse), None)
+                .is_none()
+        );
+        keyboard.capability = PollingCapability::Unavailable("unsupported".into());
+        assert!(
+            startup
+                .next(now, 0, 1, std::iter::once(keyboard.clone()), Some(3))
+                .is_none()
+        );
+        keyboard.capability = PollingCapability::ReadWrite;
+        let Command::Polling(request, _, Some(configuration_epoch)) = startup
+            .next(now, 0, 1, std::iter::once(keyboard), Some(3))
+            .unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(request.target.device.kind, "keyboard");
+        assert_eq!(configuration_epoch, 3);
+        assert!(
+            startup
+                .next(now, 0, 2, simulated_keyboards().into_iter(), Some(4))
+                .is_none()
+        );
     }
     #[test]
     fn explicit_simulation_read_apply_restore_and_stale_epoch() {

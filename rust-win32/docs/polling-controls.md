@@ -19,8 +19,8 @@ rate-changing command. After a successful readback the submenu uses the reported
 rate list and checks the last confirmed rate. **Refresh hardware rate** remains
 available to read without changing anything; **Restore previous** uses the verified
 before-value from the last change in that tray session. The dashboard remains closed,
-and the tray reports success or failure. Neither opening the menu nor selecting a
-saved device preference applies a rate automatically. Keyboard controls remain on
+and the tray reports success or failure. Opening the menu never applies a saved
+preference. Keyboard controls remain on
 Devices because batteryless keyboards do not have tray icons.
 
 Dashboard and tray writes clear each other's cached confirmation. A pending write
@@ -28,8 +28,24 @@ continues to block another configuration request even if its dashboard page clos
 Connection changes invalidate confirmations and previous-rate recovery values.
 
 The setting defaults off. The last requested selection is stored separately from
-the observation; startup, reconnect, scheduled battery refresh and closing the
-dashboard never apply it. Reconnection invalidates the observed target and the
+the observation. **Restore saved rates at startup** is a second, default-off
+option. When both options are enabled at launch, each supported online device
+discovered in the first 60 seconds gets one attempt to restore its saved selection.
+The normal GET-before / SET / GET-after path validates it; an already matching
+rate performs no SET. Busy, gaming-blocked, unavailable or uncertain attempts are
+not retried. Settings changes or suspend cancel remaining startup attempts.
+Opening another instance, later reconnects, scheduled refreshes and closing the
+dashboard do not enforce rates. Keyboards still require Devices to be visible
+and discovered within that startup window; no background keyboard discovery is
+added. The initial queue is bounded to 512 saved devices.
+
+Device hover tooltips append the last successfully read-back polling rate. They
+use a bounded cached observation, never a saved/requested rate. Pending manual
+writes, failed readbacks, stale/changed identities, connection epochs or disabling
+controls remove that confirmation. Hovering performs no hardware reads, allocation
+or timer work. Other software can still change hardware after a readback.
+
+Reconnection invalidates the observed target and the
 previous-rate recovery value. **Restore previous** explicitly applies the last
 confirmed before-value from this connection session. Partial writes retain an
 error even if readback matches; refresh before deciding whether to restore.
