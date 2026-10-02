@@ -252,7 +252,7 @@ impl Store {
                 session,
             });
         }
-        Ok(builder.finish())
+        Ok(builder.finish_at(until))
     }
     /// Preserve confirmed configuration evidence without applying it to hardware.
     pub fn record_usage(&mut self, observation: &UsageObservation) -> Result<(), ProviderError> {
@@ -402,15 +402,18 @@ impl Store {
         until: i64,
         mut visit: impl FnMut(Reading, i64),
     ) -> Result<i64, ProviderError> {
-        let mut query = self.db.prepare(
-            "SELECT ts,payload FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3 ORDER BY ts",
-        ).map_err(sql_error)?;
+        let sql = if self.has_usage_metadata {
+            "SELECT r.ts,r.payload,m.session FROM readings r LEFT JOIN usage_metadata m ON m.device=r.device AND m.ts=r.ts WHERE r.device=?1 AND r.ts BETWEEN ?2 AND ?3 ORDER BY r.ts"
+        } else {
+            "SELECT ts,payload,NULL FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3 ORDER BY ts"
+        };
+        let mut query = self.db.prepare(sql).map_err(sql_error)?;
         let mut rows = query
             .query(params![key, until.saturating_sub(30 * 86400), until])
             .map_err(sql_error)?;
         // Continuity needs only time and awake state, not another owned copy
         // of every reading and its strings during both chart passes.
-        let mut previous: Option<(i64, bool)> = None;
+        let mut previous: Option<(i64, bool, Option<u64>)> = None;
         let mut total = 0i64;
         while let Some(row) = rows.next().map_err(sql_error)? {
             let timestamp: i64 = row.get(0).map_err(sql_error)?;
@@ -424,16 +427,38 @@ impl Store {
                 continue;
             }
             let awake = |r: &Reading| {
-                r.online() && r.level.is_some_and(|level| level <= 100) && r.charging != Some(true)
+                r.online()
+                    && r.level.is_some_and(|level| level <= 100)
+                    && r.charging == Some(false)
+                    && !r.charging_inferred
+            };
+            let session = match row.get_ref(2).map_err(sql_error)? {
+                rusqlite::types::ValueRef::Null => None,
+                value => match value
+                    .as_str()
+                    .ok()
+                    .and_then(|value| value.parse::<u64>().ok())
+                {
+                    Some(session) => Some(session),
+                    None => {
+                        previous = None;
+                        visit(reading, total);
+                        continue;
+                    }
+                },
             };
             let reading_awake = awake(&reading);
-            if let Some((timestamp, true)) = previous
+            if let Some((timestamp, true, previous_session)) = previous
                 && reading_awake
+                && previous_session == session
+                && reading
+                    .timestamp
+                    .checked_sub(timestamp)
+                    .is_some_and(|delta| (1..=600).contains(&delta))
             {
-                total =
-                    total.saturating_add(reading.timestamp.saturating_sub(timestamp).clamp(0, 600));
+                total = total.saturating_add(reading.timestamp - timestamp);
             }
-            previous = Some((reading.timestamp, reading_awake));
+            previous = Some((reading.timestamp, reading_awake, session));
             visit(reading, total);
         }
         Ok(total)
@@ -905,18 +930,18 @@ mod tests {
         use hb_core::Connection::{Online, Sleeping};
         let (_dir, mut store) = baseline_store();
         for (ts, level, connection, charging) in [
-            (0, Some(80), Online, None),
-            (60, Some(79), Online, None),
+            (0, Some(80), Online, Some(false)),
+            (60, Some(79), Online, Some(false)),
             (120, Some(79), Sleeping, None),
             (10000, Some(79), Sleeping, None),
-            (10060, Some(79), Online, None),
-            (10120, Some(78), Online, None),
+            (10060, Some(79), Online, Some(false)),
+            (10120, Some(78), Online, Some(false)),
             (10180, Some(78), Online, Some(true)),
             (10240, Some(80), Online, Some(true)),
-            (10300, Some(80), Online, None),
+            (10300, Some(80), Online, Some(false)),
             (10360, None, Online, None),
-            (10420, Some(79), Online, None),
-            (10480, Some(78), Online, None),
+            (10420, Some(79), Online, Some(false)),
+            (10480, Some(78), Online, Some(false)),
         ] {
             usage_seed(&mut store, ts, level, connection, charging);
         }
@@ -927,15 +952,21 @@ mod tests {
         assert_eq!(series.samples.last().unwrap().position, 180);
     }
     #[test]
-    fn usage_clamps_app_gaps_and_sampling_does_not_change_total_or_device_scope() {
+    fn usage_excludes_app_gaps_and_sampling_does_not_change_total_or_device_scope() {
         let (_dir, mut store) = baseline_store();
-        usage_seed(&mut store, 0, Some(100), hb_core::Connection::Online, None);
+        usage_seed(
+            &mut store,
+            0,
+            Some(100),
+            hb_core::Connection::Online,
+            Some(false),
+        );
         usage_seed(
             &mut store,
             10000,
             Some(90),
             hb_core::Connection::Online,
-            None,
+            Some(false),
         );
         for i in 1..101 {
             usage_seed(
@@ -943,18 +974,18 @@ mod tests {
                 10000 + i * 60,
                 Some((90 - i % 80) as u8),
                 hb_core::Connection::Online,
-                None,
+                Some(false),
             );
         }
         seed(&mut store, "other", 16001, Some(50));
         for cap in [2, 3, 4, 10, 4096] {
             let series = store.query_usage("usage", 16001, 1200, cap).unwrap();
-            assert_eq!((series.since, series.until), (5400, 6600));
+            assert_eq!((series.since, series.until), (4800, 6000));
             assert!(series.samples.len() <= cap);
             assert_eq!(series.samples.last().unwrap().reading.timestamp, 16000);
-            assert_eq!(series.samples.last().unwrap().position, 6600);
+            assert_eq!(series.samples.last().unwrap().position, 6000);
             assert!(series.samples.iter().all(|s| s.reading.key == "usage"));
-            assert!(series.samples.first().unwrap().position <= 5400);
+            assert!(series.samples.first().unwrap().position <= 4800);
         }
     }
     #[test]
@@ -997,7 +1028,7 @@ mod tests {
             (360, Some(50), hb_core::Connection::Online),
             (420, Some(49), hb_core::Connection::Online),
         ] {
-            usage_seed(&mut store, ts, level, state, None);
+            usage_seed(&mut store, ts, level, state, Some(false));
         }
         store
             .db
@@ -1119,6 +1150,7 @@ mod tests {
             for i in 0..43200i64 {
                 let mut r = Reading::new("usage", "Mouse", "test", i * 60);
                 r.level = Some((100 - i % 100) as u8);
+                r.charging = Some(false);
                 insert
                     .execute(params![
                         r.key,

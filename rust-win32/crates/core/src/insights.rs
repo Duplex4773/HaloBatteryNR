@@ -21,6 +21,12 @@ pub enum InsightConfidence {
 pub struct RateInsight {
     pub hz: u32,
     pub awake_seconds: u64,
+    /// Accepted time in complete drop-to-drop windows. The initial plateau and
+    /// unfinished flat tail of each uninterrupted segment remain coverage only.
+    pub projection_seconds: u64,
+    pub projection_consumed_percent: u64,
+    /// Complete drop-to-drop windows, excluding each segment's first drop.
+    pub projection_drop_count: u64,
     pub consumed_percent: u64,
     /// Distinct endpoints of accepted intervals.
     pub sample_count: u64,
@@ -54,20 +60,40 @@ pub struct ChargeCycle {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct InsightCoverage {
+    pub observation_count: u64,
+    /// Exact online readings explicitly known to be discharging.
+    pub discharge_sample_count: u64,
+    /// Accepted adjacent discharge time, including unknown polling rates.
+    pub awake_seconds: u64,
+    /// Adjacent pairs excluded from usage, counted once regardless of reason.
+    pub excluded_interval_count: u64,
+    /// Raw rows the caller could not decode; not included in observation_count.
+    pub unreadable_row_count: u64,
+    pub last_reading_timestamp: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct BatteryInsights {
     /// Only rates with accepted observed usage, in ascending Hz order.
     pub rates: Vec<RateInsight>,
     /// At most ten recent observed discharge periods, oldest first.
     pub cycles: Vec<ChargeCycle>,
+    pub coverage: InsightCoverage,
 }
 
 pub struct InsightsBuilder {
     previous: Option<UsageObservation>,
     rates: [RateInsight; 7],
     previous_counted_rate: Option<u32>,
+    pending_projection_seconds: u64,
+    projection_anchored: bool,
     cycles: VecDeque<ChargeCycle>,
     pending_charge: Option<CycleEvidence>,
     segment_low: Option<u8>,
+    cycle_low: Option<u8>,
+    coverage: InsightCoverage,
+    has_input: bool,
 }
 
 impl Default for InsightsBuilder {
@@ -79,9 +105,14 @@ impl Default for InsightsBuilder {
                 ..RateInsight::default()
             }),
             previous_counted_rate: None,
+            pending_projection_seconds: 0,
+            projection_anchored: false,
             cycles: VecDeque::new(),
             pending_charge: None,
             segment_low: None,
+            cycle_low: None,
+            coverage: InsightCoverage::default(),
+            has_input: false,
         }
     }
 }
@@ -99,10 +130,19 @@ fn discharging(reading: &Reading) -> bool {
 impl InsightsBuilder {
     /// Use when a corrupt or missing raw row prevents proving adjacency.
     pub fn break_continuity(&mut self) {
+        self.coverage.unreadable_row_count = self.coverage.unreadable_row_count.saturating_add(1);
+        self.has_input = true;
+        self.reset_continuity();
+    }
+
+    fn reset_continuity(&mut self) {
         self.previous = None;
         self.previous_counted_rate = None;
+        self.pending_projection_seconds = 0;
+        self.projection_anchored = false;
         self.pending_charge = None;
         self.segment_low = None;
+        self.cycle_low = None;
         self.close_cycle();
     }
 
@@ -118,6 +158,7 @@ impl InsightsBuilder {
         }
         let reading = &observation.reading;
         let level = valid_level(reading).expect("validated discharge");
+        self.cycle_low = Some(level);
         self.cycles.push_back(ChargeCycle {
             start_timestamp: reading.timestamp,
             end_timestamp: reading.timestamp,
@@ -135,21 +176,35 @@ impl InsightsBuilder {
     /// Session/rate changes and pauses exclude their boundary interval only.
     pub fn push(&mut self, observation: UsageObservation) {
         let reading = &observation.reading;
+        let had_input = self.has_input;
+        self.has_input = true;
+        self.coverage.observation_count = self.coverage.observation_count.saturating_add(1);
+        self.coverage.last_reading_timestamp = Some(reading.timestamp);
+        if discharging(reading) {
+            self.coverage.discharge_sample_count =
+                self.coverage.discharge_sample_count.saturating_add(1);
+        }
         let discontinuity = self.previous.as_ref().is_some_and(|previous| {
             reading.timestamp <= previous.reading.timestamp || reading.key != previous.reading.key
         });
         if discontinuity {
-            self.break_continuity();
+            self.reset_continuity();
         }
+
+        let mut accepted = false;
 
         if valid_level(reading).is_some() && reading.charging == Some(true) {
             self.close_cycle();
             self.segment_low = None;
-            self.pending_charge = Some(if reading.charging_inferred {
-                CycleEvidence::InferredCharge
-            } else {
-                CycleEvidence::ObservedCharge
-            });
+            self.pending_charge = Some(
+                if reading.charging_inferred
+                    && self.pending_charge != Some(CycleEvidence::ObservedCharge)
+                {
+                    CycleEvidence::InferredCharge
+                } else {
+                    CycleEvidence::ObservedCharge
+                },
+            );
         } else if discharging(reading) {
             let previous_observation = self.previous.take();
             let previous = previous_observation.as_ref();
@@ -167,9 +222,10 @@ impl InsightsBuilder {
                     && self
                         .segment_low
                         .is_some_and(|low| level.saturating_sub(low) >= 3))
-                    || self.cycles.back().is_some_and(|cycle| {
-                        cycle.current && level.saturating_sub(cycle.end_percent) >= 3
-                    }));
+                    || (self.cycles.back().is_some_and(|cycle| cycle.current)
+                        && self
+                            .cycle_low
+                            .is_some_and(|low| level.saturating_sub(low) >= 3)));
             if increase {
                 self.close_cycle();
                 self.pending_charge = Some(CycleEvidence::InferredCharge);
@@ -177,9 +233,14 @@ impl InsightsBuilder {
             if !self.cycles.back().is_some_and(|cycle| cycle.current) {
                 self.start_cycle(&observation);
             }
+            // Pauses exclude drain accounting, but cumulative rises still provide
+            // evidence of an unobserved charge within the physical cycle.
+            self.cycle_low = Some(self.cycle_low.unwrap_or(level).min(level));
             if continuous && !increase {
+                accepted = true;
                 let previous = previous.expect("accepted interval has previous");
                 let seconds = delta.expect("accepted positive duration") as u64;
+                self.coverage.awake_seconds = self.coverage.awake_seconds.saturating_add(seconds);
                 // Repeated small rebounds cannot manufacture additional drain.
                 let low = self.segment_low.unwrap_or(previous.reading.level.unwrap());
                 let drop = u64::from(low.saturating_sub(level));
@@ -194,9 +255,30 @@ impl InsightsBuilder {
                         && observation.polling_rate == previous.polling_rate
                 }) {
                     let hz = polling_rate.hz();
+                    if self.previous_counted_rate != Some(hz) {
+                        self.pending_projection_seconds = 0;
+                        self.projection_anchored = false;
+                    }
+                    self.pending_projection_seconds =
+                        self.pending_projection_seconds.saturating_add(seconds);
                     let rate = self.rates.iter_mut().find(|rate| rate.hz == hz).unwrap();
                     rate.awake_seconds = rate.awake_seconds.saturating_add(seconds);
                     rate.consumed_percent = rate.consumed_percent.saturating_add(drop);
+                    if drop > 0 {
+                        if self.projection_anchored {
+                            rate.projection_seconds = rate
+                                .projection_seconds
+                                .saturating_add(self.pending_projection_seconds);
+                            rate.projection_consumed_percent =
+                                rate.projection_consumed_percent.saturating_add(drop);
+                            rate.projection_drop_count =
+                                rate.projection_drop_count.saturating_add(1);
+                        }
+                        // The first drop only anchors a segment: its preceding
+                        // plateau began at an unknown point in the percentage bin.
+                        self.projection_anchored = true;
+                        self.pending_projection_seconds = 0;
+                    }
                     rate.sample_count = rate.sample_count.saturating_add(
                         if self.previous_counted_rate == Some(hz) {
                             1
@@ -223,24 +305,48 @@ impl InsightsBuilder {
         if !discharging(reading) {
             self.previous_counted_rate = None;
         }
+        if !accepted || self.previous_counted_rate.is_none() {
+            self.pending_projection_seconds = 0;
+            self.projection_anchored = false;
+        }
+        if had_input && !accepted {
+            self.coverage.excluded_interval_count =
+                self.coverage.excluded_interval_count.saturating_add(1);
+        }
         self.previous = Some(observation);
+    }
+
+    /// Suppress remaining-use estimates when the latest observation is stale or
+    /// lies in the future relative to the query clock. Historical totals remain.
+    pub fn finish_at(mut self, timestamp: i64) -> BatteryInsights {
+        let fresh = self.previous.as_ref().is_some_and(|previous| {
+            timestamp
+                .checked_sub(previous.reading.timestamp)
+                .is_some_and(|age| (0..=600).contains(&age))
+        });
+        if !fresh {
+            self.previous_counted_rate = None;
+        }
+        self.finish()
     }
 
     pub fn finish(mut self) -> BatteryInsights {
         for rate in &mut self.rates {
-            if rate.awake_seconds >= 1800 && rate.consumed_percent >= 3 {
-                rate.confidence = if rate.awake_seconds >= 7200
-                    && rate.consumed_percent >= 10
-                    && rate.drop_count >= 3
+            if rate.projection_seconds >= 1800 && rate.projection_consumed_percent >= 3 {
+                rate.confidence = if rate.projection_seconds >= 7200
+                    && rate.projection_consumed_percent >= 10
+                    && rate.projection_drop_count >= 3
                 {
                     InsightConfidence::Moderate
                 } else {
                     InsightConfidence::Low
                 };
-                let hours = rate.awake_seconds as f64 / 36.0 / rate.consumed_percent as f64;
+                let hours =
+                    rate.projection_seconds as f64 / 36.0 / rate.projection_consumed_percent as f64;
                 rate.projected_full_charge_hours = Some(hours);
                 if let Some(current) = self.previous.as_ref().filter(|current| {
                     discharging(&current.reading)
+                        && self.previous_counted_rate == Some(rate.hz)
                         && current.session.is_some()
                         && current.polling_rate.is_some_and(|r| r.hz() == rate.hz)
                 }) {
@@ -256,6 +362,7 @@ impl InsightsBuilder {
                 .filter(|rate| rate.awake_seconds > 0)
                 .collect(),
             cycles: self.cycles.into_iter().collect(),
+            coverage: self.coverage,
         }
     }
 }

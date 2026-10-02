@@ -91,7 +91,7 @@ try{
   $text=[InsightsShot]::Text([InsightsShot]::GetDlgItem($dashboard,74))
   if($text-notlike"$($entry.hz) Hz*"-or$text-notlike'*samples*observed drops*'-or$text-notlike'*Estimated full-charge use:*'-or$text-notlike'*confidence*'){throw "Rate evidence missing: $text"}
  }
- foreach($entry in @(@{index=0;evidence='Partial cycle'},@{index=9;evidence='Observed charge'})){
+ foreach($entry in @(@{index=0;evidence='Observed charge'},@{index=9;evidence='Partial cycle'})){
   [InsightsShot]::SendMessage($cycles,390,[UIntPtr]$entry.index,[IntPtr]::Zero)|Out-Null
   Message $dashboard 273 (65536+71);Start-Sleep -Milliseconds 100
   $text=[InsightsShot]::Text([InsightsShot]::GetDlgItem($dashboard,76))
@@ -100,6 +100,8 @@ try{
  [InsightsShot]::SendMessage([InsightsShot]::GetDlgItem($dashboard,10),334,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
  Message $dashboard 273 (65536+10);Wait-Insights $dashboard
  Message $dashboard 273 4;Wait-Insights $dashboard
+ $coverage=[InsightsShot]::Text([InsightsShot]::GetDlgItem($dashboard,78))
+ if($coverage-notlike'*readings*discharging*counted use*confirmed rate*'-or$coverage-notlike'*intervals excluded*unreadable rows*'){throw "Coverage summary missing: $coverage"}
  [InsightsShot]::Save($dashboard,(Join-Path $output 'insights-native.png'))
  Message $monitor 32777;Start-Sleep -Milliseconds 100
  $samples=@{}

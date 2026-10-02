@@ -20,7 +20,9 @@ Added features include:
   views available. Sleeping periods pause estimated use time; calendar charts
   carry the last known level through unavailable readings.
 - Estimated use remaining, charge summaries and observed drain comparisons by
-  confirmed polling rate, with evidence requirements for estimates.
+  confirmed polling rate, with evidence coverage, freshness and conservative
+  discharge windows. Recent-use predictions preserve learning through sleep
+  without counting unobserved battery loss.
 - Optional read/apply/restore polling-rate controls for supported Razer, Logitech
   and MCHOSE mice and five wired Razer keyboard models, including supported
   8000 Hz routes. Controls use ordinary

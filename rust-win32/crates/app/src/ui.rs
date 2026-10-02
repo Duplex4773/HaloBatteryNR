@@ -516,10 +516,8 @@ impl InsightsUi {
         self.pending = None;
         match result {
             Ok(data) => {
+                self.status = insight_coverage_text(&data);
                 self.data = Some(data);
-                self.status =
-                    "Local data refreshed. Select a rate or charge summary to view its evidence."
-                        .into();
             }
             Err(error) => {
                 self.status =
@@ -529,14 +527,50 @@ impl InsightsUi {
         true
     }
 }
-const INSIGHTS_EMPTY: &str = "Collect discharge data while the device is awake. For rate comparisons, enable polling controls in Settings and manually Refresh a supported device's hardware rate under Devices. Saved requested rates are never evidence.";
+const INSIGHTS_EMPTY: &str = "For rate comparisons, enable polling controls and confirm a supported device's rate using Refresh or a verified rate change in Devices or the tray menu. Saved requested rates are never evidence.";
+fn insight_coverage_text(data: &BatteryInsights) -> String {
+    let c = &data.coverage;
+    let last = c
+        .last_reading_timestamp
+        .map(polling_timestamp)
+        .unwrap_or_else(|| "none".into());
+    let rate_time = data.rates.iter().map(|rate| rate.awake_seconds).sum();
+    format!(
+        "Local data refreshed. {} readings · {} discharging · {} counted use ({} with confirmed rate).\r\nLast stored reading: {last} · {} intervals excluded · {} unreadable rows.",
+        c.observation_count,
+        c.discharge_sample_count,
+        insight_hours(c.awake_seconds),
+        insight_hours(rate_time),
+        c.excluded_interval_count,
+        c.unreadable_row_count
+    )
+}
+fn insight_empty_text(data: Option<&BatteryInsights>) -> String {
+    let Some(data) = data else {
+        return INSIGHTS_EMPTY.into();
+    };
+    let explanation = if data.coverage.observation_count == 0 {
+        "No retained readings for this device yet."
+    } else if data.coverage.discharge_sample_count == 0 {
+        "No usable discharge readings yet. Charging, unavailable, imprecise or unknown-state readings cannot establish battery life."
+    } else {
+        "Discharge readings exist, but there is no continuous confirmed-rate usage to compare yet."
+    };
+    format!("{explanation}\r\n\r\n{INSIGHTS_EMPTY}")
+}
 fn insight_hours(seconds: u64) -> String {
     format!("{:.1} h", seconds as f64 / 3600.0)
 }
 fn insight_estimate(hours: Option<f64>) -> String {
     hours
         .filter(|value| value.is_finite() && *value >= 0.0)
-        .map(|value| format!("{value:.1} h"))
+        .map(|value| {
+            if value < 1.0 {
+                "less than 1 h".into()
+            } else {
+                format!("about {value:.0} h")
+            }
+        })
         .unwrap_or_else(|| "Not enough discharge evidence".into())
 }
 fn rate_insight_text(rate: &RateInsight) -> String {
@@ -545,19 +579,33 @@ fn rate_insight_text(rate: &RateInsight) -> String {
         InsightConfidence::Low => "Low",
         InsightConfidence::Moderate => "Moderate",
     };
+    let guidance = match rate.confidence {
+        InsightConfidence::Insufficient => {
+            "Needs 30 min and 3 points between observed drops within continuous periods."
+        }
+        InsightConfidence::Low => {
+            "Tentative: needs 2 h, 10 points and 3 complete drop intervals for moderate evidence."
+        }
+        InsightConfidence::Moderate => {
+            "Observed average; usage conditions and battery rounding still affect the estimate."
+        }
+    };
     format!(
-        "{} Hz · {} confidence\r\n{} awake · {} percentage points consumed\r\n{} samples · {} observed drops\r\nEstimated full-charge use: {}\r\nRemaining at last reading: {}\r\nLast-confirmed rate; usage conditions may differ.",
+        "{} Hz · {} confidence\r\n{} awake · {} percentage points consumed\r\n{} samples · {} observed drops\r\nProjection evidence: {} · {} points · {} complete drop intervals\r\nEstimated full-charge use: {}\r\nRemaining at recent qualifying reading: {}\r\n{guidance}",
         rate.hz,
         confidence,
         insight_hours(rate.awake_seconds),
         rate.consumed_percent,
         rate.sample_count,
         rate.drop_count,
+        insight_hours(rate.projection_seconds),
+        rate.projection_consumed_percent,
+        rate.projection_drop_count,
         insight_estimate(rate.projected_full_charge_hours),
         rate.remaining_hours
             .filter(|hours| hours.is_finite() && *hours >= 0.0)
-            .map(|hours| format!("{hours:.1} h"))
-            .unwrap_or_else(|| "Unavailable".into())
+            .map(|hours| insight_estimate(Some(hours)))
+            .unwrap_or_else(|| "Unavailable (stale, paused or unconfirmed)".into())
     )
 }
 fn charge_cycle_row(cycle: &ChargeCycle) -> String {
@@ -1795,7 +1843,7 @@ impl State {
         self.insights_edit(74, 170, 155);
         self.label(
             75,
-            "Recent charge summaries · UTC start time (up to 10; partial cycles included)",
+            "Recent charge summaries · newest first · UTC start time (up to 10)",
             20,
             340,
             760,
@@ -1803,7 +1851,7 @@ impl State {
         self.insights_list(71, 370, 165);
         self.insights_edit(76, 370, 165);
         self.control(77, w!("STATIC"),
-            "Awake use is estimated device availability, not input activity. Full-charge runtime is a projection, not battery health.\r\n\r\nRates use the last confirmed setting. Refresh under Devices after changing it elsewhere. Sleep or unavailability pauses learning; reconnect, system suspend, restart or disabling controls requires fresh rate confirmation.",
+            "Awake use measures observed device availability, not input activity. Rate comparisons average up to 30 days; the tray estimate follows recent discharge and can differ. Neither measures battery health.\r\n\r\nRates use the last confirmed setting. Confirm again after changing it elsewhere. Sleep, charging, missing readings and connection boundaries are excluded from learning. No hardware polling is added by this page.",
             WINDOW_STYLE::default(), 20, 550, 760, 140);
         self.control(
             78,
@@ -1865,7 +1913,7 @@ impl State {
                             let estimate = rate
                                 .projected_full_charge_hours
                                 .filter(|hours| hours.is_finite() && *hours >= 0.0)
-                                .map(|hours| format!("~{hours:.1} h"))
+                                .map(|hours| format!("~{hours:.0} h"))
                                 .unwrap_or_else(|| "limited data".into());
                             format!("{} Hz · {estimate}", rate.hz)
                         })
@@ -1873,7 +1921,12 @@ impl State {
                 ),
                 (
                     71,
-                    data.cycles.iter().take(10).map(charge_cycle_row).collect(),
+                    data.cycles
+                        .iter()
+                        .rev()
+                        .take(10)
+                        .map(charge_cycle_row)
+                        .collect(),
                 ),
             ] {
                 if let Some(h) = self.controls.get(&id) {
@@ -1907,8 +1960,8 @@ impl State {
             .as_ref()
             .and_then(|data| data.rates.get(selected(70)))
             .map(rate_insight_text)
-            .unwrap_or_else(|| INSIGHTS_EMPTY.into());
-        let cycle = self.insights.data.as_ref().and_then(|data| data.cycles.get(selected(71)))
+            .unwrap_or_else(|| insight_empty_text(self.insights.data.as_ref()));
+        let cycle = self.insights.data.as_ref().and_then(|data| data.cycles.iter().rev().nth(selected(71)))
             .map(charge_cycle_text).unwrap_or_else(|| "No charge summaries yet. Collect awake discharge readings; partial cycles appear when sufficient connected data is available.".into());
         self.set_control_text(74, &rate);
         self.set_control_text(76, &cycle);
@@ -4853,6 +4906,9 @@ mod insights_tests {
         let rate = RateInsight {
             hz: 1000,
             awake_seconds: 7200,
+            projection_seconds: 7200,
+            projection_consumed_percent: 20,
+            projection_drop_count: 4,
             consumed_percent: 20,
             sample_count: 15,
             drop_count: 4,
@@ -4868,8 +4924,9 @@ mod insights_tests {
             "20 percentage points",
             "15 samples",
             "4 observed drops",
-            "Estimated full-charge use: 10.0 h",
-            "Remaining at last reading: Unavailable",
+            "Estimated full-charge use: about 10 h",
+            "Remaining at recent qualifying reading: Unavailable",
+            "Tentative:",
         ] {
             assert!(text.contains(expected), "Missing {expected}: {text}");
         }
@@ -4881,8 +4938,33 @@ mod insights_tests {
             insight_estimate(Some(-1.0)),
             "Not enough discharge evidence"
         );
-        assert!(INSIGHTS_EMPTY.contains("manually Refresh"));
+        assert!(INSIGHTS_EMPTY.contains("tray menu"));
         assert!(INSIGHTS_EMPTY.contains("Saved requested rates are never evidence"));
+    }
+    #[test]
+    fn insight_coverage_explains_empty_rate_evidence_and_corruption() {
+        let mut data = BatteryInsights::default();
+        assert!(insight_empty_text(Some(&data)).contains("No retained readings"));
+        data.coverage.observation_count = 12;
+        assert!(insight_empty_text(Some(&data)).contains("No usable discharge readings"));
+        data.coverage.discharge_sample_count = 5;
+        data.coverage.awake_seconds = 3600;
+        data.coverage.excluded_interval_count = 6;
+        data.coverage.unreadable_row_count = 1;
+        data.coverage.last_reading_timestamp = Some(0);
+        assert!(insight_empty_text(Some(&data)).contains("no continuous confirmed-rate usage"));
+        let text = insight_coverage_text(&data);
+        for expected in [
+            "12 readings",
+            "5 discharging",
+            "1.0 h counted",
+            "0.0 h with confirmed rate",
+            "6 intervals excluded",
+            "1 unreadable rows",
+            "1970-01-01",
+        ] {
+            assert!(text.contains(expected), "{text}");
+        }
     }
     #[test]
     fn charge_summary_distinguishes_partial_and_inferred_evidence() {

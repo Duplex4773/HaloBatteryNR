@@ -263,3 +263,26 @@ fn corrupt_raw_rows_break_insight_continuity() {
     let actual = store.query_insights("synthetic-a", 120).unwrap();
     assert_eq!(format!("{actual:?}"), format!("{:?}", expected.finish()));
 }
+
+#[test]
+fn old_rate_evidence_is_historical_not_current_remaining_use() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("history.db");
+    let mut store = Store::open(&path).unwrap();
+    for i in 0..=4 {
+        store
+            .record_usage(&observation(i * 600, 80 - i as u8, Some(1000), Some(1)))
+            .unwrap();
+    }
+    store.flush().unwrap();
+    let fresh = store.query_insights("synthetic-a", 2400).unwrap();
+    let old = store.query_insights("synthetic-a", 3100).unwrap();
+    assert!(fresh.rates[0].remaining_hours.is_some());
+    assert!(old.rates[0].remaining_hours.is_none());
+    assert_eq!(
+        fresh.rates[0].projected_full_charge_hours,
+        old.rates[0].projected_full_charge_hours
+    );
+    assert_eq!(old.coverage.observation_count, 5);
+    assert_eq!(old.coverage.last_reading_timestamp, Some(2400));
+}

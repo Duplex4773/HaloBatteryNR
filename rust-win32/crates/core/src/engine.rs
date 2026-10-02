@@ -117,6 +117,11 @@ impl Engine {
             .is_some_and(|readings| !readings.is_empty())
             || self.errors.contains_key(provider)
     }
+    /// Provider-local cache for recording availability transitions independently
+    /// of the combined UI inventory.
+    pub fn provider_readings(&self, provider: &str) -> &[Reading] {
+        self.by_provider.get(provider).map_or(&[], Vec::as_slice)
+    }
     pub fn has_held_notifications(&self) -> bool {
         !self.held.is_empty()
     }
@@ -428,8 +433,9 @@ impl Engine {
                     });
                     let seconds_left = if self.settings.time_left
                         && r.online()
-                        && r.charging != Some(true)
-                        && r.precision != Precision::Coarse
+                        && r.charging == Some(false)
+                        && !r.charging_inferred
+                        && r.precision == Precision::Exact
                         && !preferences.hidden
                     {
                         self.estimator

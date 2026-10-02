@@ -446,7 +446,8 @@ fn estimator_sleep_long_gap_unknown_coarse_and_backward_clock() {
     let mut h = Estimator::default();
     h.record(&r("one", Some(90), Some(false)), 0.0);
     h.record(&r("one", Some(89), Some(false)), 28_800.0);
-    assert_eq!(h.devices["one"].usage, 600.0);
+    // An eight-hour observation gap does not establish any awake time.
+    assert_eq!(h.devices["one"].usage, 0.0);
     let usage = h.devices["one"].usage;
     let mut sleeping = r("one", Some(89), Some(false));
     sleeping.connection = Connection::Sleeping;

@@ -4,9 +4,45 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
+## Insights and prediction checkpoint, 2 October 2026
+
+The current portable executable is **2,811,392 bytes (2.68 MiB)**,
+SHA256 `A947E0A6E805A7EB0AD549D7FF7457500D28AF54F87CDE6736CD32B79DB32AEC`.
+Formatting, strict workspace Clippy, **493 behavioral tests**, the optimized
+release build and production API restrictions pass; two optional timing tests
+remain ignored. No dependencies or GitHub workflows were added.
+All 459 upstream IDs remain accounted for: 365 mapped, 37 intentional differences
+and 57 obsolete. Long unobserved gaps are now explicitly an intentional difference.
+
+Regressions cover estimator sleep/restart rebasing, unknown charging, exact
+precision, recent-drain adaptation, full-charge plateau resets, invalid saved
+fits, interrupted projection windows, charge evidence, query-time freshness,
+provider-local history, availability boundaries, per-device rate sessions and
+late completions across permission/connection changes. Usage charts now exclude
+long unobserved gaps and known session boundaries rather than inventing time.
+
+Native Insights validation passes rate/charge selection, coverage explanations,
+keyboard navigation, local Refresh and forty close/reopen cycles with stable
+USER/GDI handles. The existing direct tray rate-selection/readback/Restore test
+also passes with the new completion guards. These tests use simulation; no
+physical polling-rate SET was sent and hardware support labels are unchanged.
+
+A **180.36-second** background run with one simulated animated charging mouse,
+after forty dashboard cycles, averages **6.11 MiB** private memory (6.23 MiB peak)
+and **0.069% of one logical core**. USER/GDI handles do not grow. The run also
+replays Explorer restart and resume, confirms graceful shutdown, and checkpoints
+the learned state before exit. This is a current target check, not a matched
+performance comparison with the older optimization checkpoint.
+
+The audit example checks SQLite integrity, row/payload agreement, rate metadata
+and retained evidence without writing or emitting hardware identities. Actual
+history and its consistent audit snapshot remain local, outside the repository
+and portable package. Previously overwritten observations cannot be recovered
+from the remaining rows; no historical measurements were fabricated or repaired.
+
 ## Direct tray polling checkpoint, 2 October 2026
 
-The current portable executable is **2,785,280 bytes (2.66 MiB)**,
+At this checkpoint, the portable executable was **2,785,280 bytes (2.66 MiB)**,
 SHA256 `44F39252F369A1C43A5293077577BA66161D16D8D8049FC5D03EECF463356E6F`.
 Formatting, strict workspace Clippy, **461 behavioral tests**, the optimized
 release build and production API restrictions pass. Two optional timing tests

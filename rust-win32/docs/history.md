@@ -6,10 +6,11 @@ minutes and hours rather than calendar days.
 
 Use time is an estimate from device battery observations, not cursor movement or
 button activity. An interval counts only when both adjacent observations are
-online, have valid battery percentages and are not charging. Sleeping, stale,
-unknown and charging observations pause the clock. Each observed interval is
-capped at ten minutes, matching the existing awake-use safeguard for long
-unobserved gaps. The app does not add input hooks or wake the mouse to collect
+online, have valid battery percentages and explicitly report not charging.
+Sleeping, stale, unknown and charging observations pause the clock. Intervals
+longer than ten minutes and known session boundaries contribute no use time;
+the app cannot establish device availability across those gaps. The app does
+not add input hooks or wake the mouse to collect
 history. Previously recorded data can be displayed without a schema migration.
 
 Select **Calendar time** for the last 24 hours, 7 days or 30 days. The graph holds

@@ -97,9 +97,9 @@
   },
   {
     "upstream_test": "test_new_features.HistoryTests.test_long_gap_counts_as_max_gap",
-    "status": "mapped",
+    "status": "intentional_difference",
     "rust_test": "crates/core/tests/ported_behaviour.rs::estimator_sleep_long_gap_unknown_coarse_and_backward_clock",
-    "notes": ""
+    "notes": "Intervals longer than ten minutes contribute zero observed awake time rather than a capped ten minutes; unobserved loss is rebased without changing the learned slope."
   },
   {
     "upstream_test": "test_new_features.HistoryTests.test_coarse_and_unknown_readings_are_ignored",

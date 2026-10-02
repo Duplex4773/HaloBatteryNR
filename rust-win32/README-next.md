@@ -99,8 +99,10 @@ PlayStation Bluetooth full mode is opt-in. 8BitDo mode switching is disabled. Un
 
 The **Insights** page compares observed battery drain by last-confirmed polling
 rate and shows recent charge summaries with awake use, consumption and average
-drain. Evidence counts and conservative projection thresholds distinguish
-limited data from an estimate. Only fresh hardware readbacks establish rate
+drain, newest first. Coverage and freshness explain missing or limited data;
+projections require complete intervals between observed battery drops instead
+of extrapolating flat or interrupted samples. Recent-use predictions retain
+learned drain through sleep while excluding unobserved losses. Only fresh hardware readbacks establish rate
 evidence; saved requests never count. Existing history can provide partial
 charge summaries. See [`docs/insights.md`](docs/insights.md).
 
