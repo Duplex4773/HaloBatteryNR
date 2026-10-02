@@ -4,6 +4,7 @@ use hb_core::{
     Settings, Snapshot, UsageObservation,
 };
 use rusqlite::{Connection, params};
+use serde::{Serialize, Serializer, ser::SerializeSeq};
 use std::{
     collections::BTreeMap,
     fs,
@@ -56,16 +57,79 @@ pub fn save_settings(path: &Path, settings: &Settings) -> Result<(), ProviderErr
     )
 }
 pub fn write_status(path: &Path, snapshot: &Snapshot, running: bool) -> Result<(), ProviderError> {
-    let devices: Vec<_> = snapshot.devices.iter().filter(|d| running && !d.hidden).map(|d| serde_json::json!({
-        "key":d.reading.key,"name":d.name,"level":d.reading.level,"charging":d.reading.charging.unwrap_or(false),
-        "online":d.reading.online(),"kind":d.icon,"approx":d.reading.approx,"low_alert_at":d.low_alert_at,
-        "seconds_left":d.seconds_left,"text":d.text
-    })).collect();
-    atomic_write(path, &serde_json::to_vec(&serde_json::json!({"app":"Halo Battery Next","version":env!("CARGO_PKG_VERSION"),"running":running,
-        "updated_unix":snapshot.timestamp,"updated":timestamp(snapshot.timestamp),"devices":devices})).map_err(|e| ProviderError::new(e.to_string()))?)
+    let status = Status {
+        app: "Halo Battery Next",
+        version: env!("CARGO_PKG_VERSION"),
+        running,
+        updated_unix: snapshot.timestamp,
+        updated: timestamp(snapshot.timestamp),
+        devices: StatusDevices { snapshot, running },
+    };
+    atomic_write(
+        path,
+        &serde_json::to_vec(&status).map_err(|e| ProviderError::new(e.to_string()))?,
+    )
+}
+#[derive(Serialize)]
+struct Status<'a> {
+    app: &'static str,
+    version: &'static str,
+    running: bool,
+    updated_unix: i64,
+    updated: String,
+    devices: StatusDevices<'a>,
+}
+struct StatusDevices<'a> {
+    snapshot: &'a Snapshot,
+    running: bool,
+}
+#[derive(Serialize)]
+struct StatusDevice<'a> {
+    key: &'a str,
+    name: &'a str,
+    level: Option<u8>,
+    charging: bool,
+    online: bool,
+    kind: &'a str,
+    approx: &'a Option<String>,
+    low_alert_at: u8,
+    seconds_left: Option<u64>,
+    text: &'a str,
+}
+impl Serialize for StatusDevices<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut sequence = serializer.serialize_seq(None)?;
+        for d in self
+            .snapshot
+            .devices
+            .iter()
+            .filter(|d| self.running && !d.hidden)
+        {
+            sequence.serialize_element(&StatusDevice {
+                key: &d.reading.key,
+                name: &d.name,
+                level: d.reading.level,
+                charging: d.reading.charging.unwrap_or(false),
+                online: d.reading.online(),
+                kind: &d.icon,
+                approx: &d.reading.approx,
+                low_alert_at: d.low_alert_at,
+                seconds_left: d.seconds_left,
+                text: &d.text,
+            })?;
+        }
+        sequence.end()
+    }
 }
 fn sql_error(e: rusqlite::Error) -> ProviderError {
     ProviderError::new(e.to_string())
+}
+// The SQLite row owns this text until the next step; parsing does not need a copy.
+fn row_text<'a>(row: &'a rusqlite::Row<'_>, index: usize) -> rusqlite::Result<&'a str> {
+    let value = row.get_ref(index)?;
+    value.as_str().map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(index, value.data_type(), Box::new(error))
+    })
 }
 /// UTC calendar rendering avoids locale-dependent output. All status fields match
 /// upstream; the RFC3339 suffix makes the timestamp's timezone explicit.
@@ -165,8 +229,8 @@ impl Store {
         let mut builder = InsightsBuilder::default();
         while let Some(row) = rows.next().map_err(sql_error)? {
             let timestamp: i64 = row.get(0).map_err(sql_error)?;
-            let payload: String = row.get(1).map_err(sql_error)?;
-            let Ok(reading) = serde_json::from_str::<Reading>(&payload) else {
+            let payload = row_text(row, 1).map_err(sql_error)?;
+            let Ok(reading) = serde_json::from_str::<Reading>(payload) else {
                 builder.break_continuity();
                 continue;
             };
@@ -179,10 +243,8 @@ impl Store {
                 .ok()
                 .flatten()
                 .and_then(|hz| PollingRate::try_from(hz).ok());
-            let session = row
-                .get::<_, Option<String>>(3)
+            let session = row_text(row, 3)
                 .ok()
-                .flatten()
                 .and_then(|value| value.parse::<u64>().ok());
             builder.push(UsageObservation {
                 reading,
@@ -243,8 +305,8 @@ impl Store {
             .map_err(sql_error)?;
         while let Some(row) = rows.next().map_err(sql_error)? {
             let timestamp: i64 = row.get(0).map_err(sql_error)?;
-            let payload: String = row.get(1).map_err(sql_error)?;
-            if let Ok(reading) = serde_json::from_str::<Reading>(&payload)
+            let payload = row_text(row, 1).map_err(sql_error)?;
+            if let Ok(reading) = serde_json::from_str::<Reading>(payload)
                 && reading.key == key
                 && reading.timestamp == timestamp
                 && reading.level.is_some_and(|level| level <= 100)
@@ -352,8 +414,8 @@ impl Store {
         let mut total = 0i64;
         while let Some(row) = rows.next().map_err(sql_error)? {
             let timestamp: i64 = row.get(0).map_err(sql_error)?;
-            let payload: String = row.get(1).map_err(sql_error)?;
-            let Ok(reading) = serde_json::from_str::<Reading>(&payload) else {
+            let payload = row_text(row, 1).map_err(sql_error)?;
+            let Ok(reading) = serde_json::from_str::<Reading>(payload) else {
                 previous = None;
                 continue;
             };
@@ -379,10 +441,10 @@ impl Store {
     pub fn load_estimator(&self) -> Estimator {
         self.db
             .query_row("SELECT payload FROM state WHERE key='estimator'", [], |r| {
-                r.get::<_, String>(0)
+                Ok(serde_json::from_str(row_text(r, 0)?).ok())
             })
             .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
+            .flatten()
             .map(|v| {
                 Estimator::from_value(v, hb_core::Clock::unix(&hb_core::SystemClock::default()))
             })
@@ -418,8 +480,8 @@ impl HistoryStore for Store {
         let count: i64 = self
             .db
             .query_row(
-                "SELECT count(*) FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3",
-                params![key, since, until],
+                "SELECT count(*) FROM (SELECT 1 FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3 LIMIT ?4)",
+                params![key, since, until, limit as i64 + 1],
                 |r| r.get(0),
             )
             .map_err(sql_error)?;
@@ -438,20 +500,24 @@ impl HistoryStore for Store {
                 )
                 .map_err(sql_error)?;
             for ts in [bounds.0, bounds.1] {
-                let payload: String = query
-                    .query_row(params![key, ts], |r| r.get(0))
+                let reading = query
+                    .query_row(params![key, ts], |r| {
+                        Ok(serde_json::from_str(row_text(r, 0)?).ok())
+                    })
                     .map_err(sql_error)?;
-                if let Ok(r) = serde_json::from_str(&payload) {
+                if let Some(r) = reading {
                     out.push(r);
                 }
             }
         } else if count <= limit as i64 {
             let mut query=self.db.prepare("SELECT payload FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3 ORDER BY ts").map_err(sql_error)?;
             for row in query
-                .query_map(params![key, since, until], |r| r.get::<_, String>(0))
+                .query_map(params![key, since, until], |r| {
+                    Ok(serde_json::from_str(row_text(r, 0)?).ok())
+                })
                 .map_err(sql_error)?
             {
-                if let Ok(r) = serde_json::from_str(&row.map_err(sql_error)?) {
+                if let Some(r) = row.map_err(sql_error)? {
                     out.push(r);
                 }
             }
@@ -464,11 +530,11 @@ impl HistoryStore for Store {
             let mut query=self.db.prepare("WITH selected AS (SELECT ts,payload,level,(ts-?2)/?4 AS bucket FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3), extremes AS (SELECT bucket,min(level) AS lo,max(level) AS hi FROM selected GROUP BY bucket) SELECT s.payload FROM selected s JOIN extremes e ON s.bucket=e.bucket WHERE s.level=e.lo OR s.level=e.hi OR s.level IS NULL GROUP BY s.bucket,s.level ORDER BY s.ts LIMIT ?5").map_err(sql_error)?;
             for row in query
                 .query_map(params![key, since, until, width, limit as i64], |r| {
-                    r.get::<_, String>(0)
+                    Ok(serde_json::from_str(row_text(r, 0)?).ok())
                 })
                 .map_err(sql_error)?
             {
-                if let Ok(r) = serde_json::from_str(&row.map_err(sql_error)?) {
+                if let Some(r) = row.map_err(sql_error)? {
                     out.push(r);
                 }
             }

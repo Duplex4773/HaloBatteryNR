@@ -1,12 +1,13 @@
 //! A single UI thread owns all HWND, HICON and Direct2D resources.
 use crate::{
     chart::Chart,
-    dashboard_theme::{DashboardTheme, Palette},
+    dashboard_theme::{DashboardTheme, Palette, color_brush},
     icons::{self, Icon},
     runtime::{Command, Event, Runtime},
 };
 use hb_core::*;
 use std::{
+    borrow::Cow,
     cell::{Cell, RefCell},
     collections::BTreeMap,
     path::PathBuf,
@@ -164,7 +165,7 @@ struct Tray {
     registration: TrayRegistration,
     data: NOTIFYICONDATAW,
     frames: Vec<Icon>,
-    signature: String,
+    signature: IconSignature,
     frame: usize,
 }
 impl Drop for Tray {
@@ -207,23 +208,34 @@ impl PollingUi {
         self.status.clear();
         self.pending = None;
     }
+    #[cfg(test)]
     fn retain_devices(&mut self, devices: &[ConfigurationDevice]) {
-        let keys = devices
+        self.retain_inventory(&[], devices);
+    }
+    fn retain_inventory(
+        &mut self,
+        batteries: &[DeviceView],
+        configuration: &[ConfigurationDevice],
+    ) {
+        let mut keys = std::collections::BTreeSet::new();
+        for key in batteries
             .iter()
-            .take(512)
-            .map(|d| d.key.as_str())
-            .collect::<std::collections::BTreeSet<_>>();
-        self.observations
-            .retain(|key, _| keys.contains(key.as_str()));
+            .map(|d| d.reading.key.as_str())
+            .chain(configuration.iter().map(|d| d.key.as_str()))
+        {
+            if keys.len() < 512 {
+                keys.insert(key);
+            }
+        }
+        self.observations.retain(|key, observation| {
+            keys.contains(key.as_str())
+                && inventory_contains_device(batteries, configuration, &observation.target.device)
+        });
         self.previous.retain(|key, _| keys.contains(key.as_str()));
         self.status.retain(|key, _| keys.contains(key.as_str()));
-        self.observations
-            .retain(|_, observation| devices.iter().any(|d| d == &observation.target.device));
-        if self
-            .pending
-            .as_ref()
-            .is_some_and(|pending| !devices.iter().any(|d| d == &pending.device))
-        {
+        if self.pending.as_ref().is_some_and(|pending| {
+            !inventory_contains_device(batteries, configuration, &pending.device)
+        }) {
             self.abandon();
         }
     }
@@ -578,6 +590,80 @@ fn merged_device_rows(
     }
     rows
 }
+fn inventory_contains_device(
+    batteries: &[DeviceView],
+    configuration: &[ConfigurationDevice],
+    device: &ConfigurationDevice,
+) -> bool {
+    if let Some(battery) = batteries.iter().find(|d| d.reading.key == device.key) {
+        if let Some(configured) = configuration
+            .iter()
+            .find(|d| d.matches_reading(&battery.reading))
+        {
+            return configured == device;
+        }
+        let reading = &battery.reading;
+        device.matches_reading(reading)
+            && device.name == reading.name
+            && device.kind == reading.kind
+            && device.connection == reading.connection
+            && matches!(device.capability, PollingCapability::ReadWrite)
+    } else {
+        configuration
+            .iter()
+            .find(|d| d.key == device.key)
+            .is_some_and(|d| d == device)
+    }
+}
+fn device_row_index(
+    batteries: &[DeviceView],
+    configuration: &[ConfigurationDevice],
+    key: &str,
+) -> Option<usize> {
+    if let Some(index) = batteries.iter().position(|d| d.reading.key == key) {
+        return Some(index);
+    }
+    let mut row = batteries.len();
+    for (index, device) in configuration.iter().enumerate() {
+        if batteries.iter().any(|d| d.reading.key == device.key)
+            || configuration[..index].iter().any(|d| d.key == device.key)
+        {
+            continue;
+        }
+        if device.key == key {
+            return Some(row);
+        }
+        row += 1;
+    }
+    None
+}
+fn current_device_row(
+    batteries: &[DeviceView],
+    configuration: &[ConfigurationDevice],
+    selected: Option<&str>,
+) -> Option<(ConfigurationDevice, Option<DeviceView>)> {
+    let battery = selected.and_then(|key| batteries.iter().find(|d| d.reading.key == key));
+    let standalone = selected.and_then(|key| configuration.iter().find(|d| d.key == key));
+    if let Some(battery) = battery.or_else(|| {
+        if standalone.is_none() {
+            batteries.first()
+        } else {
+            None
+        }
+    }) {
+        let device = configuration
+            .iter()
+            .find(|d| d.matches_reading(&battery.reading))
+            .cloned()
+            .unwrap_or_else(|| ConfigurationDevice::from_reading(&battery.reading));
+        Some((device, Some(battery.clone())))
+    } else {
+        standalone
+            .or_else(|| configuration.first())
+            .cloned()
+            .map(|d| (d, None))
+    }
+}
 struct State {
     context: *const UiContext,
     runtime: Runtime,
@@ -615,10 +701,12 @@ fn wide(s: &str) -> Vec<u16> {
 }
 fn copy(dst: &mut [u16], s: &str) {
     dst.fill(0);
-    let x: Vec<_> = s.encode_utf16().collect();
-    let n = x.len().min(dst.len() - 1);
-    dst[..n].copy_from_slice(&x[..n]);
+    let limit = dst.len().saturating_sub(1);
+    for (target, character) in dst.iter_mut().take(limit).zip(s.encode_utf16()) {
+        *target = character;
+    }
 }
+
 fn err(e: windows::core::Error) -> ProviderError {
     ProviderError::new(e.to_string())
 }
@@ -2065,13 +2153,8 @@ impl State {
         if selection_changed {
             self.polling.abandon();
         }
-        self.polling.retain_devices(
-            &self
-                .device_rows()
-                .into_iter()
-                .map(|(d, _)| d)
-                .collect::<Vec<_>>(),
-        );
+        self.polling
+            .retain_inventory(&self.snapshot.devices, &self.configuration_devices);
         if self.dashboard.is_some() && self.page == 1 {
             self.build();
             if selection_changed {
@@ -2088,12 +2171,11 @@ impl State {
         merged_device_rows(&self.snapshot.devices, &self.configuration_devices)
     }
     fn current_device(&self) -> Option<(ConfigurationDevice, Option<DeviceView>)> {
-        let rows = self.device_rows();
-        self.selected_device
-            .as_ref()
-            .and_then(|key| rows.iter().find(|(d, _)| &d.key == key))
-            .cloned()
-            .or_else(|| rows.first().cloned())
+        current_device_row(
+            &self.snapshot.devices,
+            &self.configuration_devices,
+            self.selected_device.as_deref(),
+        )
     }
     fn configuration_name(&self, device: &ConfigurationDevice) -> String {
         self.settings
@@ -2453,13 +2535,8 @@ impl State {
                 self.polling.abandon();
                 polling_selection_changed = true;
             }
-            self.polling.retain_devices(
-                &self
-                    .device_rows()
-                    .into_iter()
-                    .map(|(d, _)| d)
-                    .collect::<Vec<_>>(),
-            );
+            self.polling
+                .retain_inventory(&self.snapshot.devices, &self.configuration_devices);
             self.selected = previous_key
                 .as_ref()
                 .and_then(|key| {
@@ -2510,7 +2587,11 @@ impl State {
                         self.selected_device
                             .as_ref()
                             .and_then(|key| {
-                                self.device_rows().iter().position(|(d, _)| &d.key == key)
+                                device_row_index(
+                                    &self.snapshot.devices,
+                                    &self.configuration_devices,
+                                    key,
+                                )
                             })
                             .unwrap_or(0)
                     } else {
@@ -2550,21 +2631,19 @@ impl State {
                     .get(&d.reading.key)
                     .is_some_and(|p| p.hidden)
         }) {
-            let signature = icon_signature(d, settings, dark);
-            let tip = d.text.clone();
             let existing = self.trays.get_mut(&d.reading.key);
             if let Some(t) = existing {
                 let mut changed = false;
-                if signature != t.signature
+                if !t.signature.matches(d, settings, dark)
                     && let Ok(frames) = icons::frames(d, settings, dark, 32)
                 {
                     t.frames = frames;
-                    t.signature = signature;
+                    t.signature = icon_signature(d, settings, dark);
                     t.frame = 0;
                     changed = true
                 }
                 let old = t.data.szTip;
-                copy(&mut t.data.szTip, &tip);
+                copy(&mut t.data.szTip, &d.text);
                 changed |= old != t.data.szTip;
                 t.data.hIcon = t.frames[t.frame].0;
                 t.registration
@@ -2580,7 +2659,7 @@ impl State {
                     guidItem: GUID::from_u128(stable_guid(&d.reading.key)),
                     ..Default::default()
                 };
-                copy(&mut data.szTip, &tip);
+                copy(&mut data.szTip, &d.text);
                 let mut registration = TrayRegistration::default();
                 registration.update_with(&data, update, true, &mut shell_notify);
                 self.trays.insert(
@@ -2589,7 +2668,7 @@ impl State {
                         registration,
                         data,
                         frames,
-                        signature,
+                        signature: icon_signature(d, settings, dark),
                         frame: 0,
                     },
                 );
@@ -2656,25 +2735,54 @@ unsafe fn send(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     unsafe { SendMessageW(h, m, Some(w), Some(l)) }
 }
 
-fn icon_signature(d: &DeviceView, settings: &Settings, dark: bool) -> String {
-    format!(
-        "{:?}{:?}{:?}{:?}{}{}{}{:?}{:?}",
-        d.reading.level,
-        d.reading.precision,
-        d.reading.charging,
-        d.reading.connection,
-        d.icon,
-        d.low_alert_at,
-        dark,
-        settings.icon_theme,
-        (
-            settings.animation,
-            settings.percent_in_icon,
-            settings.badges,
-            settings.warning_level
-        )
-    )
+#[derive(Debug, PartialEq, Eq)]
+struct IconSignature {
+    level: Option<u8>,
+    precision: Precision,
+    charging: Option<bool>,
+    connection: Connection,
+    icon: String,
+    low_alert_at: u8,
+    dark: bool,
+    icon_theme: String,
+    animation: bool,
+    percent_in_icon: bool,
+    badges: bool,
+    warning_level: u8,
 }
+impl IconSignature {
+    fn matches(&self, d: &DeviceView, settings: &Settings, dark: bool) -> bool {
+        self.level == d.reading.level
+            && self.precision == d.reading.precision
+            && self.charging == d.reading.charging
+            && self.connection == d.reading.connection
+            && self.icon == d.icon
+            && self.low_alert_at == d.low_alert_at
+            && self.dark == dark
+            && self.icon_theme == settings.icon_theme
+            && self.animation == settings.animation
+            && self.percent_in_icon == settings.percent_in_icon
+            && self.badges == settings.badges
+            && self.warning_level == settings.warning_level
+    }
+}
+fn icon_signature(d: &DeviceView, settings: &Settings, dark: bool) -> IconSignature {
+    IconSignature {
+        level: d.reading.level,
+        precision: d.reading.precision.clone(),
+        charging: d.reading.charging,
+        connection: d.reading.connection.clone(),
+        icon: d.icon.clone(),
+        low_alert_at: d.low_alert_at,
+        dark,
+        icon_theme: settings.icon_theme.clone(),
+        animation: settings.animation,
+        percent_in_icon: settings.percent_in_icon,
+        badges: settings.badges,
+        warning_level: settings.warning_level,
+    }
+}
+
 fn tray_dark(settings: &Settings) -> bool {
     let fallback = hb_windows::system::dark_theme();
     if !["auto", "topbar"].contains(&settings.icon_theme.as_str())
@@ -2796,7 +2904,7 @@ fn device_threshold(text: &str) -> Result<Option<u8>, &'static str> {
         .ok_or("Enter 0–100, or leave blank for the default alert threshold")
 }
 
-fn tray_devices(snapshot: &Snapshot, settings: &Settings) -> Vec<DeviceView> {
+fn tray_devices<'a>(snapshot: &'a Snapshot, settings: &Settings) -> Vec<Cow<'a, DeviceView>> {
     let mut devices: Vec<_> = snapshot
         .devices
         .iter()
@@ -2807,10 +2915,10 @@ fn tray_devices(snapshot: &Snapshot, settings: &Settings) -> Vec<DeviceView> {
                     .get(&d.reading.key)
                     .is_some_and(|p| p.hidden)
         })
-        .cloned()
+        .map(Cow::Borrowed)
         .collect();
     if devices.is_empty() {
-        devices.push(DeviceView {
+        devices.push(Cow::Owned(DeviceView {
             reading: Reading::new("application", "Halo Battery Next", "app", 0),
             name: "Halo Battery Next".into(),
             icon: "mouse".into(),
@@ -2818,7 +2926,7 @@ fn tray_devices(snapshot: &Snapshot, settings: &Settings) -> Vec<DeviceView> {
             seconds_left: None,
             text: "Halo Battery Next — no visible devices".into(),
             hidden: false,
-        });
+        }));
     }
     devices
 }
@@ -2829,7 +2937,9 @@ mod behaviour_tests {
     #[test]
     fn icon_changes_on_precision_transition_but_not_timestamp_refresh() {
         let settings = Settings::default();
-        let mut d = tray_devices(&Snapshot::default(), &settings).remove(0);
+        let mut d = tray_devices(&Snapshot::default(), &settings)
+            .remove(0)
+            .into_owned();
         d.reading.level = Some(50);
         let exact = icon_signature(&d, &settings, false);
         d.reading.timestamp += 60;
@@ -2838,10 +2948,60 @@ mod behaviour_tests {
         assert_ne!(exact, icon_signature(&d, &settings, false));
     }
     #[test]
+    fn tray_cache_signature_covers_visual_changes_but_ignores_text_and_freshness() {
+        let settings = Settings::default();
+        let device = tray_devices(&Snapshot::default(), &settings)
+            .remove(0)
+            .into_owned();
+        let signature = icon_signature(&device, &settings, false);
+        type Edit = fn(&mut DeviceView, &mut Settings);
+        let edits: [Edit; 11] = [
+            |d, _| d.reading.level = Some(50),
+            |d, _| d.reading.precision = Precision::Coarse,
+            |d, _| d.reading.charging = Some(true),
+            |d, _| d.reading.connection = Connection::Sleeping,
+            |d, _| d.icon = "keyboard".into(),
+            |d, _| d.low_alert_at += 1,
+            |_, s| s.icon_theme = "black".into(),
+            |_, s| s.animation = !s.animation,
+            |_, s| s.percent_in_icon = !s.percent_in_icon,
+            |_, s| s.badges = !s.badges,
+            |_, s| s.warning_level += 1,
+        ];
+        for edit in edits {
+            let mut d = device.clone();
+            let mut s = settings.clone();
+            edit(&mut d, &mut s);
+            assert!(!signature.matches(&d, &s, false));
+        }
+        assert!(!signature.matches(&device, &settings, true));
+        let mut text_only = device;
+        text_only.reading.timestamp += 60;
+        text_only.reading.charging_inferred = true;
+        text_only.name = "Renamed".into();
+        text_only.text = "Fresh tooltip".into();
+        assert!(signature.matches(&text_only, &settings, false));
+    }
+    #[test]
+    fn fixed_utf16_buffers_remain_terminated_and_clear_previous_content() {
+        let mut buffer = [99; 6];
+        copy(&mut buffer, "A😀BCDE");
+        assert_eq!(buffer, [65, 0xd83d, 0xde00, 66, 67, 0]);
+        copy(&mut buffer, "X");
+        assert_eq!(buffer, [88, 0, 0, 0, 0, 0]);
+        copy(&mut [], "anything");
+        let mut one = [99];
+        copy(&mut one, "anything");
+        assert_eq!(one, [0]);
+    }
+    #[test]
     fn placeholder_exists_only_without_visible_devices() {
         let mut settings = Settings::default();
         let mut snapshot = Snapshot::default();
-        let empty = tray_devices(&snapshot, &settings);
+        let empty = tray_devices(&snapshot, &settings)
+            .into_iter()
+            .map(Cow::into_owned)
+            .collect::<Vec<_>>();
         assert_eq!(empty.len(), 1);
         assert_eq!(empty[0].reading.key, "application");
         let mut reading = Reading::new("mouse", "Mouse", "razer", SystemClock::default().unix());
@@ -3171,22 +3331,25 @@ impl PopupAppearance {
             SelectObject(item.hDC, self.font.into());
             let selected = item.itemState.0 & ODS_SELECTED.0 != 0;
             let disabled = item.itemState.0 & (ODS_DISABLED.0 | ODS_GRAYED.0) != 0;
-            let background = CreateSolidBrush(if selected && !disabled {
-                self.palette.selection
-            } else {
-                self.palette.surface
-            });
-            FillRect(item.hDC, &item.rcItem, background);
-            let _ = DeleteObject(background.into());
+            FillRect(
+                item.hDC,
+                &item.rcItem,
+                color_brush(
+                    item.hDC,
+                    if selected && !disabled {
+                        self.palette.selection
+                    } else {
+                        self.palette.surface
+                    },
+                ),
+            );
             let mut rect = item.rcItem;
             rect.left += self.padding;
             rect.right -= self.padding;
             if entry.separator {
                 rect.top = (rect.top + rect.bottom) / 2;
                 rect.bottom = rect.top + 1;
-                let brush = CreateSolidBrush(self.palette.border);
-                FillRect(item.hDC, &rect, brush);
-                let _ = DeleteObject(brush.into());
+                FillRect(item.hDC, &rect, color_brush(item.hDC, self.palette.border));
             } else {
                 SetBkMode(item.hDC, TRANSPARENT);
                 SetTextColor(
@@ -3715,6 +3878,71 @@ mod configuration_device_ui_tests {
             before.first().map(|d| &d.reading.key),
             after.first().map(|d| &d.reading.key)
         );
+    }
+    #[test]
+    fn direct_selection_and_row_indices_match_mixed_deduplicated_inventory() {
+        let batteries = vec![battery("mouse"), battery("second")];
+        let matched = ConfigurationDevice::from_reading(&batteries[0].reading);
+        let configured = vec![
+            matched,
+            keyboard("keyboard"),
+            keyboard("keyboard"),
+            keyboard("other"),
+        ];
+        let rows = merged_device_rows(&batteries, &configured);
+        for selected in [
+            None,
+            Some("missing"),
+            Some("mouse"),
+            Some("second"),
+            Some("keyboard"),
+            Some("other"),
+        ] {
+            let expected = selected
+                .and_then(|key| rows.iter().find(|(d, _)| d.key == key))
+                .unwrap_or(&rows[0]);
+            let actual = current_device_row(&batteries, &configured, selected).unwrap();
+            assert_eq!(actual.0, expected.0);
+            assert_eq!(
+                actual.1.as_ref().map(|d| &d.reading.key),
+                expected.1.as_ref().map(|d| &d.reading.key)
+            );
+            if let Some(key) = selected {
+                assert_eq!(
+                    device_row_index(&batteries, &configured, key),
+                    rows.iter().position(|(d, _)| d.key == key)
+                );
+            }
+        }
+        let views = tray_devices(
+            &Snapshot {
+                devices: batteries.clone(),
+                ..Snapshot::default()
+            },
+            &Settings::default(),
+        )
+        .into_iter()
+        .map(Cow::into_owned)
+        .collect::<Vec<_>>();
+        assert_eq!(views.len(), 2);
+        let snapshot = Snapshot {
+            devices: batteries,
+            ..Snapshot::default()
+        };
+        let views = tray_devices(&snapshot, &Settings::default());
+        assert!(matches!(&views[0], Cow::Borrowed(d) if std::ptr::eq(*d, &snapshot.devices[0])));
+    }
+    #[test]
+    fn retention_uses_matching_descriptor_and_rejects_replaced_battery_identity() {
+        let mut batteries = vec![battery("mouse")];
+        let device = ConfigurationDevice::from_reading(&batteries[0].reading);
+        let mut ui = PollingUi::default();
+        ui.begin(device, PollingIntent::Read).unwrap();
+        ui.retain_inventory(&batteries, &[]);
+        assert!(ui.pending.is_some());
+        batteries[0].reading.serial = Some("replacement".into());
+        ui.retain_inventory(&batteries, &[]);
+        assert!(ui.pending.is_none());
     }
     #[test]
     fn unavailable_keyboard_never_submits_hardware_request() {

@@ -151,7 +151,7 @@ impl InsightsBuilder {
                 CycleEvidence::ObservedCharge
             });
         } else if discharging(reading) {
-            let previous_observation = self.previous.clone();
+            let previous_observation = self.previous.take();
             let previous = previous_observation.as_ref();
             let delta = previous.and_then(|p| reading.timestamp.checked_sub(p.reading.timestamp));
             let continuous = previous.is_some_and(|p| {

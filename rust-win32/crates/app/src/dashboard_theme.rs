@@ -86,6 +86,14 @@ impl Palette {
         }
     }
 }
+/// Use the documented DC stock brush for a single fill/frame inside a saved DC.
+/// The brush belongs to Windows; RestoreDC restores its selected color.
+pub(crate) fn color_brush(hdc: HDC, color: COLORREF) -> HBRUSH {
+    unsafe {
+        SetDCBrushColor(hdc, color);
+        HBRUSH(GetStockObject(DC_BRUSH).0)
+    }
+}
 struct Brush(HBRUSH);
 impl Brush {
     fn new(color: COLORREF) -> Self {
@@ -229,8 +237,7 @@ impl DashboardTheme {
             } else {
                 self.palette.text
             };
-            let brush = Brush::new(bg);
-            FillRect(item.hDC, &item.rcItem, brush.0);
+            FillRect(item.hDC, &item.rcItem, color_brush(item.hDC, bg));
             if item.itemID != u32::MAX {
                 let len = SendMessageW(
                     item.hwndItem,
@@ -313,16 +320,13 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
             let saved = SaveDC(hdc);
             let mut rect = RECT::default();
             let _ = GetClientRect(hwnd, &mut rect);
-            let surface = Brush::new(palette.surface);
-            let background = Brush::new(palette.background);
-            let border = Brush::new(palette.border);
             if combo {
-                FrameRect(hdc, &rect, border.0);
+                FrameRect(hdc, &rect, color_brush(hdc, palette.border));
                 rect.left = rect.right - (22 * GetDpiForWindow(hwnd) / 96) as i32;
                 rect.top += 1;
                 rect.bottom -= 1;
                 rect.right -= 1;
-                FillRect(hdc, &rect, surface.0);
+                FillRect(hdc, &rect, color_brush(hdc, palette.surface));
                 let mut arrow: Vec<u16> = "▾".encode_utf16().collect();
                 SetTextColor(hdc, palette.text);
                 SetBkMode(hdc, TRANSPARENT);
@@ -336,7 +340,18 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
                 let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
                 let check = style & BS_TYPEMASK as u32 == BS_AUTOCHECKBOX as u32;
                 let state = SendMessageW(hwnd, BM_GETSTATE, None, None).0 as u32;
-                FillRect(hdc, &rect, if check { background.0 } else { surface.0 });
+                FillRect(
+                    hdc,
+                    &rect,
+                    color_brush(
+                        hdc,
+                        if check {
+                            palette.background
+                        } else {
+                            palette.surface
+                        },
+                    ),
+                );
                 let mut text_rect = rect;
                 if check {
                     let size = (16 * GetDpiForWindow(hwnd) / 96) as i32;
@@ -346,8 +361,8 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
                         right: 1 + size,
                         bottom: (rect.bottom + size) / 2,
                     };
-                    FillRect(hdc, &mark, surface.0);
-                    FrameRect(hdc, &mark, border.0);
+                    FillRect(hdc, &mark, color_brush(hdc, palette.surface));
+                    FrameRect(hdc, &mark, color_brush(hdc, palette.border));
                     if SendMessageW(hwnd, BM_GETCHECK, None, None).0 == BST_CHECKED.0 as isize {
                         let mut mark_rect = mark;
                         let mut tick: Vec<u16> = "✓".encode_utf16().collect();
@@ -365,11 +380,14 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
                     FrameRect(
                         hdc,
                         &rect,
-                        if state & BST_PUSHED != 0 {
-                            background.0
-                        } else {
-                            border.0
-                        },
+                        color_brush(
+                            hdc,
+                            if state & BST_PUSHED != 0 {
+                                palette.background
+                            } else {
+                                palette.border
+                            },
+                        ),
                     );
                 }
                 let font = SendMessageW(hwnd, WM_GETFONT, None, None);

@@ -1,5 +1,9 @@
 # Resource audit — 2026-10-01
 
+The [2 October follow-up](performance-audit-20261002.md) records the current
+runtime, allocation and paint optimizations with matched before/after builds.
+The measurements below describe their original checkpoints.
+
 The original optimization audit below reduces repeated work without changing provider packets, discovery
 filters, transport precedence, polling intervals, notification behavior or the
 default charging animation. A later keyboard/menu checkpoint is recorded at the

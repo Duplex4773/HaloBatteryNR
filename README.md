@@ -47,23 +47,27 @@ refresh interval and status export enabled, with dashboards and menus closed.
 The hardware workload used a wireless Razer DeathAdder V4 Pro and normal
 provider discovery; the charging workload used one simulated animated mouse.
 Original figures include observed Python and PowerShell helper processes.
-Rust figures use the keyboard/menu build, after dashboard warmup; the animated
-run also warmed keyboard inventory and completed 40 dashboard cycles.
+Rust figures use the 2 October optimization build after dashboard warmup; the
+animated run also warmed keyboard inventory and completed 40 dashboard cycles.
+The original figures are retained from the previous audit, not rerun today.
 
 | Measurement | Original Halo Battery 1.13.0 | Halo Battery Next Rust port |
 | --- | ---: | ---: |
-| Hardware: average private memory | 138.18 MiB | 6.21 MiB |
-| Hardware: CPU, one logical core | 0.269% | 0.260% |
-| Animated charging: average private memory | 33.10 MiB | 6.21 MiB |
-| Animated charging: CPU, one logical core | 0.226% | 0.139% |
-| Portable executable size | Not measured | 2.67 MiB |
+| Hardware: average private memory | 138.18 MiB | 6.03 MiB |
+| Hardware: CPU, one logical core | 0.269% | 0.122% |
+| Animated charging: average private memory | 33.10 MiB | 5.66 MiB |
+| Animated charging: CPU, one logical core | 0.226% | 0.156% |
+| Portable executable size | Not measured | 2.64 MiB |
 
 These compare unchanged upstream Python source with optimized Rust release
 builds on one machine, rather than two packaged releases. The hardware run shows substantially lower private memory for the Rust port.
-CPU results vary across short runs; the latest hardware CPU values are close.
-Small timing differences need repeated measurements. See the
-[full resource audit](rust-win32/docs/resource-audit.md) for build identities,
-peak memory, compiler settings, lifecycle checks and measurement limits.
+The latest Rust hardware run includes mouse sleep, so its CPU figure is not a
+like-for-like speedup comparison. The controlled animated before/after test used
+about 12% less private memory with unchanged CPU. This follow-up removes duplicate
+snapshot/export work, JSON copies and paint allocations. See the
+[latest performance audit](rust-win32/docs/performance-audit-20261002.md) for matched
+builds, allocation checks and limitations, and the [original resource audit](rust-win32/docs/resource-audit.md)
+for the Python reference and compiler experiments.
 
 Thank you to [HeyOkay](https://github.com/HeyOkay) and all
 [original HaloBattery contributors](https://github.com/HeyOkay/HaloBattery/graphs/contributors)

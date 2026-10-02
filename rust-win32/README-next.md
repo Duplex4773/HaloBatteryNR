@@ -14,20 +14,22 @@ enabled and dashboards/menus closed:
 
 | Measurement | Original Halo Battery 1.13.0 | Rust port 0.1.0 |
 | --- | ---: | ---: |
-| Wireless DeathAdder V4 Pro: average private memory | 138.18 MiB | 6.21 MiB |
-| Wireless DeathAdder V4 Pro: CPU, one logical core | 0.269% | 0.260% |
-| One simulated charging mouse: average private memory | 33.10 MiB | 6.21 MiB |
-| One simulated charging mouse: CPU, one logical core | 0.226% | 0.139% |
-| Portable executable size | Not measured | 2.67 MiB |
+| Wireless DeathAdder V4 Pro: average private memory | 138.18 MiB | 6.03 MiB |
+| Wireless DeathAdder V4 Pro: CPU, one logical core | 0.269% | 0.122% |
+| One simulated charging mouse: average private memory | 33.10 MiB | 5.66 MiB |
+| One simulated charging mouse: CPU, one logical core | 0.226% | 0.156% |
+| Portable executable size | Not measured | 2.64 MiB |
 
 Original figures include observed helper processes. This is unchanged upstream
 Python source versus optimized Rust release builds on one machine; a packaged
-original release was unavailable. Rust figures include the keyboard/menu build and 40 animated dashboard warmup
-cycles. Hardware CPU values are close in this run; short-run CPU results vary. The hardware
-comparison includes native/PowerShell discovery costs, and short-run differences
-are not guarantees. The fork also retains 30-day raw history and a native
-dashboard. See [`docs/resource-audit.md`](docs/resource-audit.md) for exact builds,
-peak memory, optimizations, compiler experiments and reproduction commands.
+original release was unavailable. Original figures are retained from the previous
+audit. Rust figures use the 2 October optimization build and 40 animated dashboard
+warmup cycles. Its hardware run includes mouse sleep, so the CPU figures are not
+a like-for-like speedup comparison. The controlled animated before/after run used
+about 12% less private memory with unchanged CPU. The fork retains 30-day raw
+history and a native dashboard. See the [latest performance audit](docs/performance-audit-20261002.md)
+for allocation savings, exact builds and limitations, and the [original resource
+audit](docs/resource-audit.md) for Python conditions and compiler experiments.
 
 ## Run and build
 

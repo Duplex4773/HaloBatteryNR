@@ -4,9 +4,43 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
+## Performance follow-up checkpoint, 2 October 2026
+
+The current portable executable is **2,767,872 bytes (2.64 MiB)**,
+SHA256 `3D2CF85FDCDB3B6616431D448BB72B28C5F7B19120B28C11981064290454266F`.
+Formatting, strict workspace Clippy, **451 behavioral tests**, the optimized
+release build and production API restrictions pass. Two optional timing tests
+remain ignored. All 459 upstream test IDs retain their documented mapping.
+Source/executable privacy checks pass, and the original Python README section
+is unchanged. No workflows were enabled.
+
+Allocation regression tests cover borrowed SQLite text, unchanged status JSON,
+bounded Insights processing, empty notification queues, diagnostics and native
+vendor-path parsing. Runtime tests verify skipped empty-provider snapshot bursts
+without losing device/error updates or the five-second freshness heartbeat.
+UI tests cover every icon-render input, borrowed inventory selection and fixed
+UTF-16 buffers. Native palette, mnemonic, reentrancy and lifecycle tests pass.
+
+The release passes dashboard/theme/navigation/settings tests and forty
+close/reopen cycles; the normal duplicate launch reopens the original dashboard
+while a background duplicate stays quiet. The keyboard suite passes another
+forty cycles, Read/Apply 250/Restore, rename, Corsair exclusion and battery-only
+selectors/status/history. Its settled private memory is **8.59 MiB**, with no
+growth in USER/GDI handles. Eight actual tray popup cycles match system app
+appearance and retain **15 GDI handles**. These are simulated device tests;
+hardware verification labels are unchanged.
+
+Matched **180-second** animated workloads average **6.46 → 5.66 MiB** private
+memory, with CPU effectively unchanged at **0.156% of one logical core**. Hardware
+measurements average **6.25 → 6.03 MiB**, but the optimized run includes mouse
+sleep while the baseline remained online; its lower CPU figure is not evidence
+of a code-only speedup. Both record actual battery levels and meet the engineering
+targets. See the [follow-up audit](performance-audit-20261002.md) for complete
+before/after figures, allocation evidence, remaining candidates and limitations.
+
 ## Keyboard controls and tray theme checkpoint, 1 October 2026
 
-The current portable executable is **2,794,496 bytes (2.67 MiB)**,
+At this checkpoint, the portable executable was **2,794,496 bytes (2.67 MiB)**,
 SHA256 `3CDFBF17B0AEF715AAD0AAF603E633C32E8DA5942CB60FA1464B726659715864`.
 Formatting, strict workspace Clippy, the optimized release build, production
 source/import restrictions and **436 behavioral tests** pass. Two optional timing

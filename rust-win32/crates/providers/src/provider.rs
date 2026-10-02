@@ -5,6 +5,7 @@ use crate::{
 use hb_core::*;
 use std::{
     collections::{BTreeMap, BTreeSet},
+    fmt::Write,
     time::Duration,
 };
 
@@ -114,6 +115,21 @@ impl HidProvider {
             self.diagnostics.push(text.into());
         }
     }
+    fn log_reply(&mut self, reply: &[u8]) {
+        if self.diagnostics.len() >= 120 {
+            return;
+        }
+        let bytes = &reply[..reply.len().min(32)];
+        let mut text = String::with_capacity(6 + bytes.len().saturating_mul(3));
+        text.push_str("reply ");
+        for (index, byte) in bytes.iter().enumerate() {
+            if index != 0 {
+                text.push(' ');
+            }
+            write!(text, "{byte:02x}").unwrap();
+        }
+        self.diagnostics.push(text);
+    }
     fn receive(
         &mut self,
         s: &mut dyn HidSession,
@@ -131,14 +147,7 @@ impl HidProvider {
                 Duration::from_millis(ms).min(c.deadline.saturating_sub(c.clock.monotonic())),
             )?;
             if !r.is_empty() {
-                self.log(format!(
-                    "reply {}",
-                    r.iter()
-                        .take(32)
-                        .map(|b| format!("{b:02x}"))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                ));
+                self.log_reply(&r);
                 if accept(&r) {
                     self.last_reply_accepted = true;
                     return Ok(Some(r));
@@ -1610,6 +1619,13 @@ fn candidate(id: &str, d: &Device, i: &HidInfo) -> bool {
     }
 }
 fn candidate_group(id: &str, d: &Device, i: &HidInfo, infos: &[HidInfo]) -> bool {
+    if !matches!(
+        id,
+        "astro" | "keychron" | "jbl" | "corsair" | "pulsar" | "audeze"
+    ) && !(id == "steelseries" && !d.variant.starts_with("exchange_"))
+    {
+        return candidate(id, d, i);
+    }
     let mine: Vec<_> = infos
         .iter()
         .filter(|other| other.vendor_id == i.vendor_id && other.product_id == i.product_id)
@@ -2285,5 +2301,125 @@ impl BatteryProvider for HidProvider {
         } else {
             Ok(output)
         }
+    }
+}
+
+#[cfg(test)]
+mod allocation_tests {
+    use super::*;
+    use std::{
+        alloc::{GlobalAlloc, Layout, System},
+        cell::Cell,
+    };
+    thread_local! { static COUNT: Cell<Option<usize>> = const { Cell::new(None) }; }
+    struct Allocator;
+    #[global_allocator]
+    static ALLOCATOR: Allocator = Allocator;
+    fn counted() {
+        let _ = COUNT.try_with(|count| {
+            if let Some(n) = count.get() {
+                count.set(Some(n + 1));
+            }
+        });
+    }
+    unsafe impl GlobalAlloc for Allocator {
+        unsafe fn alloc(&self, l: Layout) -> *mut u8 {
+            counted();
+            unsafe { System.alloc(l) }
+        }
+        unsafe fn alloc_zeroed(&self, l: Layout) -> *mut u8 {
+            counted();
+            unsafe { System.alloc_zeroed(l) }
+        }
+        unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
+            counted();
+            unsafe { System.realloc(p, l, n) }
+        }
+        unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+            unsafe { System.dealloc(p, l) }
+        }
+    }
+    fn allocations(f: impl FnOnce()) -> usize {
+        COUNT.with(|c| c.set(Some(0)));
+        f();
+        COUNT.with(|c| c.replace(None).unwrap())
+    }
+    #[test]
+    fn bounded_reply_diagnostics_keep_exact_hex_with_one_allocation_then_none_at_cap() {
+        let mut provider = HidProvider::new("razer");
+        provider.diagnostics.reserve_exact(120);
+        let reply: Vec<u8> = (0..64).collect();
+        assert_eq!(allocations(|| provider.log_reply(&reply)), 1);
+        assert_eq!(
+            provider.diagnostics[0],
+            "reply 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f"
+        );
+        provider.log_reply(&[0, 0xab, 0xff]);
+        assert_eq!(provider.diagnostics[1], "reply 00 ab ff");
+        provider.log_reply(&[]);
+        assert_eq!(provider.diagnostics[2], "reply ");
+        provider.diagnostics.resize(120, String::new());
+        assert_eq!(allocations(|| provider.log_reply(&reply)), 0);
+        assert_eq!(provider.diagnostics.len(), 120);
+        let before = allocations(|| {
+            let text = format!(
+                "reply {}",
+                reply
+                    .iter()
+                    .take(32)
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            std::hint::black_box(text);
+        });
+        assert!(before >= 34, "old hex formatting allocated {before} times");
+    }
+    #[test]
+    fn ordinary_collections_skip_unused_group_identity_work_without_allocations() {
+        for id in FAMILIES.iter().map(|(id, _)| *id).filter(|id| {
+            !matches!(
+                *id,
+                "astro" | "keychron" | "jbl" | "corsair" | "pulsar" | "audeze" | "steelseries"
+            )
+        }) {
+            let d = DEVICES.iter().find(|d| d.provider == id).unwrap();
+            let info = HidInfo {
+                vendor_id: d.vid,
+                product_id: d.pid,
+                serial: "SYNTHETIC-LONG-SERIAL".into(),
+                path: "synthetic-path".into(),
+                usage_page: 0xffff,
+                interface: 4,
+                ..Default::default()
+            };
+            let infos = vec![info.clone(); 64];
+            let expected = candidate(id, d, &info);
+            let baseline = allocations(|| {
+                std::hint::black_box(candidate(id, d, &info));
+            });
+            assert_eq!(
+                allocations(|| assert_eq!(candidate_group(id, d, &info, &infos), expected)),
+                baseline
+            );
+        }
+        let d = DEVICES
+            .iter()
+            .find(|d| d.provider == "steelseries" && d.variant.starts_with("exchange_"))
+            .unwrap();
+        let info = HidInfo {
+            vendor_id: d.vid,
+            product_id: d.pid,
+            usage_page: 0xff43,
+            interface: 3,
+            ..Default::default()
+        };
+        assert_eq!(
+            allocations(|| assert_eq!(
+                candidate_group("steelseries", d, &info, std::slice::from_ref(&info)),
+                candidate("steelseries", d, &info)
+            )),
+            0
+        );
     }
 }

@@ -1,6 +1,7 @@
 use crate::{Connection, Estimator, PollResult, Precision, Reading, Settings};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeviceView {
@@ -109,6 +110,16 @@ impl Engine {
         self.held
             .insert((notification.key.clone(), notification.kind), notification);
     }
+    /// An unchanged empty provider cannot alter a published device/error view.
+    pub fn provider_has_snapshot_data(&self, provider: &str) -> bool {
+        self.by_provider
+            .get(provider)
+            .is_some_and(|readings| !readings.is_empty())
+            || self.errors.contains_key(provider)
+    }
+    pub fn has_held_notifications(&self) -> bool {
+        !self.held.is_empty()
+    }
     pub fn update_settings(&mut self, settings: Settings) {
         self.settings = settings;
         self.by_provider.retain(|provider, readings| {
@@ -125,21 +136,26 @@ impl Engine {
         self.clean_states();
     }
     fn clean_states(&mut self) {
-        let connected: BTreeSet<_> = self
-            .readings()
-            .into_iter()
+        let readings = self.readings();
+        self.clean_states_with(&readings);
+    }
+    fn clean_states_with(&mut self, readings: &[Reading]) {
+        let connected: BTreeSet<_> = readings
+            .iter()
             .filter(|r| !self.settings.devices.get(&r.key).is_some_and(|d| d.hidden))
-            .map(|r| r.key)
+            .map(|r| r.key.as_str())
             .collect();
-        self.alerts.retain(|key, _| connected.contains(key));
+        self.alerts
+            .retain(|key, _| connected.contains(key.as_str()));
         let known: BTreeSet<_> = self
             .by_provider
             .values()
             .flatten()
-            .map(|r| r.key.clone())
+            .map(|r| r.key.as_str())
             .collect();
-        self.misses.retain(|key, _| known.contains(key));
-        self.held.retain(|(key, _), _| connected.contains(key));
+        self.misses.retain(|key, _| known.contains(key.as_str()));
+        self.held
+            .retain(|(key, _), _| connected.contains(key.as_str()));
     }
     pub fn apply(
         &mut self,
@@ -207,7 +223,7 @@ impl Engine {
         }
         self.by_provider.insert(provider.into(), fresh);
         let readings = self.readings();
-        self.clean_states();
+        self.clean_states_with(&readings);
         let mut notifications = Vec::new();
         for r in readings {
             if self.settings.devices.get(&r.key).is_some_and(|d| d.hidden) {
@@ -227,8 +243,8 @@ impl Engine {
                 .settings
                 .devices
                 .get(&r.key)
-                .and_then(|d| d.name.clone())
-                .unwrap_or(r.name.clone());
+                .and_then(|d| d.name.as_deref())
+                .unwrap_or(&r.name);
             let alert = self.alerts.entry(r.key.clone()).or_default();
             if alert.threshold != Some(low) {
                 alert.low = false;
@@ -277,7 +293,7 @@ impl Engine {
         if quiet { Vec::new() } else { self.flush_held() }
     }
     pub fn flush_held(&mut self) -> Vec<Notification> {
-        if self.suspended {
+        if self.suspended || self.held.is_empty() {
             return Vec::new();
         }
         let readings = self.readings();
@@ -422,12 +438,18 @@ impl Engine {
                     } else {
                         None
                     };
-                    let mut text = format!(
-                        "{name}: {}",
-                        r.approx.clone().unwrap_or_else(|| r
-                            .level
-                            .map_or("battery unknown".into(), |l| format!("{l}%")))
+                    let mut text = String::with_capacity(
+                        name.len() + r.approx.as_ref().map_or(0, String::len) + 48,
                     );
+                    text.push_str(&name);
+                    text.push_str(": ");
+                    if let Some(approx) = &r.approx {
+                        text.push_str(approx);
+                    } else if let Some(level) = r.level {
+                        let _ = write!(text, "{level}%");
+                    } else {
+                        text.push_str("battery unknown");
+                    }
                     if r.charging == Some(true) {
                         text.push_str(" · charging");
                     }

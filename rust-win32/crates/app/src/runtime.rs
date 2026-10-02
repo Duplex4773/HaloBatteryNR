@@ -218,6 +218,52 @@ fn publish_diagnostics(
         *dirty = false;
     }
 }
+/// Keep the five-second freshness/status heartbeat, without rebuilding and
+/// exporting battery state for unrelated commands or empty provider completions.
+struct SnapshotPublisher {
+    changed: bool,
+    next: Instant,
+}
+impl SnapshotPublisher {
+    fn new(now: Instant) -> Self {
+        Self {
+            changed: true,
+            next: now,
+        }
+    }
+    fn delay(&self, now: Instant) -> Duration {
+        if self.changed {
+            Duration::ZERO
+        } else {
+            self.next.saturating_duration_since(now)
+        }
+    }
+    fn publish(
+        &mut self,
+        engine: &Engine,
+        timestamp: i64,
+        now: Instant,
+        events: &Events,
+        storage: &Sender<Storage>,
+    ) {
+        if !self.changed && now < self.next {
+            return;
+        }
+        let snapshot = engine.snapshot(timestamp);
+        if engine.settings.status_file {
+            let _ = events.try_send(Event::Snapshot(snapshot.clone()));
+            let _ = storage.send(Storage::Status(snapshot, true));
+        } else {
+            let _ = events.try_send(Event::Snapshot(snapshot));
+        }
+        self.changed = false;
+        self.next = now + Duration::from_secs(5);
+    }
+}
+fn battery_affects_snapshot(engine: &Engine, provider: &str, result: &PollResult) -> bool {
+    engine.provider_has_snapshot_data(provider)
+        || !matches!(result, Ok(readings) if readings.is_empty())
+}
 pub(crate) struct ControlPermission {
     enabled: AtomicBool,
     epoch: AtomicU64,
@@ -1169,6 +1215,7 @@ fn run(
     let mut invalidated = BTreeSet::new();
     let mut diagnostics = BTreeMap::new();
     let mut diagnostics_dirty = true;
+    let mut snapshots = SnapshotPublisher::new(Instant::now());
     let mut control_cancel = Arc::new(AtomicBool::new(!engine.settings.polling_controls));
     let mut simulated_rates = BTreeMap::new();
     let mut configuration_devices: Vec<ConfigurationDevice> = Vec::new();
@@ -1198,6 +1245,7 @@ fn run(
             .unwrap_or_else(|p| p.into_inner())
             .take();
         if let Some((s, epoch)) = latest_settings {
+            snapshots.changed = true;
             let remove = engine.settings.status_file && !s.status_file;
             control_cancel.store(true, Ordering::Relaxed);
             control_cancel = Arc::new(AtomicBool::new(!s.polling_controls));
@@ -1220,6 +1268,7 @@ fn run(
         }
         let requested_suspend = permission.suspended.load(Ordering::Acquire);
         if requested_suspend != suspended {
+            snapshots.changed = true;
             suspended = requested_suspend;
             control_cancel.store(true, Ordering::Relaxed);
             hid.invalidate();
@@ -1321,6 +1370,7 @@ fn run(
             .copied()
             .collect::<Vec<_>>();
         if simulate && !ready.is_empty() {
+            snapshots.changed = true;
             let mut r = Reading::new(
                 "simulated:mouse",
                 "Simulated mouse",
@@ -1346,7 +1396,6 @@ fn run(
             let _ = storage.send(Storage::UsageSample(
                 usage_tracker.samples(engine.readings()),
             ));
-            let _ = events.try_send(Event::Snapshot(engine.snapshot(clock.unix())));
         } else {
             for id in ready {
                 let target = if ["bluetooth", "xinput"].contains(&id) {
@@ -1384,6 +1433,7 @@ fn run(
             .min()
             .unwrap_or(Duration::from_secs(5))
             .min(Duration::from_secs(5))
+            .min(snapshots.delay(Instant::now()))
             .max(Duration::from_millis(20));
         let work = select! {recv(commands)->m=>Work::Command(m),recv(event_rx)->_=>Work::ConnectionEvent,recv(result_rx)->r=>Work::Completed(r),default(wait)=>Work::Idle};
         match work {
@@ -1395,6 +1445,7 @@ fn run(
             Work::Command(Ok(Command::EpochSuspend(epoch)))
                 if epoch == permission.epoch.load(Ordering::Acquire) =>
             {
+                snapshots.changed = true;
                 suspended = true;
                 control_cancel.store(true, Ordering::Relaxed);
                 hid.invalidate();
@@ -1408,6 +1459,7 @@ fn run(
             Work::Command(Ok(Command::EpochResume(epoch)))
                 if epoch == permission.epoch.load(Ordering::Acquire) =>
             {
+                snapshots.changed = true;
                 suspended = false;
                 control_cancel = Arc::new(AtomicBool::new(!engine.settings.polling_controls));
                 engine.resume();
@@ -1501,6 +1553,7 @@ fn run(
             Work::Completed(Ok(WorkerCompleted::Battery(r))) => {
                 inflight = inflight.saturating_sub(1);
                 let id = r.provider.id();
+                snapshots.changed |= battery_affects_snapshot(&engine, id, &r.result);
                 diagnostics_dirty |=
                     update_diagnostics(&mut diagnostics, id.to_string(), r.provider.diagnostics());
                 for n in engine.apply(id, r.result, clock.monotonic().as_secs_f64(), quiet) {
@@ -1589,6 +1642,7 @@ fn run(
                         && engine.readings().iter().any(|r| r.key == outcome.key)
                     {
                         engine.reset_estimate(&outcome.key);
+                        snapshots.changed = true;
                         let _ = storage.send(Storage::State(engine.estimator.clone()));
                     }
                     usage_tracker.synchronize(
@@ -1630,6 +1684,7 @@ fn run(
                     && engine.readings().iter().any(|r| r.key == outcome.key)
                 {
                     engine.reset_estimate(&outcome.key);
+                    snapshots.changed = true;
                     let _ = storage.send(Storage::State(engine.estimator.clone()));
                 }
                 diagnostics_dirty |= update_diagnostics(
@@ -1661,13 +1716,7 @@ fn run(
             )) => {}
             Work::Completed(Err(_)) | Work::Idle => {}
         }
-        let snapshot = engine.snapshot(clock.unix());
-        if engine.settings.status_file {
-            let _ = events.try_send(Event::Snapshot(snapshot.clone()));
-            let _ = storage.send(Storage::Status(snapshot, true));
-        } else {
-            let _ = events.try_send(Event::Snapshot(snapshot));
-        }
+        snapshots.publish(&engine, clock.unix(), Instant::now(), &events, &storage);
         publish_diagnostics(&events, &diagnostics, &mut diagnostics_dirty);
         let retry = failed_delivery
             .iter()
@@ -1679,7 +1728,10 @@ fn run(
                 engine.notification_failed(n);
             }
         }
-        if !suspended && (!engine.settings.quiet_fullscreen || !hb_windows::system::gaming()) {
+        if !suspended
+            && engine.has_held_notifications()
+            && (!engine.settings.quiet_fullscreen || !hb_windows::system::gaming())
+        {
             for n in engine.flush_held() {
                 let _ = events.send(Event::Alert(n));
             }
@@ -1700,6 +1752,118 @@ fn run(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn snapshots_skip_empty_provider_bursts_but_keep_updates_and_freshness_heartbeat() {
+        let (tx, events) = bounded(8);
+        let sink = Events {
+            tx,
+            window: Arc::new(AtomicUsize::new(0)),
+        };
+        let (storage, statuses) = bounded(8);
+        let mut engine = Engine::new(
+            Settings {
+                status_file: true,
+                ..Default::default()
+            },
+            Estimator::default(),
+        );
+        let start = Instant::now();
+        let mut publisher = SnapshotPublisher::new(start);
+        publisher.publish(&engine, 100, start, &sink, &storage);
+        assert!(matches!(events.try_recv(), Ok(Event::Snapshot(_))));
+        assert!(matches!(statuses.try_recv(), Ok(Storage::Status(_, true))));
+        // A full discovery burst from absent devices must not cause repeated
+        // UI wakeups, JSON exports or atomic file replacements.
+        for index in 0..25 {
+            let id = format!("absent-{index}");
+            let result = Ok(Vec::new());
+            publisher.changed |= battery_affects_snapshot(&engine, &id, &result);
+            engine.apply(&id, result, 0.0, false);
+            publisher.publish(
+                &engine,
+                101,
+                start + Duration::from_secs(1),
+                &sink,
+                &storage,
+            );
+        }
+        assert!(events.is_empty());
+        assert!(statuses.is_empty());
+        assert_eq!(
+            publisher.delay(start + Duration::from_secs(4)),
+            Duration::from_secs(1)
+        );
+        // Heartbeats use monotonic time, including after a wall-clock correction.
+        publisher.publish(&engine, 90, start + Duration::from_secs(5), &sink, &storage);
+        let Event::Snapshot(snapshot) = events.try_recv().unwrap() else {
+            panic!("missing heartbeat")
+        };
+        assert_eq!(snapshot.timestamp, 90);
+        assert!(matches!(statuses.try_recv(), Ok(Storage::Status(_, true))));
+        let mut reading = Reading::new("mouse", "Mouse", "razer", 91);
+        reading.level = Some(70);
+        let result = Ok(vec![reading]);
+        publisher.changed |= battery_affects_snapshot(&engine, "razer", &result);
+        engine.apply("razer", result, 6.0, false);
+        publisher.publish(&engine, 91, start + Duration::from_secs(6), &sink, &storage);
+        let Event::Snapshot(snapshot) = events.try_recv().unwrap() else {
+            panic!("missing new reading")
+        };
+        assert_eq!(snapshot.devices[0].reading.level, Some(70));
+        assert!(matches!(statuses.try_recv(), Ok(Storage::Status(_, true))));
+        for (seconds, expected_devices) in [(7, 1), (8, 0)] {
+            let result = Ok(Vec::new());
+            publisher.changed |= battery_affects_snapshot(&engine, "razer", &result);
+            engine.apply("razer", result, seconds as f64, false);
+            publisher.publish(
+                &engine,
+                92,
+                start + Duration::from_secs(seconds),
+                &sink,
+                &storage,
+            );
+            let Event::Snapshot(snapshot) = events.try_recv().unwrap() else {
+                panic!("missing disconnect")
+            };
+            assert_eq!(snapshot.devices.len(), expected_devices);
+            if expected_devices > 0 {
+                assert_eq!(snapshot.devices[0].reading.connection, Connection::Stale);
+            }
+            assert!(matches!(statuses.try_recv(), Ok(Storage::Status(_, true))));
+        }
+        // Failures and recovery from an error remain immediately visible even
+        // for a provider that has never produced a battery device.
+        for (seconds, result, errors) in [
+            (9, Err(ProviderError::new("inaccessible")), 1),
+            (10, Ok(Vec::new()), 0),
+        ] {
+            publisher.changed |= battery_affects_snapshot(&engine, "corsair", &result);
+            engine.apply("corsair", result, seconds as f64, false);
+            publisher.publish(
+                &engine,
+                93,
+                start + Duration::from_secs(seconds),
+                &sink,
+                &storage,
+            );
+            let Event::Snapshot(snapshot) = events.try_recv().unwrap() else {
+                panic!("missing failure/recovery")
+            };
+            assert_eq!(snapshot.errors.len(), errors);
+            assert!(matches!(statuses.try_recv(), Ok(Storage::Status(_, true))));
+        }
+        engine.settings.status_file = false;
+        publisher.changed = true;
+        publisher.publish(
+            &engine,
+            94,
+            start + Duration::from_secs(11),
+            &sink,
+            &storage,
+        );
+        assert!(matches!(events.try_recv(), Ok(Event::Snapshot(_))));
+        assert!(statuses.is_empty());
+    }
     #[derive(Default)]
     struct PassiveHid {
         enumerations: AtomicU64,

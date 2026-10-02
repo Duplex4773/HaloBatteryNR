@@ -132,6 +132,7 @@ impl Drop for DeviceSet {
         }
     }
 }
+#[cfg(test)]
 fn path_vendor(path: &str) -> Option<u16> {
     let bytes = path.as_bytes();
     for marker in [b"vid_", b"vid&"] {
@@ -150,6 +151,34 @@ fn path_vendor(path: &str) -> Option<u16> {
                     16,
                 )
                 .ok();
+            }
+        }
+    }
+    None
+}
+// Inspect borrowed native UTF-16 before decoding. ASCII marker precedence and
+// the trailing four hex digits match path_vendor, including Bluetooth VID forms.
+fn path_vendor_wide(path: &[u16]) -> Option<u16> {
+    for marker in [b"vid_", b"vid&"] {
+        if let Some(at) = path.windows(4).position(|part| {
+            part.iter()
+                .zip(marker)
+                .all(|(&unit, byte)| unit <= 0x7f && (unit as u8).eq_ignore_ascii_case(byte))
+        }) {
+            let mut value = 0u16;
+            let mut count = 0usize;
+            for &unit in &path[at + 4..] {
+                let digit = match unit {
+                    0x30..=0x39 => unit - 0x30,
+                    0x41..=0x46 => unit - 0x41 + 10,
+                    0x61..=0x66 => unit - 0x61 + 10,
+                    _ => break,
+                };
+                value = value.wrapping_mul(16).wrapping_add(digit);
+                count += 1;
+            }
+            if count >= 4 {
+                return Some(value);
             }
         }
     }
@@ -218,9 +247,10 @@ fn present_paths(vendor: u16) -> Result<BTreeSet<String>, ProviderError> {
             )
         };
         let end = wide.iter().position(|v| *v == 0).unwrap_or(wide.len());
-        let mut path = String::from_utf16_lossy(&wide[..end]);
-        path.make_ascii_lowercase();
-        if path_vendor(&path) == Some(vendor) {
+        let wide = &wide[..end];
+        if path_vendor_wide(wide) == Some(vendor) {
+            let mut path = String::from_utf16_lossy(wide);
+            path.make_ascii_lowercase();
             paths.insert(path);
         }
     }
@@ -484,6 +514,38 @@ mod cache_tests {
         assert_eq!(path_vendor("BTH#VID&0002045E_PID&02FD"), Some(0x045e));
         assert_eq!(path_vendor("hid#vid_153&vid&0002045e"), Some(0x045e));
         assert_eq!(path_vendor("hid#vid_1532FFFF&pid_0000"), Some(0xffff));
+    }
+    #[test]
+    fn borrowed_utf16_vendor_filter_matches_decoded_paths_including_invalid_unicode() {
+        for path in [
+            "",
+            "hid#VID_1532&pid_0000",
+            "µHID#ViD_1532&pid_0000",
+            "BTH#VID&0002045E_PID&02FD",
+            "hid#vid_153&vid&0002045e",
+            "hid#vid_1532FFFF&pid_0000",
+            "vid&1234_vid_5678",
+            "vid_12z4_vid&ABCD",
+            "vid_１２３４",
+            "vid_ABCDEF0123456789",
+        ] {
+            let wide: Vec<u16> = path.encode_utf16().collect();
+            assert_eq!(path_vendor_wide(&wide), path_vendor(path), "{path}");
+        }
+        let prefixes: &[&[u16]] = &[&[], &[0xd800], &[0xdc00], &[0xd800, 0xdc00], &[0x00b5]];
+        for prefix in prefixes {
+            for marker in ["vid_", "VID&", "ViD_"] {
+                for digits in ["123", "1532", "0002045e", "ABCDEF0123456789", "12z4"] {
+                    let mut wide = prefix.to_vec();
+                    wide.extend(marker.encode_utf16());
+                    wide.extend(digits.encode_utf16());
+                    wide.push(0xd800);
+                    wide.extend("&pid_0000".encode_utf16());
+                    let decoded = String::from_utf16_lossy(&wide);
+                    assert_eq!(path_vendor_wide(&wide), path_vendor(&decoded), "{decoded}");
+                }
+            }
+        }
     }
     #[test]
     fn device_event_or_open_failure_generation_forces_rediscovery() {
