@@ -1,5 +1,10 @@
 # Halo Battery Next 0.1.0
 
+DeathAdder V4 Pro wireless polling: **hardware verified by user testing** at all
+supported rates (125, 500, 1000, 2000, 4000 and 8000 Hz), confirmed 2 October 2026.
+Battery devices verified upstream are labelled **User-verified in parent app** in the
+[device support table](docs/device-support.md); this does not imply polling-rate verification.
+
 A Windows 11 x64 Rust/Win32 port of [HaloBattery](https://github.com/HeyOkay/HaloBattery), based on upstream 1.13.0 (`a566a046`). The Rust workspace lives in `rust-win32/` on `main`; the Python implementation remains at the repository root as the protocol reference. The `port/rust-win32` branch also retains the port checkpoint.
 
 Thanks to [HeyOkay](https://github.com/HeyOkay) and all

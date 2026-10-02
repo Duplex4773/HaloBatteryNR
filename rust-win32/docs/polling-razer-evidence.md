@@ -16,7 +16,7 @@ product; no such compatibility claim is made.
 | PID (VID 1532) | Protocol | Offered Hz | Evidence status |
 | --- | --- | --- | --- |
 | 00BE, DeathAdder V4 Pro wired | extended | 125, 500, 1000, 2000, 4000, 8000 | reference supported; wired controls unverified locally |
-| 00BF, DeathAdder V4 Pro receiver | extended | 125, 500, 1000, 2000, 4000, 8000 | user-reported wireless changes: 1000 → 8000 → 125 → 2000 Hz, 2026-10-01; 500/4000 unreported |
+| 00BF, DeathAdder V4 Pro receiver | extended | 125, 500, 1000, 2000, 4000, 8000 | hardware verified by user testing: all six supported wireless rates, 2026-10-02 |
 | 009F, Viper Mini Signature Edition dedicated receiver | extended, 60-ms settle | 125, 500, 1000, 2000, 4000, 8000 | direct upstream protocol and rate list; hardware unverified locally; 8K requires suitable firmware |
 | 00C1, Viper V3 Pro dedicated receiver | extended, 60-ms settle | 125, 500, 1000, 2000, 4000, 8000 | direct upstream protocol and rate list, corroborating OpenMouse hardware report; hardware unverified locally |
 | 00B6 / 00B7, DeathAdder V3 Pro wired / stock receiver | legacy | 125, 500, 1000 | third-party physical test evidence; hardware unverified by Halo Battery |
@@ -153,10 +153,10 @@ cancellation. The synthetic tests do not open physical hardware. Earlier automat
 read-only hardware results are recorded in `validation-next.md`; those probes
 did not attempt a polling SET while the receiver reported a device timeout.
 
-On 1 October 2026, the user reported working wireless polling changes on a
-DeathAdder V4 Pro in this sequence: **1000 → 8000 → 125 → 2000 Hz**. This is
-user-reported hardware validation of configuration changes, without identifying
-device captures. It does not cover 500/4000 Hz, wired operation, reconnection or
-power-cycle persistence, independently measured USB frequency, or anti-cheat
-compatibility. The original upstream support labels remain unchanged.
+On 2 October 2026, the user confirmed that all supported wireless polling rates
+work on the DeathAdder V4 Pro: **125, 500, 1000, 2000, 4000 and 8000 Hz**.
+Support is **hardware verified by user testing** for these configuration changes.
+This supersedes the partial 1 October report. No identifying captures are retained.
+Wired operation, persistence across reconnect/power cycle and independently measured
+USB frequency remain unverified. This is not manufacturer or anti-cheat certification.
 Readback confirms reported configuration, not physical USB report frequency.

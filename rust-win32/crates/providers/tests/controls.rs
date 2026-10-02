@@ -154,7 +154,7 @@ fn dedicated_high_rate_razer_receivers_use_exact_device_keys() {
         assert!(result.confirmed_change());
         let observation = result.observation.unwrap();
         assert_eq!(observation.rate.unwrap().hz(), 8000);
-        assert!(observation.evidence.contains("OpenRazer high-rate"));
+        assert!(observation.evidence.contains("Razer high-rate"));
         assert_eq!(
             hid.state
                 .sent
@@ -383,4 +383,21 @@ fn keyboard_controller_rejects_bluetooth_path_and_non_usb_descriptor_before_open
         assert!(run(&r, &hid, false).failure.is_some());
         assert_eq!(hid.state.opens.load(Ordering::Relaxed), 0);
     }
+}
+
+#[test]
+fn wireless_deathadder_v4_reports_user_verified_support() {
+    let mut hid = transport();
+    hid.devices[0].product_id = 0x00bf;
+    let mut request = request(ControlAction::Read);
+    request.target.device.key = "razer:00bf:MOUSE-1".into();
+    let result = run(&request, &hid, false);
+    assert!(result.failure.is_none());
+    assert!(
+        result
+            .observation
+            .unwrap()
+            .evidence
+            .contains("Hardware verified (user tested)")
+    );
 }

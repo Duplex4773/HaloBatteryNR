@@ -4,6 +4,10 @@ All 25 upstream providers remain represented: 23 HID families in
 `hb-providers`, plus Bluetooth and a controller provider using XInput/WGI in the Windows layer. The original Python
 providers, protocol credits, tests and MIT license remain available for comparison.
 
+Inherited hardware reports are listed as **User-verified in parent app** in the
+[device support table](device-support.md), separately from Rust-port tests and
+polling configuration evidence.
+
 ## Reproducible evidence
 
 Run `python tools/provider_fixtures.py` in the upstream Python environment,

@@ -78,10 +78,11 @@ change, SET or heartbeat. Its controls display exactly: **Polling changes
 unavailable: this model requires a maintained software session, which is disabled
 by design.** See [keyboard identities and evidence](polling-keyboard-evidence.md).
 
-DeathAdder V4 Pro wireless configuration changes have **user-reported working**
-evidence from 1 October 2026: **1000 → 8000 → 125 → 2000 Hz**. This report does
-not establish wired behavior, 500/4000 Hz, effective USB frequency or anti-cheat
-compatibility. See [validation details](validation-next.md).
+DeathAdder V4 Pro wireless polling is **hardware verified by user testing** at
+all supported rates: **125, 500, 1000, 2000, 4000 and 8000 Hz**, confirmed on
+2 October 2026. This verifies configuration changes on the tested wireless setup;
+wired operation and independently measured USB frequency remain unverified.
+It is not manufacturer or anti-cheat certification. See [validation details](validation-next.md).
 
 Logitech onboard profile mode is preserved. Changing that mode or rewriting
 profiles could affect other settings, so the app refuses the rate change and

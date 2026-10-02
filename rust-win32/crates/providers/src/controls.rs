@@ -310,11 +310,14 @@ impl DeviceController for HidDeviceController {
             rate: rate(Some(hz)),
             timestamp: context.clock.unix(),
             evidence: match protocol {
+                _ if info.product_id == 0x00bf => {
+                    "Hardware verified (user tested): wireless DeathAdder V4 Pro, all supported polling rates"
+                }
                 razer_controls::Protocol::Extended | razer_controls::Protocol::ExtendedWireless => {
-                    "OpenRazer high-rate protocol reference; hardware unverified locally"
+                    "Razer high-rate polling; hardware unverified locally"
                 }
                 razer_controls::Protocol::KeyboardExtended => {
-                    "OpenRazer Windows keyboard polling reference; hardware unverified locally"
+                    "Razer keyboard polling; hardware unverified locally"
                 }
                 razer_controls::Protocol::Legacy => {
                     "OpenMouse legacy polling reference; hardware unverified locally"

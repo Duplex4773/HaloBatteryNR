@@ -4,6 +4,17 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro; other providers remain hardware-unverified in
 this Rust port. The original support labels remain in the Python documentation.
 
+## Razer verification labels checkpoint, 2 October 2026
+
+The updated portable executable is **2,832,384 bytes (2.70 MiB)**,
+SHA256 `1DD4708DCFD580CB6AE34AF2C2C18696970B5F8CCD31D6C17113EC2CA2FB5E54`.
+Formatting, strict workspace Clippy, all **506 behavioral tests** and the release
+build pass. App-facing protocol-reference labels now use device terminology.
+Wireless DeathAdder V4 Pro support records the user's confirmation of all six
+supported rates; the wired model and other devices retain their existing status.
+Protocol provenance, credits and upstream test identifiers are retained.
+No packet formats or polling transactions changed.
+
 ## Startup polling and tray tooltip checkpoint, 2 October 2026
 
 The portable executable is **2,831,872 bytes (2.70 MiB)**,
@@ -476,13 +487,12 @@ session was used by the automated checks to claim compatibility.
 
 ### User-reported DeathAdder V4 Pro wireless validation
 
-On **1 October 2026**, the user reported that polling changes worked wirelessly
-in the sequence **1000 Hz → 8000 Hz → 125 Hz → 2000 Hz**. Record this as
-**user-reported working** for those wireless configuration transitions. No
-identifying device details or captures are retained. Wired operation, 500/4000
-Hz, persistence across reconnect/power cycle, effective USB reporting frequency
-and anti-cheat compatibility were not established by this report. Upstream
-verified/unverified support labels remain unchanged.
+On **2 October 2026**, the user confirmed all supported wireless polling rates
+on the DeathAdder V4 Pro: **125, 500, 1000, 2000, 4000 and 8000 Hz**.
+The Rust port labels this **hardware verified by user testing**. This supersedes
+the partial 1 October transition report. No identifying captures are retained.
+Wired operation, reconnect/power-cycle persistence and effective USB frequency
+remain unverified. This is not manufacturer or anti-cheat certification.
 
 ### Five-minute polling-control measurements
 
