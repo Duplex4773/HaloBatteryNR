@@ -1,4 +1,4 @@
-name: Rust Windows port
+name: Windows Rust validation
 on:
   pull_request:
   push:
@@ -6,9 +6,6 @@ on:
 jobs:
   validate:
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: rust-win32
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -30,4 +27,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: HaloBatteryNext-windows-x64
-          path: rust-win32/dist/HaloBatteryNext-0.1.0-windows-x64.zip
+          path: dist/HaloBatteryNext-0.1.0-windows-x64.zip

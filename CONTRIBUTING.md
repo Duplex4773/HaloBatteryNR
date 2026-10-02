@@ -1,85 +1,86 @@
-# Contributing to Halo Battery
+# Contributing
 
-Thank you for helping. This page tells you how to:
+Halo Battery Next is a standalone Rust/Win32 application for Windows 11 x64.
+The Cargo workspace is at the repository root. The original HaloBattery Python
+application is an external protocol and behavior reference; it is not needed to
+build or run this application.
 
-1. [Report a device that is not detected or shows a wrong level](#1-report-a-device)
-2. [Record a USB capture when the protocol is not known](#2-record-a-usb-capture)
-3. [Open a pull request](#3-open-a-pull-request)
+## Build and validate
 
-## 1. Report a device
+Install Rust with the MSVC x64 target and Visual Studio C++ build tools with the
+Windows SDK. Run these commands from the repository root:
 
-Before you report, do these steps:
+```powershell
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+python tools/merge-coverage.py --check --require-complete
+.\tools\build-rust.ps1
+.\tools\package-rust.ps1
+```
 
-1. Close the maker's software (Synapse, G HUB, the web driver and similar). It can hold the receiver.
-2. Wake the device: move the mouse, press a key, or turn the headset on.
-3. Right-click a Halo Battery icon and select **Diagnostics…**. The "No devices found" icon has this item too. If you run the app from source, `probe.bat` shows the same information in a console window; copy all of it into the issue.
+Only the coverage command requires Python, using its standard library. Rust tests
+consume stored fixtures and do not import the parent application. The build script
+sets portable linking and removes local build paths from embedded messages. Use
+[the release guide](docs/releasing.md) for package contents and local validation.
 
-   <picture>
-     <source media="(prefers-color-scheme: dark)" srcset="docs/contributing/diagnostics-menu-dark.png">
-     <img src="docs/contributing/diagnostics-menu-light.png" alt="The tray menu of a device, with the Diagnostics item marked" width="381">
-   </picture>
+## Change the implementation
 
-4. The report opens in your text editor (usually Notepad). It is a text file, `diagnostics.txt`, in `%APPDATA%\HaloBattery`. It starts like this:
+Keep device state, identity and alerts in `crates/core`, protocols and injected HID
+contracts in `crates/providers`, Windows integrations in `crates/windows`, storage
+in `crates/storage`, and engine/UI orchestration in `crates/app`.
 
-   ```
-   === Poll result ===
-   G502 LIGHTSPEED Wireless Gaming Mouse: 71%   [logitech:xxxxxxxx]
+For protocol changes, add meaningful fake-session regressions for packet bytes,
+reply matching, capability/identity checks, timeouts, cancellation and recovery.
+Parser agreement alone does not prove transaction equivalence. Keep work queues,
+retries and caches bounded. Communication failures must retain explicitly stale
+readings rather than pretend a device disconnected.
 
-   === Protocol details ===
-   [Logitech] pid=c539 'USB Receiver'
-     idx=1 'G502 LIGHTSPEED Wireless Gaming Mouse' unit=xxxxxxxx feature 1001: 0f 57 00 00 -> 71%
+Polling-rate changes require reviewed exact device/connection identities, command
+and acknowledgement evidence, and fresh readback. Battery catalog updates do not
+authorize configuration writes. Preserve the opt-in, gaming-state restrictions,
+connection epochs and existing settings outside the requested rate.
 
-   === All HID devices ===
-   VID=046d PID=c539 if=2 usage=ff00:0001 'Logitech' 'USB Receiver'
-   ```
+Use invented identities in fixtures and UI validation. Never commit real device
+keys, serials, Bluetooth addresses, names, account paths or raw private captures.
+Use a separate temporary data directory for simulated validation; preserve the
+user's application settings and history.
 
-   The **All HID devices** part is the most important for a device that is not supported: it shows the ids (`VID`, `PID`) and the collections (`usage`) of your device.
+## Update the official source reference
 
-Then [open an issue](../../issues/new) and:
+Fetch [HeyOkay/HaloBattery](https://github.com/HeyOkay/HaloBattery) into a separate
+reference checkout. Preserve the archived 1.13.0 source used for existing evidence.
+Review changes to protocols, provider behavior, discovery and tests before porting
+them. Do not merge the parent Python application into this repository.
 
-- Write the device name, and how it is connected (receiver, cable or Bluetooth).
-- Drag `diagnostics.txt` into the comment box (type `%APPDATA%\HaloBattery` in the address bar of File Explorer to find it). Do not paste only a part of it.
-- If the maker's app shows a battery level, write that level and the level that Halo Battery shows.
+With that external checkout's Python dependencies installed:
 
-The report contains Bluetooth MAC addresses and device serial numbers. You can replace them with `xx` before you post.
+```powershell
+python tools/port_catalog.py --upstream C:\reference\HaloBattery
+python tools/provider_fixtures.py --upstream C:\reference\HaloBattery
+cargo fmt --all
+python tools/merge-coverage.py --upstream C:\reference\HaloBattery
+python tools/merge-coverage.py --check --require-complete
+cargo test --workspace --locked
+```
 
-## 2. Record a USB capture
+Review generated diffs, update coverage mappings and implement transaction changes
+before claiming support. The default coverage checker validates the stored
+inventory and actual Rust test links. Optional `--upstream` additionally checks the
+external reference's test inventory through AST inspection.
 
-Halo Battery reads a battery only with a known protocol. The protocol comes from the maker's documentation, from an open-source project (for example OpenRazer, Solaar, HeadsetControl, rivalcfg or SDL), or from a capture of the maker's own app. Halo Battery does not send guessed commands to a device, because a wrong command can change the device's settings.
+## Report evidence accurately
 
-If you know an open-source project that reads your device's battery, put the link in your issue. That is the fastest way.
+Keep **User-verified in parent app** battery reports scoped to their exact models
+and connections. The Rust rewrite inherits parent protocols, provider behavior,
+tests and hardware reports, with separate native implementation and verification.
+Synthetic tests and inherited reports do not certify every model or transport.
+The wireless DeathAdder V4 Pro has Rust-port hardware evidence and user-verified
+configured-rate changes at 125, 500, 1000, 2000, 4000 and 8000 Hz (2 October 2026).
+Other local hardware claims require recorded evidence; this is not manufacturer
+or anti-cheat certification.
 
-If there is no such project, and the maker's app (or web driver) shows the battery, a capture of that app gives the exact request and reply. USBPcap's [illustrated guide](https://desowin.org/usbpcap/tour.html#use-usbpcap-as-wireshark-extcap) has screenshots of each Wireshark window in these steps, and the [Wireshark USB page](https://wiki.wireshark.org/CaptureSetup/USB) has more detail.
-
-1. Install [Wireshark](https://www.wireshark.org/download.html). In the installer, select **USBPcap**. Restart the computer.
-2. **Close the maker's app completely** (also from the tray).
-3. Start Wireshark and start a capture on the **USBPcap** interface that has your receiver or cable. If you are not sure which one, try each until moving the mouse makes packets appear.
-4. **Start the maker's app** and wait until it shows the battery level. If it has a battery or device page, open it.
-5. Wait approximately 10 seconds, then stop the capture.
-6. Select **File → Save As** and save as `.pcapng`. Upload the file (for example with WeTransfer or Google Drive) and put the link in your issue.
-
-If the capture has no packets from the maker's app, change one setting in the app (for example the DPI) during the capture and then change it back. That shows whether the capture sees the app at all.
-
-Bluetooth devices: Halo Battery shows the level that Windows itself reports. If **Settings → Bluetooth & devices** shows no battery for your device, Halo Battery cannot show one either.
-
-## 3. Open a pull request
-
-1. Fork the repository and make a branch from the latest `main`.
-2. Put a new device in the provider for its protocol family (`providers/*.py`). Make a new provider only for a new protocol. A new provider must be:
-   - imported in `providers/__init__.py`;
-   - added to the provider list in `halo_battery.pyw` (the app and `--probe` use it).
-3. Only send commands that come from a source you can name. Put the source (project, file and line, or your capture) in a comment at the top of the provider.
-4. Add unit tests in `tests/`. They use fake HID devices, so no hardware is necessary. Run all tests from the repository root:
-
-   ```
-   python -m unittest discover -s tests
-   ```
-
-5. Add a line to `CHANGELOG.md` under `[Unreleased]`, and a row to the supported devices table.
-6. In the pull request description, write:
-   - which issue it closes;
-   - the source of the protocol;
-   - if you tested it on real hardware, and with which device;
-   - which other open pull requests change the same files.
-
-Look at the open issues and pull requests first, so that two people do not do the same work.
+Retain the upstream MIT notices and [protocol credits](docs/protocols.md). Preserve
+historical resource measurements, test checkpoints and their limitations. Label
+simulated screenshots explicitly. Review [provider parity](docs/provider-parity.md)
+and [device support](docs/device-support.md) when changing support claims.

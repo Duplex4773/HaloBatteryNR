@@ -1,37 +1,17 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-
-# PyInstaller (build_exe.bat)
-build/
-dist/
-*.spec
-
-# Diagnostics and logs (written to %APPDATA%\HaloBattery, but just in case)
+# Rust/build outputs
+/target/
+/dist/
+# Local validation, reference work and device diagnostics
+/validation-local/
+/*-probe.json
 *.log
 diagnostics.txt
-
-# OS files
+# Python development tools
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+# OS/editor files
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# Generated exe icon (tools/make_icon.py)
-halo.ico
-
-# release notes extracted by the workflow
-release_notes.md
-
-# Generated version resource (tools/make_version.py)
-version_info.txt
-
-# Rust and local validation artifacts
-/target/
-/*-probe.json
-/validation-local/
-/rust-win32/target/
-/rust-win32/*-probe.json
-/rust-win32/validation-local/
