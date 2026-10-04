@@ -813,3 +813,31 @@ fn razer_exclusive_open_error_remains_explicit_then_backoff_preserves_known_iden
     assert!(poll(&mut fresh, &unknown, &clock).is_empty());
     unknown.done();
 }
+
+#[test]
+fn definitive_empty_receiver_slot_forgets_unit_and_repair_reads_new_identity() {
+    let mut first = Exchange::default();
+    first.mouse("Invented old mouse", [1, 2, 3, 4], 76);
+    let mut provider = HidProvider::new("logitech");
+    let clock = FakeClock::default();
+    let first_hid = FakeHid::new(receiver(0xc547, "invented-receiver", false), first.steps);
+    let old = poll(&mut provider, &first_hid, &clock);
+    assert_eq!(old.len(), 1);
+    first_hid.done();
+    let mut unpaired = Exchange::default();
+    for slot in 1..=6 {
+        unpaired.error(slot, 0, 1, &[], 8);
+    }
+    let empty_hid = FakeHid::new(receiver(0xc547, "invented-receiver", false), unpaired.steps);
+    assert!(poll(&mut provider, &empty_hid, &clock).is_empty());
+    empty_hid.done();
+    let mut second = Exchange::default();
+    second.mouse("Invented replacement", [5, 6, 7, 8], 61);
+    let second_hid = FakeHid::new(receiver(0xc547, "invented-receiver", false), second.steps);
+    let new = poll(&mut provider, &second_hid, &clock);
+    assert_eq!(new.len(), 1);
+    assert_eq!(new[0].name, "Invented replacement");
+    assert_eq!(new[0].level, Some(61));
+    assert_ne!(new[0].key, old[0].key);
+    second_hid.done();
+}

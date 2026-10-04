@@ -4,6 +4,59 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro. Inherited parent battery reports and Rust
 hardware checks are labelled separately in [device support](device-support.md).
 
+## Dashboard refinement, 4 October 2026
+
+The separate local UI executable is **2,902,016 bytes (2.77 MiB)**, SHA256
+`2AB96887905C5386D1B1EDFDFC483240B0E0F84E68C4C9B2EEDF2939A0898172`.
+Formatting, strict workspace Clippy, **528 passing tests** (two optional timing
+tests ignored), release build, production API restrictions and the complete
+459-ID coverage gate pass.
+
+Native dashboard regressions cover light/dark painting, selected navigation,
+scrolling and keyboard focus, fixed footers, More options, retained edits and
+plain-language errors with original support-report details. Forty open/close
+cycles keep closed-window GDI and USER counts at **22 / 22**, with no growth.
+Fonts, page controls, chart resources and loaded Insights are released on close.
+
+Devices, Settings and Insights screenshots use the native test's synthetic data;
+the existing History screenshot remains the 2 October release capture. Live
+computer inspection was stopped with Escape and was not resumed. The PowerShell
+UI validation helpers were updated, parsed and compiled, but not run in this pass.
+No physical polling changes or new hardware verification were performed.
+
+CPU and private memory were not remeasured for this UI pass. The historical
+three-minute figures below remain separate checkpoints. This build is packaged
+as `0.1.0-ui-20261004` (application version 0.1.0), separately from the previously
+prepared release assets. See the [UI audit](ui-audit-20261004.md).
+
+## Performance and correctness audit, 3 October 2026
+
+The separate local audit executable is **2,863,104 bytes (2.73 MiB)**, SHA256
+`FB88F80B1C9D282C318A7A0F87097E15AF76F6BE6C7D1FF65C4545C96DA22446`.
+Formatting, strict workspace Clippy, **524 passing tests** (two optional timing
+tests ignored), release build, production API restrictions and the complete
+459-ID coverage gate pass.
+
+The audit fixes HID access-failure generations/retries, saturated worker waits,
+departed-device caches, explicit Logitech unpairing, bounded history recovery,
+latest estimate persistence and final shutdown recovery. Calendar sampling keeps
+endpoints/gaps, and History defers resizing queries while streaming paint vertices.
+
+Native dashboard, keyboard, Insights, tray theme and tray polling suites pass.
+Forty close/reopen cycles retain stable GDI/USER counts; native History tests
+verify 500 resize messages retain data and submit one final query. Simulation
+sends no physical rate commands. Settings smoke cleanup now restores the exact
+shared Windows startup registration; normal monitoring is restored afterward.
+
+Controlled **three-minute** background runs average **5.64 MiB / 0.122%** one-core
+CPU with animation off, and **6.02 MiB / 0.165%** with one animated charging icon.
+Corresponding baseline results are **5.70 MiB / 0.061%** and **6.00 MiB / 0.174%**.
+RAM is effectively unchanged; no general steady-state CPU improvement is claimed.
+The [full audit](performance-audit-20261003.md) records accepted workloads,
+excluded runs, historical original comparison and remaining limitations.
+The previously prepared unsigned release assets are unchanged; this audit build
+is packaged separately and has not been published.
+
 ## Startup tooltip checkpoint, 2 October 2026
 
 The portable executable is **2,835,456 bytes (2.70 MiB)**,

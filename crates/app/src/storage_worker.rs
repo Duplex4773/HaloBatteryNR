@@ -7,6 +7,68 @@ use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
+const MAX_RECOVERY_DEVICES: usize = 512;
+
+/// Once a batch cannot be recorded, retain its latest unprocessed observation
+/// per device. Outages must neither silently discard the tail nor grow RAM
+/// with every changed battery sample.
+fn retain_usage(
+    pending: &mut Vec<UsageObservation>,
+    observations: impl IntoIterator<Item = UsageObservation>,
+) {
+    for observation in observations {
+        if let Some(old) = pending
+            .iter_mut()
+            .find(|old| old.reading.key == observation.reading.key)
+        {
+            *old = observation;
+        } else if pending.len() < MAX_RECOVERY_DEVICES {
+            pending.push(observation);
+        }
+    }
+}
+
+fn record_batch(
+    db: &mut Store,
+    observations: Vec<UsageObservation>,
+    pending: &mut Vec<UsageObservation>,
+) -> Result<(), ProviderError> {
+    let mut observations = observations.into_iter();
+    while let Some(observation) = observations.next() {
+        if let Err(error) = db.record_usage(&observation) {
+            retain_usage(pending, std::iter::once(observation).chain(observations));
+            return Err(error);
+        }
+    }
+    Ok(())
+}
+fn save_latest_estimator(
+    pending: &mut Option<Estimator>,
+    save: impl FnOnce(&Estimator) -> Result<(), ProviderError>,
+) -> Result<(), ProviderError> {
+    if let Some(state) = pending.as_ref() {
+        save(state)?;
+        *pending = None;
+    }
+    Ok(())
+}
+
+fn recover_and_flush(
+    database: &mut Result<Store, ProviderError>,
+    path: &std::path::Path,
+    pending_usage: &mut Vec<UsageObservation>,
+    estimator: &mut Option<Estimator>,
+) -> Result<(), ProviderError> {
+    if database.is_err() {
+        *database = Store::open(path);
+    }
+    let db = database.as_mut().map_err(|error| error.clone())?;
+    db.flush()?;
+    let recovered = std::mem::take(pending_usage);
+    record_batch(db, recovered, pending_usage)?;
+    save_latest_estimator(estimator, |state| db.save_estimator(state))?;
+    db.flush()
+}
 pub(super) fn run(
     folder: PathBuf,
     messages: Receiver<Storage>,
@@ -34,18 +96,9 @@ pub(super) fn run(
         let result = match message {
             Ok(Storage::UsageSample(observations)) => {
                 if let Ok(db) = &mut database {
-                    observations.iter().try_for_each(|o| db.record_usage(o))
+                    record_batch(db, observations, &mut pending_usage)
                 } else {
-                    for observation in observations {
-                        if let Some(old) = pending_usage
-                            .iter_mut()
-                            .find(|old| old.reading.key == observation.reading.key)
-                        {
-                            *old = observation;
-                        } else if pending_usage.len() < 512 {
-                            pending_usage.push(observation);
-                        }
-                    }
+                    retain_usage(&mut pending_usage, observations);
                     Ok(())
                 }
             }
@@ -69,10 +122,12 @@ pub(super) fn run(
                 Err(e) => Err(e.into()),
             },
             Ok(Storage::State(state)) => {
+                // A newer checkpoint supersedes any failed/deferred one. Keep
+                // exactly the latest state until persistence succeeds.
+                estimator = Some(state);
                 if let Ok(db) = &mut database {
-                    db.save_estimator(&state)
+                    save_latest_estimator(&mut estimator, |state| db.save_estimator(state))
                 } else {
-                    estimator = Some(state);
                     Ok(())
                 }
             }
@@ -98,9 +153,12 @@ pub(super) fn run(
                 Ok(())
             }
             Ok(Storage::Quit) | Err(RecvTimeoutError::Disconnected) => {
-                if let Ok(db) = &mut database
-                    && let Err(e) = db.flush()
-                {
+                if let Err(e) = recover_and_flush(
+                    &mut database,
+                    &folder.join("history.db"),
+                    &mut pending_usage,
+                    &mut estimator,
+                ) {
                     let _ = events.send(Event::Error(format!("History flush: {e}")));
                 }
                 break;
@@ -111,23 +169,136 @@ pub(super) fn run(
             let _ = events.send(Event::Error(format!("Storage: {e}")));
         }
         if flush.elapsed() >= Duration::from_secs(60) {
-            if database.is_err() {
-                database = Store::open(&folder.join("history.db"));
-                if let Ok(db) = &mut database {
-                    for observation in pending_usage.drain(..) {
-                        let _ = db.record_usage(&observation);
-                    }
-                    if let Some(state) = estimator.take() {
-                        let _ = db.save_estimator(&state);
-                    }
-                }
-            }
-            if let Ok(db) = &mut database
-                && let Err(e) = db.flush().and_then(|_| db.prune(clock.unix()))
-            {
+            let result = recover_and_flush(
+                &mut database,
+                &folder.join("history.db"),
+                &mut pending_usage,
+                &mut estimator,
+            )
+            .and_then(|_| database.as_mut().unwrap().prune(clock.unix()));
+            if let Err(e) = result {
                 let _ = events.send(Event::Error(format!("History: {e}")));
             }
             flush = Instant::now();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn estimator(usage: f64) -> Estimator {
+        let mut state = Estimator::default();
+        let discharge = state.devices.entry("synthetic".into()).or_default();
+        discharge.usage = usage;
+        discharge.seen = SystemClock::default().unix();
+        state
+    }
+
+    #[test]
+    fn newer_checkpoint_supersedes_deferred_state_after_write_failure() {
+        let mut pending = Some(estimator(10.0));
+        assert!(
+            save_latest_estimator(&mut pending, |_| {
+                Err(ProviderError::new("Synthetic write failure"))
+            })
+            .is_err()
+        );
+        assert_eq!(pending.as_ref().unwrap().devices["synthetic"].usage, 10.0);
+        // Storage::State always replaces pending before attempting to save.
+        pending = Some(estimator(20.0));
+        save_latest_estimator(&mut pending, |state| {
+            assert_eq!(state.devices["synthetic"].usage, 20.0);
+            Ok(())
+        })
+        .unwrap();
+        assert!(pending.is_none());
+        save_latest_estimator(&mut pending, |_| {
+            panic!("An obsolete checkpoint must not be replayed")
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn final_recovery_reopens_database_and_saves_deferred_reading_and_estimator() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("history.db");
+        std::fs::create_dir(&path).unwrap();
+        let mut database = Store::open(&path);
+        assert!(database.is_err());
+        let mut pending = vec![observation("synthetic", 100, 77)];
+        let mut state = Some(estimator(120.0));
+        assert!(recover_and_flush(&mut database, &path, &mut pending, &mut state).is_err());
+        assert_eq!(pending.len(), 1);
+        assert!(state.is_some());
+        std::fs::remove_dir(&path).unwrap();
+        recover_and_flush(&mut database, &path, &mut pending, &mut state).unwrap();
+        assert!(pending.is_empty());
+        assert!(state.is_none());
+        let store = Store::read_only(&path).unwrap();
+        assert_eq!(
+            store.query("synthetic", 0, 200, 10).unwrap()[0].level,
+            Some(77)
+        );
+        assert_eq!(store.load_estimator().devices["synthetic"].usage, 120.0);
+    }
+
+    fn observation(key: &str, timestamp: i64, level: u8) -> UsageObservation {
+        let mut reading = Reading::new(key, "Synthetic device", "simulation", timestamp);
+        reading.level = Some(level);
+        UsageObservation {
+            reading,
+            polling_rate: None,
+            session: None,
+        }
+    }
+
+    #[test]
+    fn failed_batch_retains_unprocessed_devices_for_bounded_recovery() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("history.db");
+        drop(Store::open(&path).unwrap());
+        // A read-only SQLite connection accepts staged records but rejects
+        // their first flush, giving a deterministic write failure.
+        let mut database = Store::read_only(&path).unwrap();
+        for timestamp in 0..4095 {
+            database
+                .record_usage(&observation("mouse", timestamp, (timestamp % 100) as u8))
+                .unwrap();
+        }
+        let mut pending = Vec::new();
+        assert!(
+            record_batch(
+                &mut database,
+                vec![
+                    observation("mouse", 5000, 10),
+                    observation("headset", 5000, 20),
+                    observation("controller", 5000, 30),
+                ],
+                &mut pending,
+            )
+            .is_err()
+        );
+        assert_eq!(pending.len(), 3, "The whole unprocessed tail must survive");
+        retain_usage(&mut pending, [observation("headset", 5060, 19)]);
+        let mut recovered = Store::open(&path).unwrap();
+        let retry = std::mem::take(&mut pending);
+        record_batch(&mut recovered, retry, &mut pending).unwrap();
+        recovered.flush().unwrap();
+        assert!(pending.is_empty());
+        for (key, level) in [("mouse", 10), ("headset", 19), ("controller", 30)] {
+            let readings = recovered.query(key, 0, 6000, 10).unwrap();
+            assert_eq!(readings.len(), 1);
+            assert_eq!(readings[0].level, Some(level));
+        }
+        retain_usage(
+            &mut pending,
+            (0..700).map(|index| observation(&format!("synthetic:{index}"), 6000, 50)),
+        );
+        assert_eq!(pending.len(), MAX_RECOVERY_DEVICES);
+        retain_usage(&mut pending, [observation("synthetic:0", 6060, 49)]);
+        assert_eq!(pending.len(), MAX_RECOVERY_DEVICES);
+        assert_eq!(pending[0].reading.level, Some(49));
     }
 }

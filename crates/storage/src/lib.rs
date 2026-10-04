@@ -256,6 +256,11 @@ impl Store {
     }
     /// Preserve confirmed configuration evidence without applying it to hardware.
     pub fn record_usage(&mut self, observation: &UsageObservation) -> Result<(), ProviderError> {
+        // A failed transaction retains queued observations for retry. Refuse
+        // further growth before updating pacing/identity state at the hard cap.
+        if self.pending.len() >= 4096 {
+            self.flush()?;
+        }
         let reading = &observation.reading;
         let changed = self.last.get(&reading.key).is_none_or(|previous| {
             let r = &previous.reading;
@@ -511,7 +516,7 @@ impl HistoryStore for Store {
             )
             .map_err(sql_error)?;
         let mut out = Vec::with_capacity(limit.min(count as usize));
-        if count > limit as i64 && limit == 2 {
+        if count > limit as i64 && limit < 5 {
             let mut query = self
                 .db
                 .prepare("SELECT payload FROM readings WHERE device=?1 AND ts=?2")
@@ -524,7 +529,17 @@ impl HistoryStore for Store {
                     |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
                 )
                 .map_err(sql_error)?;
-            for ts in [bounds.0, bounds.1] {
+            // With a tiny chart budget, prioritize an observed unknown gap
+            // between the endpoints over an extra known-level representative.
+            let gap: Option<i64> = if limit >= 3 {
+                self.db.query_row(
+                    "SELECT min(ts) FROM readings WHERE device=?1 AND ts>?2 AND ts<?3 AND level IS NULL",
+                    params![key, bounds.0, bounds.1], |r| r.get(0),
+                ).map_err(sql_error)?
+            } else {
+                None
+            };
+            for ts in [Some(bounds.0), gap, Some(bounds.1)].into_iter().flatten() {
                 let reading = query
                     .query_row(params![key, ts], |r| {
                         Ok(serde_json::from_str(row_text(r, 0)?).ok())
@@ -547,12 +562,15 @@ impl HistoryStore for Store {
                 }
             }
         } else {
-            // SQL performs min/max sampling; an entire month is never loaded into UI memory.
-            // A bucket can contain a low, high and unknown reading. Reserve room
-            // for all three so null gaps never truncate the end of the interval.
-            let buckets = (limit / 3).max(1) as i64;
-            let width = (((until - since).max(0) + 1 + buckets - 1) / buckets).max(1);
-            let mut query=self.db.prepare("WITH selected AS (SELECT ts,payload,level,(ts-?2)/?4 AS bucket FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3), extremes AS (SELECT bucket,min(level) AS lo,max(level) AS hi FROM selected GROUP BY bucket) SELECT s.payload FROM selected s JOIN extremes e ON s.bucket=e.bucket WHERE s.level=e.lo OR s.level=e.hi OR s.level IS NULL GROUP BY s.bucket,s.level ORDER BY s.ts LIMIT ?5").map_err(sql_error)?;
+            // Reserve real interval endpoints, then up to low/high/unknown
+            // representatives per bucket. Flat plateaus still span their real
+            // timestamps; deterministic representatives avoid SQLite's arbitrary
+            // GROUP BY payload selection.
+            let buckets = ((limit - 2) / 3).max(1) as i64;
+            let span = (i128::from(until) - i128::from(since)).max(0) + 1;
+            let width = ((span + i128::from(buckets) - 1) / i128::from(buckets))
+                .clamp(1, i128::from(i64::MAX)) as i64;
+            let mut query=self.db.prepare("WITH selected AS (SELECT ts,level,min((ts-?2)/?4,(?5-2)/3-1) AS bucket FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3), extremes AS (SELECT bucket,min(level) AS lo,max(level) AS hi FROM selected GROUP BY bucket), representatives AS (SELECT min(s.ts) AS ts FROM selected s JOIN extremes e ON s.bucket=e.bucket WHERE s.level=e.lo OR s.level=e.hi OR s.level IS NULL GROUP BY s.bucket,s.level), timestamps AS (SELECT ts FROM representatives UNION SELECT min(ts) FROM selected UNION SELECT max(ts) FROM selected) SELECT payload FROM readings WHERE device=?1 AND ts IN (SELECT ts FROM timestamps) ORDER BY ts LIMIT ?5").map_err(sql_error)?;
             for row in query
                 .query_map(params![key, since, until, width, limit as i64], |r| {
                     Ok(serde_json::from_str(row_text(r, 0)?).ok())
@@ -612,6 +630,96 @@ impl Drop for Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn persistent_flush_failure_bounds_pending_and_recovers_without_losing_queued_rows() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("history.db")).unwrap();
+        store.db.execute_batch("PRAGMA query_only=ON").unwrap();
+        for timestamp in 0..4096 {
+            let mut reading = Reading::new("invented", "Invented", "test", timestamp);
+            reading.level = Some((timestamp % 100) as u8);
+            let result = store.record(&reading);
+            assert_eq!(result.is_err(), timestamp == 4095);
+        }
+        for timestamp in 4096..4196 {
+            let mut reading = Reading::new(
+                format!("invented-{timestamp}"),
+                "Invented",
+                "test",
+                timestamp,
+            );
+            reading.level = Some(80);
+            assert!(store.record(&reading).is_err());
+            assert_eq!(store.pending.len(), 4096);
+            assert_eq!(store.last.len(), 1);
+        }
+        store.db.execute_batch("PRAGMA query_only=OFF").unwrap();
+        let mut latest = Reading::new("invented", "Invented", "test", 4200);
+        latest.level = Some(80);
+        store.record(&latest).unwrap();
+        assert_eq!(store.pending.len(), 1);
+        store.flush().unwrap();
+        let count: i64 = store
+            .db
+            .query_row("SELECT count(*) FROM readings", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 4097);
+        assert_eq!(
+            store.query("invented", 4200, 4200, 2).unwrap(),
+            vec![latest]
+        );
+    }
+
+    #[test]
+    fn sampled_flat_history_preserves_endpoints_and_extreme_interval_bounds() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("history.db")).unwrap();
+        for timestamp in 0..100 {
+            let mut reading = Reading::new("invented", "Invented", "test", timestamp * 60);
+            reading.level = Some(80);
+            store.record(&reading).unwrap();
+            reading.key = "varied".into();
+            reading.level = Some((timestamp % 100) as u8);
+            store.record(&reading).unwrap();
+        }
+        store.flush().unwrap();
+        for cap in 2..=20 {
+            for (since, until) in [(0, 5940), (i64::MIN, i64::MAX)] {
+                for key in ["invented", "varied"] {
+                    let readings = store.query(key, since, until, cap).unwrap();
+                    assert!(readings.len() <= cap);
+                    assert_eq!(readings.first().unwrap().timestamp, 0);
+                    assert_eq!(readings.last().unwrap().timestamp, 5940);
+                    assert!(
+                        readings
+                            .windows(2)
+                            .all(|pair| pair[0].timestamp < pair[1].timestamp)
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn tiny_history_budget_keeps_observed_unknown_gap_between_endpoints() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("history.db")).unwrap();
+        for timestamp in 0..10 {
+            let mut reading = Reading::new("invented", "Invented", "test", timestamp * 60);
+            reading.level = (timestamp != 4).then_some(80);
+            store.record(&reading).unwrap();
+        }
+        store.flush().unwrap();
+        for cap in [3, 4] {
+            let readings = store.query("invented", 0, 540, cap).unwrap();
+            assert_eq!(
+                readings.iter().map(|r| r.timestamp).collect::<Vec<_>>(),
+                [0, 240, 540]
+            );
+            assert_eq!(readings[1].level, None);
+        }
+    }
+
     #[test]
     fn corruption_is_preserved_and_atomic_writes_replace() {
         let d = tempfile::tempdir().unwrap();

@@ -70,6 +70,19 @@ const SHORT_RETRY: Duration = Duration::from_secs(30);
 #[derive(Default)]
 struct EnumerationCache(BTreeMap<u16, Cached>);
 impl EnumerationCache {
+    fn after_open<T>(
+        &mut self,
+        vendor: u16,
+        result: Result<T, ProviderError>,
+    ) -> Result<T, ProviderError> {
+        if result.is_err() {
+            // Access failure can mean an exclusive owner, not a connection
+            // change. Re-enumerate this vendor without revoking unrelated
+            // in-flight battery results or successful sibling observations.
+            self.0.remove(&vendor);
+        }
+        result
+    }
     fn enumerate(
         &mut self,
         vendor: u16,
@@ -313,10 +326,7 @@ impl HidTransport for WindowsHid {
             // add_devices targets a vendor; never enumerate unrelated vendor collections.
             let mut api = self.api.lock().unwrap_or_else(|p| p.into_inner());
             api.reset_devices().map_err(error)?;
-            if let Err(e) = api.add_devices(vendor, 0) {
-                self.invalidate();
-                return Err(error(e));
-            }
+            api.add_devices(vendor, 0).map_err(error)?;
             let devices = api
                 .device_list()
                 .map(|d| {
@@ -341,15 +351,23 @@ impl HidTransport for WindowsHid {
     fn open(&self, info: &HidInfo) -> Result<Box<dyn HidSession>, ProviderError> {
         let path =
             CString::new(info.path.as_bytes()).map_err(|e| ProviderError::new(e.to_string()))?;
-        let handle = self
-            .api
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .open_path(&path)
-            .map_err(|e| {
-                self.invalidate();
-                error(e)
-            })?;
+        let result = {
+            // Enumeration locks cache before API. Release API before taking
+            // cache here, so failed opens cannot invert that lock order.
+            self.api
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .open_path(&path)
+                .map_err(error)
+        };
+        let handle = match result {
+            Ok(handle) => handle,
+            Err(error) => self
+                .cache
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .after_open(info.vendor_id, Err(error))?,
+        };
         Ok(Box::new(Session(handle)))
     }
 }
@@ -405,6 +423,39 @@ mod cache_tests {
                 ..Default::default()
             })
             .collect()
+    }
+    #[test]
+    fn failed_open_recovers_only_affected_vendor_without_connection_epoch_change() {
+        let mut cache = EnumerationCache::default();
+        let generation = 7;
+        for vendor in [0x1532, 0x046d] {
+            cache
+                .enumerate(vendor, generation, Duration::ZERO, || Ok((infos(2), 2)))
+                .unwrap();
+        }
+        let error = cache.after_open::<()>(0x1532, Err(ProviderError::new("exclusive owner")));
+        assert!(error.is_err());
+        assert!(!cache.0.contains_key(&0x1532));
+        let mut refreshed = false;
+        cache
+            .enumerate(0x1532, generation, Duration::from_secs(1), || {
+                refreshed = true;
+                Ok((infos(1), 1))
+            })
+            .unwrap();
+        assert!(refreshed);
+        assert_eq!(cache.0[&0x1532].generation, generation);
+        cache
+            .enumerate(0x046d, generation, Duration::from_secs(1), || {
+                panic!("unrelated provider must retain its cache")
+            })
+            .unwrap();
+        cache.after_open(0x1532, Ok(())).unwrap();
+        cache
+            .enumerate(0x1532, generation, Duration::from_secs(2), || {
+                panic!("successful access must not expire metadata")
+            })
+            .unwrap();
     }
     #[test]
     fn short_list_immediate_retry_recovers_missing_collection() {
@@ -548,7 +599,7 @@ mod cache_tests {
         }
     }
     #[test]
-    fn device_event_or_open_failure_generation_forces_rediscovery() {
+    fn connection_generation_change_forces_rediscovery() {
         let mut cache = EnumerationCache::default();
         let mut calls = 0;
         for generation in [0, 0, 1, 1, 2] {

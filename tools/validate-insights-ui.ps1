@@ -46,7 +46,17 @@ public static class InsightsShot {
  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr w,uint m,UIntPtr p,IntPtr l);
  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr w,uint m,UIntPtr p,IntPtr l);
  [DllImport("user32.dll",CharSet=CharSet.Unicode,EntryPoint="SendMessageW")] public static extern IntPtr SendText(IntPtr w,uint m,UIntPtr p,StringBuilder text);
- [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr w,int i);
+ [DllImport("user32.dll",EntryPoint="GetDlgItem")] static extern IntPtr DirectDlgItem(IntPtr w,int i);
+ [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr w,EnumProc c,IntPtr p);
+ [DllImport("user32.dll")] static extern int GetDlgCtrlID(IntPtr w);
+ public static IntPtr GetDlgItem(IntPtr w,int i){
+  if(w==IntPtr.Zero)return IntPtr.Zero;
+  uint owner;GetWindowThreadProcessId(w,out owner);if(owner!=TargetPid)return IntPtr.Zero;
+  var found=DirectDlgItem(w,i);if(found!=IntPtr.Zero)return found;
+  // Page controls can be nested; enumeration stays within this owned parent.
+  EnumChildWindows(w,(h,p)=>{uint pid;GetWindowThreadProcessId(h,out pid);if(pid==TargetPid&&GetDlgCtrlID(h)==i){found=h;return false;}return true;},IntPtr.Zero);
+  return found;
+ }
  [DllImport("user32.dll")] public static extern uint GetGuiResources(IntPtr p,uint kind);
  [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpi);
  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h,out R r);
@@ -70,8 +80,8 @@ function Wait-Window([string]$title){
 }
 function Wait-Insights([IntPtr]$dashboard){
  $deadline=[DateTime]::UtcNow.AddSeconds(5)
- do{Start-Sleep -Milliseconds 100;$text=[InsightsShot]::Text([InsightsShot]::GetDlgItem($dashboard,78))}while($text-notlike'Local data refreshed*'-and[DateTime]::UtcNow-lt$deadline)
- if($text-notlike'Local data refreshed*'){throw "Insights query did not complete: $text"}
+ do{Start-Sleep -Milliseconds 100;$text=[InsightsShot]::Text([InsightsShot]::GetDlgItem($dashboard,78))}while($text-notlike'Updated*estimated use*'-and[DateTime]::UtcNow-lt$deadline)
+ if($text-notlike'Updated*estimated use*'){throw "Insights query did not complete: $text"}
 }
 try{
  $monitor=Wait-Window 'Halo Battery Next monitor'
@@ -89,19 +99,19 @@ try{
   [InsightsShot]::SendMessage($rates,390,[UIntPtr]$entry.index,[IntPtr]::Zero)|Out-Null
   Message $dashboard 273 (65536+70);Start-Sleep -Milliseconds 100
   $text=[InsightsShot]::Text([InsightsShot]::GetDlgItem($dashboard,74))
-  if($text-notlike"$($entry.hz) Hz*"-or$text-notlike'*samples*observed drops*'-or$text-notlike'*Estimated full-charge use:*'-or$text-notlike'*confidence*'){throw "Rate evidence missing: $text"}
+  if($text-notlike"*$($entry.hz) Hz*"-or$text-notlike'*Estimated use from a full battery:*'-or$text-notlike'*Estimated time left:*'-or$text-notlike'*Based on*recorded use*'-or($text-notlike'*Early estimate*'-and$text-notlike'*Based on recorded use*')){throw "Rate estimate details missing: $text"}
  }
- foreach($entry in @(@{index=0;evidence='Observed charge'},@{index=9;evidence='Partial cycle'})){
+ foreach($entry in @(@{index=0;evidence='Started after charging'},@{index=9;evidence='Charging was not recorded at the start'})){
   [InsightsShot]::SendMessage($cycles,390,[UIntPtr]$entry.index,[IntPtr]::Zero)|Out-Null
   Message $dashboard 273 (65536+71);Start-Sleep -Milliseconds 100
   $text=[InsightsShot]::Text([InsightsShot]::GetDlgItem($dashboard,76))
-  if($text-notlike"*$($entry.evidence)*"-or$text-notlike'*Average observed drain:*percentage points/h*'-or$text-notlike'*estimated awake time*'){throw "Charge evidence missing: $text"}
+  if($text-notlike"*$($entry.evidence)*"-or$text-notlike'Battery:*% to*%*% used*'-or$text-notlike'*Average battery use:*% per hour*'-or$text-notlike'*Estimated time used:*'-or($text-notlike'*Latest session*'-and$text-notlike'*Previous session*')){throw "Battery session details missing: $text"}
  }
  [InsightsShot]::SendMessage([InsightsShot]::GetDlgItem($dashboard,10),334,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
  Message $dashboard 273 (65536+10);Wait-Insights $dashboard
  Message $dashboard 273 4;Wait-Insights $dashboard
  $coverage=[InsightsShot]::Text([InsightsShot]::GetDlgItem($dashboard,78))
- if($coverage-notlike'*readings*discharging*counted use*confirmed rate*'-or$coverage-notlike'*intervals excluded*unreadable rows*'){throw "Coverage summary missing: $coverage"}
+ if($coverage-notlike'Updated*estimated use*last 30 days*'-or$coverage-notlike'*Sleeping*charging*gaps*excluded*'){throw "Usage summary missing: $coverage"}
  [InsightsShot]::Save($dashboard,(Join-Path $output 'insights-native.png'))
  Message $monitor 32777;Start-Sleep -Milliseconds 100
  $samples=@{}

@@ -15,7 +15,7 @@ hb-windows.workspace = true
 hb-storage.workspace = true
 serde_json.workspace = true
 crossbeam-channel.workspace = true
-windows.workspace = true
+windows = { workspace = true, features = ["Win32_System_Time"] }
 windows-numerics = "0.2.0"
 
 [build-dependencies]

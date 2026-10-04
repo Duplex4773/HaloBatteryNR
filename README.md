@@ -13,8 +13,11 @@ Python application is maintained externally as a reference.
 
 ## Features
 
-- **Devices, History, Settings and Insights:** native dashboard, keyboard navigation,
+- **Devices, History, Insights and Settings:** native dashboard, keyboard navigation,
   per-monitor DPI, automatic Windows app light/dark appearance and themed tray menus.
+  Grouped Settings and scrollable pages keep navigation and the Settings Save
+  footer visible. More options holds less-used settings; device labels, polling
+  feedback and battery-life summaries use plain language.
 - **25 battery provider families:** mice, wireless keyboards, headsets and controllers
   over HID, Bluetooth, XInput and Windows.Gaming.Input. Per-device rename, hide,
   icon selection, alert thresholds and provider switches.
@@ -52,8 +55,10 @@ These boundaries do not claim universal anti-cheat approval.
 
 ## Screenshots
 
-Native release UI with **synthetic device and history data**, captured 2 October
-2026. Screenshots demonstrate the interface, not hardware verification.
+Native UI with **synthetic device and history data**. Devices, Settings and
+Insights show the 4 October 2026 dashboard refinement using native test renders;
+History is from the 2 October release capture. Screenshots demonstrate the
+interface, not hardware verification.
 
 | Devices | History |
 | --- | --- |
@@ -68,6 +73,11 @@ Native release UI with **synthetic device and history data**, captured 2 October
 [Capture instructions](docs/screenshots/README.md)
 
 ## Performance compared with the original
+
+The [3 October audit](docs/performance-audit-20261003.md) addresses access-failure
+retry loops, bounded history recovery, departed-device caches and History resizing.
+The [4 October UI audit](docs/ui-audit-20261004.md) records the dashboard changes,
+native resource checks and their limits.
 
 Local Windows measurements used **three-minute windows**, a 60-second battery
 refresh interval and status export enabled, with dashboards and menus closed.

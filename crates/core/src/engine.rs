@@ -454,7 +454,10 @@ impl Engine {
                     } else if let Some(level) = r.level {
                         let _ = write!(text, "{level}%");
                     } else {
-                        text.push_str("battery unknown");
+                        text.push_str("battery level unavailable");
+                    }
+                    if !r.online() && (r.level.is_some() || r.approx.is_some()) {
+                        text.push_str(" (last known)");
                     }
                     if r.charging == Some(true) {
                         text.push_str(" · charging");
@@ -499,5 +502,56 @@ fn trusted_identity(value: &str) -> Option<&str> {
         None
     } else {
         Some(normalized)
+    }
+}
+
+#[cfg(test)]
+mod display_tests {
+    use super::*;
+
+    #[test]
+    fn unavailable_rows_label_retained_battery_without_changing_reading() {
+        for connection in [Connection::Online, Connection::Sleeping, Connection::Stale] {
+            for approximate in [false, true] {
+                let mut engine = Engine::new(Settings::default(), Estimator::default());
+                let mut reading = Reading::new("mouse", "Mouse", "test", 42);
+                reading.level = Some(70);
+                reading.connection = connection.clone();
+                if approximate {
+                    reading.approx = Some("medium".into());
+                    reading.precision = Precision::Coarse;
+                }
+                engine
+                    .by_provider
+                    .insert("test".into(), vec![reading.clone()]);
+                let snapshot = engine.snapshot(42);
+                let row = &snapshot.devices[0];
+                assert_eq!(row.reading, reading);
+                assert_eq!(row.text.contains("(last known)"), !reading.online());
+                assert!(row.text.starts_with(if approximate {
+                    "Mouse: medium"
+                } else {
+                    "Mouse: 70%"
+                }));
+                if !reading.online() {
+                    assert_eq!(row.seconds_left, None);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn missing_battery_does_not_claim_a_last_known_value() {
+        for connection in [Connection::Online, Connection::Sleeping, Connection::Stale] {
+            let mut engine = Engine::new(Settings::default(), Estimator::default());
+            let mut reading = Reading::new("mouse", "Mouse", "test", 42);
+            reading.connection = connection;
+            engine.by_provider.insert("test".into(), vec![reading]);
+            let snapshot = engine.snapshot(42);
+            let row = &snapshot.devices[0];
+            assert!(row.text.starts_with("Mouse: battery level unavailable"));
+            assert!(!row.text.contains("last known"));
+            assert_eq!(row.seconds_left, None);
+        }
     }
 }

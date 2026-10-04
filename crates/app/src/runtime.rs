@@ -114,6 +114,18 @@ struct Completed {
     epoch: u64,
     generation: u64,
 }
+fn battery_completion_current(
+    completed: &Completed,
+    settings: &Settings,
+    epoch: u64,
+    generation: u64,
+    suspended: bool,
+) -> bool {
+    completed.epoch == epoch
+        && completed.generation == generation
+        && !suspended
+        && settings.enabled(completed.provider.id())
+}
 enum WorkerJob {
     Battery(Job),
     Polling(Box<ControlRequest>, Arc<AtomicBool>, u64, Option<u64>),
@@ -140,6 +152,60 @@ fn provider_delay(interval: u64, quiet: bool, pending: Option<Duration>) -> Dura
         pending
             .unwrap_or(effective_interval(interval, false))
             .max(Duration::from_secs(1))
+    }
+}
+fn schedule_completed_provider<'a>(
+    due: &mut BTreeMap<&'a str, Instant>,
+    id: &'a str,
+    now: Instant,
+    delay: Duration,
+) {
+    // Explicit connection/settings refreshes can already have scheduled this
+    // provider while its old job was in flight. Preserve that request. With no
+    // explicit refresh, a stale result must not create a zero-delay retry loop.
+    due.entry(id)
+        .or_insert(now + delay.max(Duration::from_secs(1)));
+}
+fn provider_queue_wait<'a>(
+    settings: &Settings,
+    due: impl Iterator<Item = (&'a str, Instant)>,
+    now: Instant,
+    paused: bool,
+    hid_full: bool,
+    winrt_full: bool,
+) -> Duration {
+    due.filter(|(id, _)| {
+        !paused
+            && settings.enabled(id)
+            && if ["bluetooth", "xinput"].contains(id) {
+                !winrt_full
+            } else {
+                !hid_full
+            }
+    })
+    .map(|(_, at)| at.saturating_duration_since(now))
+    .min()
+    .unwrap_or(Duration::from_secs(5))
+}
+fn schedule_connection_refresh<'a>(
+    due: &mut BTreeMap<&'a str, Instant>,
+    invalidated: &mut BTreeSet<&'a str>,
+    ids: impl Iterator<Item = &'a str>,
+    now: Instant,
+    settings: &Settings,
+    quiet: bool,
+) {
+    let delay = if quiet {
+        effective_interval(settings.interval, true)
+    } else {
+        Duration::from_secs(2)
+    };
+    for id in ids {
+        invalidated.insert(id);
+        let next = now + delay;
+        due.entry(id)
+            .and_modify(|at| *at = (*at).min(next))
+            .or_insert(next);
     }
 }
 fn poll_is_due(
@@ -1752,17 +1818,19 @@ fn run(
         if stop && inflight == 0 {
             break;
         }
-        let wait = due
-            .iter()
-            .filter(|(id, _)| {
-                !suspended && !stop && engine.settings.enabled(id) && providers.contains_key(*id)
-            })
-            .map(|(_, t)| t.saturating_duration_since(Instant::now()))
-            .min()
-            .unwrap_or(Duration::from_secs(5))
-            .min(Duration::from_secs(5))
-            .min(snapshots.delay(Instant::now()))
-            .max(Duration::from_millis(20));
+        let wait = provider_queue_wait(
+            &engine.settings,
+            due.iter()
+                .filter(|(id, _)| providers.contains_key(*id))
+                .map(|(id, at)| (*id, *at)),
+            Instant::now(),
+            suspended || stop,
+            jobs.is_full(),
+            winrt.is_full(),
+        )
+        .min(Duration::from_secs(5))
+        .min(snapshots.delay(Instant::now()))
+        .max(Duration::from_millis(20));
         let keyboard_epoch =
             (visible && configuration_valid && configuration_generation == hid.generation())
                 .then(|| configuration.epoch.load(Ordering::Acquire));
@@ -1904,18 +1972,28 @@ fn run(
                     engine.settings.polling_controls && !suspended,
                 );
                 let _ = events.send(Event::PollingInvalidated(hid.generation()));
-                for id in ["bluetooth", "xinput"] {
-                    invalidated.insert(id);
-                    due.insert(id, Instant::now() + Duration::from_secs(2));
-                }
+                schedule_connection_refresh(
+                    &mut due,
+                    &mut invalidated,
+                    hb_providers::provider::FAMILIES
+                        .iter()
+                        .map(|family| family.0)
+                        .chain(["bluetooth", "xinput"]),
+                    Instant::now(),
+                    &engine.settings,
+                    quiet,
+                );
             }
             Work::Completed(Ok(WorkerCompleted::Battery(r))) => {
                 inflight = inflight.saturating_sub(1);
                 let id = r.provider.id();
-                let current = r.epoch == permission.epoch.load(Ordering::Acquire)
-                    && r.generation == hid.generation()
-                    && !suspended
-                    && engine.settings.enabled(id);
+                let current = battery_completion_current(
+                    &r,
+                    &engine.settings,
+                    permission.epoch.load(Ordering::Acquire),
+                    hid.generation(),
+                    suspended,
+                );
                 snapshots.changed |= current && battery_affects_snapshot(&engine, id, &r.result);
                 diagnostics_dirty |=
                     update_diagnostics(&mut diagnostics, id.to_string(), r.provider.diagnostics());
@@ -1936,13 +2014,7 @@ fn run(
                     quiet,
                     r.provider.next_poll_delay(),
                 );
-                due.entry(id).or_insert_with(|| {
-                    if current {
-                        Instant::now() + delay
-                    } else {
-                        Instant::now()
-                    }
-                });
+                schedule_completed_provider(&mut due, id, Instant::now(), delay);
                 providers.insert(id, r.provider);
                 usage_tracker.synchronize(
                     hid.generation(),
@@ -2148,6 +2220,123 @@ fn run(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn blocked_worker_queues_do_not_create_twenty_millisecond_wakes() {
+        let settings = Settings::default();
+        let now = Instant::now();
+        let due = [
+            ("logitech", now),
+            ("bluetooth", now + Duration::from_secs(3)),
+        ];
+        assert_eq!(
+            provider_queue_wait(&settings, due.into_iter(), now, false, true, false),
+            Duration::from_secs(3)
+        );
+        assert_eq!(
+            provider_queue_wait(&settings, due.into_iter(), now, false, true, true),
+            Duration::from_secs(5)
+        );
+        assert_eq!(
+            provider_queue_wait(&settings, due.into_iter(), now, false, false, true),
+            Duration::ZERO
+        );
+        assert_eq!(
+            provider_queue_wait(&settings, due.into_iter(), now, true, false, false),
+            Duration::from_secs(5)
+        );
+    }
+    #[test]
+    fn native_connection_events_refresh_hid_providers_without_defeating_quiet_cadence() {
+        let settings = Settings::default();
+        let now = Instant::now();
+        let mut due = BTreeMap::new();
+        let mut invalidated = BTreeSet::new();
+        schedule_connection_refresh(
+            &mut due,
+            &mut invalidated,
+            ["razer", "logitech", "bluetooth", "xinput"].into_iter(),
+            now,
+            &settings,
+            false,
+        );
+        for id in ["razer", "logitech", "bluetooth", "xinput"] {
+            assert_eq!(due[id], now + Duration::from_secs(2));
+            assert!(invalidated.contains(id));
+        }
+        due.clear();
+        due.insert("razer", now + Duration::from_secs(120));
+        schedule_connection_refresh(
+            &mut due,
+            &mut invalidated,
+            ["razer", "logitech"].into_iter(),
+            now,
+            &settings,
+            true,
+        );
+        assert_eq!(due["razer"], now + Duration::from_secs(120));
+        assert_eq!(due["logitech"], now + Duration::from_secs(300));
+    }
+    #[test]
+    fn failed_collection_preserves_sibling_and_unrelated_provider_results_with_bounded_retry() {
+        struct Provider(&'static str);
+        impl BatteryProvider for Provider {
+            fn id(&self) -> &'static str {
+                self.0
+            }
+            fn diagnostics(&self) -> Vec<String> {
+                vec![]
+            }
+            fn poll(&mut self, _: &dyn HidTransport, _: &PollContext<'_>) -> PollResult {
+                unreachable!()
+            }
+        }
+        let settings = Settings::default();
+        let now = Instant::now();
+        let mut due = BTreeMap::new();
+        let mut engine = Engine::new(settings.clone(), Estimator::default());
+        // A provider can successfully read one collection while another open
+        // fails. Access failure expires metadata but leaves connection epoch 7.
+        for id in ["logitech", "mchose"] {
+            let mut reading = Reading::new(format!("{id}:healthy"), "Healthy sibling", id, 100);
+            reading.level = Some(75);
+            let completed = Completed {
+                provider: Box::new(Provider(id)),
+                result: Ok(vec![reading]),
+                epoch: 0,
+                generation: 7,
+            };
+            assert!(battery_completion_current(
+                &completed, &settings, 0, 7, false
+            ));
+            engine.apply(id, completed.result, 100.0, false);
+            schedule_completed_provider(&mut due, id, now, Duration::from_secs(60));
+            assert!(!poll_is_due(
+                &settings,
+                id,
+                due.get(id).copied(),
+                now + Duration::from_secs(1),
+                false
+            ));
+        }
+        assert_eq!(engine.readings().len(), 2);
+        // A real connection change still rejects every older in-flight result.
+        let old = Completed {
+            provider: Box::new(Provider("logitech")),
+            result: Err(ProviderError::new("access denied")),
+            epoch: 0,
+            generation: 7,
+        };
+        assert!(!battery_completion_current(&old, &settings, 0, 8, false));
+        assert!(!battery_completion_current(&old, &settings, 1, 7, false));
+        assert!(!battery_completion_current(&old, &settings, 0, 7, true));
+        due.clear();
+        schedule_completed_provider(&mut due, "logitech", now, Duration::from_secs(60));
+        assert_eq!(due["logitech"], now + Duration::from_secs(60));
+        // An explicitly scheduled reconnect refresh remains authoritative.
+        due.insert("logitech", now + Duration::from_secs(2));
+        schedule_completed_provider(&mut due, "logitech", now, Duration::from_secs(60));
+        assert_eq!(due["logitech"], now + Duration::from_secs(2));
+    }
     #[test]
     fn completion_history_preserves_online_observation_and_records_event_boundaries() {
         let mut old = Reading::new("synthetic", "Synthetic", "razer", 100);

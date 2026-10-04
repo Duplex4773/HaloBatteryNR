@@ -81,8 +81,8 @@ function Wait-Rate([int]$Hz) {
     Start-Sleep -Milliseconds 100
     $text = [HaloShot]::Text([HaloShot]::GetDlgItem($script:dashboard,44))
     $ready = [HaloShot]::IsWindowEnabled([HaloShot]::GetDlgItem($script:dashboard,41))
-  } while ((!$ready -or $text -ne "Device-reported configured rate: $Hz Hz") -and [DateTime]::UtcNow -lt $deadline)
-  if (!$ready -or $text -ne "Device-reported configured rate: $Hz Hz") { throw "Unverified simulated rate: wanted $Hz, saw $text" }
+  } while ((!$ready -or $text -notlike "Last confirmed rate: $Hz Hz*") -and [DateTime]::UtcNow -lt $deadline)
+  if (!$ready -or $text -notlike "Last confirmed rate: $Hz Hz*") { throw "Unverified simulated rate: wanted $Hz, saw $text" }
 }
 function Assert-KeyboardControls {
   if ([HaloShot]::Text([HaloShot]::GetDlgItem($script:dashboard,91)) -ne 'Wired keyboard · No battery') { throw 'Keyboard detail invented battery state.' }
@@ -144,8 +144,8 @@ try {
 
   Select-ComboText 10 'K70 RGB Pro'
   Assert-KeyboardControls
-  $reason = 'Polling changes unavailable: this model requires a maintained software session, which is disabled by design.'
-  if ([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,45)) -ne $reason) { throw 'Corsair unavailable reason differs from approved wording.' }
+  $reason = [HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,45))
+  if ($reason -notlike 'Rate changes are unavailable*model*software running continuously*') { throw 'Corsair unavailable reason is missing.' }
   foreach ($id in 40,41,42,43) {
     $control = [HaloShot]::GetDlgItem($dashboard,$id)
     if ($control -eq [IntPtr]::Zero -or [HaloShot]::IsWindowEnabled($control)) { throw "Corsair control $id must exist and be disabled." }

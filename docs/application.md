@@ -38,12 +38,35 @@ audit](resource-audit.md) for Python conditions and compiler experiments.
 
 ## Run and build
 
-Run `HaloBatteryNext.exe` to open the dashboard. Closing the window keeps monitoring active. Click a device tray icon, choose Open dashboard, or launch the executable again to reopen it. A duplicate `--background` launch stays quiet. The tray menu offers refresh, device controls and Exit. Settings include Windows startup registration, which starts the executable with `--background`.
+Run `HaloBatteryNext.exe` to open the dashboard. Closing the window keeps monitoring active. Click a device tray icon, choose Open app, or launch the executable again to reopen it. A duplicate `--background` launch stays quiet. The tray menu offers refresh, device settings and Exit. Settings include Windows startup registration, which starts the executable with `--background`.
 
 The dashboard follows Windows app light/dark appearance and changes while open,
 including native controls, history graphics and the tray context menu. Windows high-contrast colors
 take priority. Tray appearance remains independently configurable. Unplugged
 or hidden devices still follow the existing per-device tray identity rules.
+
+Devices, Settings and Insights scroll when their content exceeds the available
+height; navigation stays visible above the page. Settings keeps **Save settings**,
+**Save support report** and feedback in a fixed footer. Its options are grouped
+under Alerts and battery, Appearance, Battery checks and Polling rate.
+**More options** reveals device brands, status export, optional extra PlayStation checks
+and the update source; update checks remain unavailable in this version.
+
+Device details describe connection and charging states in plain language. Tray
+icon choices include Controller, PlayStation 4 and PlayStation 5; colour choices
+include Automatic, White, Black, Windows style and Top bar. The battery check
+interval is labelled in seconds. Invalid values show a correction message while
+keeping the current edits available, rather than rebuilding the form.
+
+Devices shows **Last confirmed rate** separately from **Saved choice**: a saved
+choice may differ from the device's current setting. Check times and dates for
+use between charges use the computer's local time. Refresh the rate after changing it
+in another app. Sleeping or unavailable battery readings are labelled **last
+known**; missing levels are shown as **battery level unavailable**.
+
+**Save support report** writes `diagnostics.json` in the app's data folder and
+shows a plain-language result. The report retains technical provider, polling
+and Insights details for troubleshooting; it is saved locally, not sent anywhere.
 
 Supported mouse tray icons also offer **Polling rate → desired rate**. Enable
 polling controls once in Settings; no preliminary Refresh is needed. The worker
@@ -58,7 +81,7 @@ rate queries are added, and sleeping or inaccessible devices may need Refresh la
 
 Noncharging battery rings turn orange at **30%** by default, then red at the
 device's configured low-alert threshold (20% by default). Charging remains green.
-Settings → Orange warning % adjusts the visual band; zero disables orange.
+Settings → Orange icon below (%) adjusts the visual band; zero disables orange.
 Red takes priority if thresholds overlap. Notification thresholds are unchanged.
 
 Configuration, diagnostics, optional `status.json` and SQLite history are stored in `%APPDATA%\HaloBatteryNext`. The app has its own startup entry, singleton mutex and notification identity. It does not import upstream settings. Both applications may run together, but receivers that reject concurrent access report recoverable errors.
@@ -89,6 +112,11 @@ The release script also removes local build paths from embedded compiler message
 
 Providers return either successful discovery (possibly empty) or an explicit communication error. Errors retain stale device readings instead of treating failures as disconnects. Immutable snapshots cross to the UI; commands cross back to the engine. Queues and worker counts are bounded. Charging HICON frames are cached; the 100 ms timer runs only while an animated charging icon exists. Dashboard graphics are created on demand and released on close. Calendar history selects the requested interval; use-time history streams retained observations to calculate awake time before bounded display sampling.
 
+The grouped layout and scrolling use native Windows controls without a new
+dependency, UI framework or background graphics. Dashboard body and heading
+fonts are reused at the current DPI and released when the dashboard closes.
+These UI changes do not establish a new measured performance result.
+
 History retains 30 days, batches writes once per minute and flushes on normal exit. Changed readings are queued immediately; unchanged readings are accepted at most once per minute. Usage estimates need at least 30 minutes of awake discharge and a three-point percentage drop. Coarse readings do not produce estimates.
 
 Tray icons are updated in place across sleep, wake and theme changes. A known
@@ -107,15 +135,21 @@ gaps. Original observations and timestamps remain intact. See
 PlayStation Bluetooth full mode is opt-in. 8BitDo mode switching is disabled. Unknown devices are excluded from command allowlists. Update checking remains disabled pending an independently configured release repository.
 
 The **Insights** page compares observed battery drain by last-confirmed polling
-rate and shows recent charge summaries with awake use, consumption and average
-drain, newest first. Coverage and freshness explain missing or limited data;
+rate and shows use between charges with estimated time used, battery consumed and
+average use per hour, newest first. Its summaries lead with estimated use from a full battery,
+estimated time left and the amount of recorded use. Plain-language learning
+messages explain missing or early estimates; sessions distinguish
+detected charging, possible charging and a missing charge start, and may cover
+only part of a charge. Technical evidence stays in the support report.
+Coverage and freshness explain missing or limited data;
 projections require complete intervals between observed battery drops instead
 of extrapolating flat or interrupted samples. Recent-use predictions retain
 learned drain through sleep while excluding unobserved losses. Only fresh hardware readbacks establish rate
 evidence; saved requests never count. Existing history can provide partial
 charge summaries. See [Insights evidence](insights.md).
 
-Optional hardware polling-rate controls default off. Enable them in Settings,
+Optional hardware polling-rate controls default off. Enable **Allow polling-rate
+changes** in Settings,
 select a supported mouse or wired Razer keyboard on Devices, then use Refresh rate, Apply rate or Restore
 previous. DeathAdder V4 Pro, Viper V3 Pro and Viper Mini Signature Edition have
 dedicated high-rate routes up to 8000 Hz; the Mini requires suitable firmware.
@@ -125,7 +159,7 @@ with software control mode required; legacy C53A and direct USB are limited to
 1000 Hz. MCHOSE A7 V2 Ultra+ has an 8000-Hz wireless route restricted to its
 100B receiver, exact paired model and firmware 5.46.2.4. Other receivers/models
 remain unavailable until their target identity and protocol are established.
-Enable **Restore saved rates at startup** to make one guarded attempt per saved
+Enable **Restore saved rates when the app starts** to make one guarded attempt per saved
 device discovered during the first minute. This is separate from polling controls
 and defaults off; failed or blocked attempts do not retry. There is no ongoing
 rate enforcement. Tray tooltips show the last hardware-confirmed rate, with no

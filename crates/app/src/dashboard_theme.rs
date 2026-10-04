@@ -340,6 +340,8 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
                 let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
                 let check = style & BS_TYPEMASK as u32 == BS_AUTOCHECKBOX as u32;
                 let state = SendMessageW(hwnd, BM_GETSTATE, None, None).0 as u32;
+                let selected = style & BS_PUSHLIKE as u32 != 0
+                    && SendMessageW(hwnd, BM_GETCHECK, None, None).0 == BST_CHECKED.0 as isize;
                 FillRect(
                     hdc,
                     &rect,
@@ -347,6 +349,8 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
                         hdc,
                         if check {
                             palette.background
+                        } else if selected {
+                            palette.selection
                         } else {
                             palette.surface
                         },
@@ -382,7 +386,9 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
                         &rect,
                         color_brush(
                             hdc,
-                            if state & BST_PUSHED != 0 {
+                            if selected {
+                                palette.accent
+                            } else if state & BST_PUSHED != 0 {
                                 palette.background
                             } else {
                                 palette.border
@@ -400,7 +406,11 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
                 SetTextColor(
                     hdc,
                     if IsWindowEnabled(hwnd).as_bool() {
-                        palette.text
+                        if selected {
+                            palette.selection_text
+                        } else {
+                            palette.text
+                        }
                     } else {
                         palette.disabled
                     },

@@ -22,59 +22,80 @@ struct HistoryVertex {
 /// measurements. A predecessor can seed the left boundary; no value is invented
 /// before the first available percentage. Cached sleeping levels seed an empty
 /// trace but cannot replace a level already observed in this interval.
-fn history_trace(points: &[HistorySample], since: i64, until: i64) -> Vec<HistoryVertex> {
-    if until < since {
-        return Vec::new();
-    }
-    let mut trace = Vec::with_capacity(points.len().saturating_mul(2).saturating_add(1));
+fn history_trace(
+    points: &[HistorySample],
+    since: i64,
+    until: i64,
+) -> impl Iterator<Item = HistoryVertex> + '_ {
+    let mut samples = points.iter();
     let mut previous: Option<HistoryVertex> = None;
-    for sample in points {
-        let reading = &sample.reading;
-        if sample.position > until {
-            continue;
+    let mut pending = None;
+    let mut finished = until < since;
+    std::iter::from_fn(move || {
+        if finished {
+            return None;
         }
-        let timestamp = sample.position.max(since);
-        if previous.is_some_and(|p| timestamp < p.timestamp) {
-            continue;
+        if let Some(point) = pending.take() {
+            previous = Some(point);
+            return Some(point);
         }
-        if previous.is_some() && !reading.online() {
-            continue;
-        }
-        let Some(level) = reading.level.filter(|level| *level <= 100) else {
-            continue;
-        };
-        if let Some(p) = previous {
-            trace.push(HistoryVertex {
+        for sample in samples.by_ref() {
+            let reading = &sample.reading;
+            if sample.position > until {
+                continue;
+            }
+            let timestamp = sample.position.max(since);
+            if previous.is_some_and(|p| timestamp < p.timestamp)
+                || previous.is_some() && !reading.online()
+            {
+                continue;
+            }
+            let Some(level) = reading.level.filter(|level| *level <= 100) else {
+                continue;
+            };
+            let point = HistoryVertex {
                 timestamp,
-                measured: false,
-                ..p
-            });
+                level,
+                measured: reading.online() && sample.position >= since,
+            };
+            if let Some(p) = previous {
+                pending = Some(point);
+                return Some(HistoryVertex {
+                    timestamp,
+                    measured: false,
+                    ..p
+                });
+            }
+            previous = Some(point);
+            return Some(point);
         }
-        let point = HistoryVertex {
-            timestamp,
-            level,
-            measured: reading.online() && sample.position >= since,
-        };
-        trace.push(point);
-        previous = Some(point);
-    }
-    if let Some(p) = previous {
-        trace.push(HistoryVertex {
+        finished = true;
+        previous.take().map(|p| HistoryVertex {
             timestamp: until,
             measured: false,
             ..p
-        });
-    }
-    trace
+        })
+    })
 }
 
 fn duration_label(seconds: i64, use_days: bool) -> String {
-    if use_days && seconds >= 86400 {
-        format!("{:.1} d", seconds as f64 / 86400.)
+    let seconds = seconds.max(0);
+    let (unit, singular, plural) = if use_days && seconds >= 86400 {
+        (86400, "day", "days")
     } else if seconds >= 3600 {
-        format!("{:.1} h", seconds as f64 / 3600.)
+        (3600, "hour", "hours")
     } else {
-        format!("{} min", seconds.max(0) / 60)
+        return format!("{} min", seconds / 60);
+    };
+    let amount = seconds as f64 / unit as f64;
+    if seconds % unit == 0 {
+        format!(
+            "{} {}",
+            seconds / unit,
+            if seconds == unit { singular } else { plural }
+        )
+    } else {
+        format!("{amount:.1} {plural}")
     }
 }
 
@@ -127,6 +148,7 @@ impl Chart {
                 13. * scale,
                 w!("en-US"),
             )?;
+            font.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
             let palette = Palette::new(false, false);
             let grid = target.CreateSolidColorBrush(&Palette::d2d(palette.border), None)?;
             let line = target.CreateSolidColorBrush(&Palette::d2d(palette.accent), None)?;
@@ -186,7 +208,8 @@ impl Chart {
                 );
             }
             let label = &self.label;
-            let text = |text: &str, x: f32, y: f32, w: f32| {
+            let text = |text: &str, x: f32, y: f32, w: f32, alignment| {
+                self.font.SetTextAlignment(alignment)?;
                 let chars: Vec<u16> = text.encode_utf16().collect();
                 self.target.DrawText(
                     &chars,
@@ -201,6 +224,7 @@ impl Chart {
                     D2D1_DRAW_TEXT_OPTIONS_NONE,
                     DWRITE_MEASURING_MODE_NATURAL,
                 );
+                windows::core::Result::Ok(())
             };
             for level in [0, 25, 50, 75, 100] {
                 let y = bottom - (bottom - top) * level as f32 / 100.;
@@ -209,43 +233,55 @@ impl Chart {
                     8. * self.scale,
                     y - 10. * self.scale,
                     48. * self.scale,
-                );
+                    DWRITE_TEXT_ALIGNMENT_LEADING,
+                )?;
             }
             for (index, caption) in axis_labels(series.axis, until.saturating_sub(since))
                 .iter()
                 .enumerate()
             {
                 let x = left + (right - left) * index as f32 / 4.;
-                let x = match index {
-                    0 => x,
-                    4 => x - 85. * self.scale,
-                    _ => x - 42. * self.scale,
+                let label_width = 128. * self.scale;
+                let (x, alignment) = match index {
+                    0 => (x, DWRITE_TEXT_ALIGNMENT_LEADING),
+                    4 => (x - label_width, DWRITE_TEXT_ALIGNMENT_TRAILING),
+                    _ => (x - label_width / 2., DWRITE_TEXT_ALIGNMENT_CENTER),
                 };
-                text(caption, x, bottom + 12. * self.scale, 100. * self.scale);
+                text(
+                    caption,
+                    x,
+                    bottom + 12. * self.scale,
+                    label_width,
+                    alignment,
+                )?;
             }
-            let trace = if series.axis == HistoryAxis::Usage && until <= since {
-                Vec::new()
+            let samples = if series.axis == HistoryAxis::Usage && until <= since {
+                &[][..]
             } else {
-                history_trace(&series.samples, since, until)
+                &series.samples[..]
             };
-            if trace.is_empty() {
+            // Stream step vertices directly to Direct2D; repainting does not
+            // allocate a second buffer proportional to the plotted history.
+            let mut trace = history_trace(samples, since, until).peekable();
+            if trace.peek().is_none() {
                 text(
                     if series.axis == HistoryAxis::Usage {
-                        "Not enough recorded awake time yet."
+                        "No usage history yet. Readings appear as the device is used."
                     } else {
-                        "No recorded readings in this interval."
+                        "No battery readings for this period yet."
                     },
-                    left + 40. * self.scale,
-                    top + 50. * self.scale,
-                    420. * self.scale,
-                );
+                    left,
+                    top + (bottom - top) / 2. - 12. * self.scale,
+                    right - left,
+                    DWRITE_TEXT_ALIGNMENT_CENTER,
+                )?;
             }
             let mut previous = None;
             for point in trace {
                 let p = Vector2 {
                     X: left
-                        + (right - left) * (point.timestamp - since) as f32
-                            / (until - since).max(1) as f32,
+                        + (right - left) * point.timestamp.saturating_sub(since) as f32
+                            / until.saturating_sub(since).max(1) as f32,
                     Y: bottom - (bottom - top) * point.level as f32 / 100.,
                 };
                 if let Some(a) = previous {
@@ -283,7 +319,7 @@ mod tests {
 
     fn calendar_trace(points: &[Reading], since: i64, until: i64) -> Vec<HistoryVertex> {
         let series = HistorySeries::calendar(points.to_vec(), since, until);
-        history_trace(&series.samples, since, until)
+        history_trace(&series.samples, since, until).collect()
     }
 
     #[test]
@@ -373,7 +409,7 @@ mod tests {
                 position: 60,
             },
         ];
-        let trace = history_trace(&samples, 0, 120);
+        let trace: Vec<_> = history_trace(&samples, 0, 120).collect();
         assert_eq!(
             trace
                 .iter()
@@ -384,10 +420,15 @@ mod tests {
         assert_eq!(samples[2].reading.timestamp, 20000);
         assert_eq!(
             axis_labels(HistoryAxis::Usage, 86400),
-            ["0 min", "6.0 h", "12.0 h", "18.0 h", "24.0 h"]
+            ["0 min", "6 hours", "12 hours", "18 hours", "24 hours"]
         );
-        assert_eq!(axis_labels(HistoryAxis::Calendar, 86400)[0], "1.0 d ago");
+        assert_eq!(axis_labels(HistoryAxis::Calendar, 86400)[0], "1 day ago");
         assert_eq!(axis_labels(HistoryAxis::Calendar, 86400)[4], "Now");
+        assert_eq!(axis_labels(HistoryAxis::Usage, 7200)[2], "1 hour");
+        assert_eq!(
+            axis_labels(HistoryAxis::Calendar, 7 * 86400)[1],
+            "5.2 days ago"
+        );
     }
 
     #[test]

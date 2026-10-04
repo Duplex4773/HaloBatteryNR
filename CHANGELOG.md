@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased — 4 October 2026 dashboard updates
+
+- Group Settings into alerts, appearance, battery checks, polling rate and
+  device brands, with less-used settings under More options. Native scrolling
+  keeps navigation visible and Settings Save actions and feedback in a fixed footer.
+- Use friendly device, icon and colour labels; show battery check units and
+  retain form edits when validation reports an invalid value.
+- Distinguish Last confirmed rate from Saved choice, use local check and session
+  dates, and label unavailable retained battery levels as last known. Preserve
+  supported-device limits, opt-in controls and the single-attempt change policy.
+- Simplify Insights estimates and use-between-charges summaries, with technical evidence
+  retained in locally saved support reports and plain-language result feedback.
+- Preserve device edits during inventory updates and restore keyboard focus after
+  rebuilding a page. Batch native child positions so off-screen controls remain
+  reachable without accumulating DPI rounding errors.
+- Reuse dashboard fonts and release them and loaded Insights on close. The layout adds no dependency,
+  UI framework or background graphics; no new performance measurement is claimed.
+
+## Unreleased — 3 October 2026 audit
+
+- Bound HID access recovery and worker-queue waits; native connection events
+  now schedule HID providers as well as controller/Bluetooth integrations.
+- Bound pending history through write failures and retain unprocessed device
+  observations for recovery. Recover deferred readings/estimates on exit and
+  preserve the latest checkpoint. Keep sampled chart endpoints and unknown gaps.
+- Release obsolete provider/Bluetooth cache entries while preserving sleeping
+  devices; forget explicitly unpaired Logitech receiver slots.
+- Keep History data visible during resizing, reload once the sizing loop ends,
+  and stream chart vertices without a second history buffer.
+- Restore the original Windows startup registration after isolated Settings
+  validation, including failure cleanup.
+- Record findings, measurements and remaining limitations in the
+  [performance audit](docs/performance-audit-20261003.md).
+
 ## 0.1.0 — local release preparation, 2 October 2026
 
 - Standalone Rust/Win32 rewrite based on HaloBattery 1.13.0 (`a566a046`),

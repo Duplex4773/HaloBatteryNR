@@ -17,7 +17,24 @@ fn main() {
             eprintln!("Halo Battery Next: {e}");
             std::process::exit(1);
         }
-        let message = hb_windows::transport::wide(&e.to_string());
+        let args: Vec<_> = std::env::args().collect();
+        let directory = args
+            .iter()
+            .position(|arg| arg == "--data-dir")
+            .and_then(|index| args.get(index + 1))
+            .map(PathBuf::from)
+            .unwrap_or_else(hb_storage::data_dir);
+        let saved = std::fs::create_dir_all(&directory).is_ok()
+            && hb_storage::atomic_write(
+                &directory.join("startup-issue.txt"),
+                e.to_string().as_bytes(),
+            )
+            .is_ok();
+        let message = hb_windows::transport::wide(if saved {
+            "Halo Battery Next couldn't start. Try opening the app again.\n\nIf this keeps happening, share startup-issue.txt from the app's data folder with support."
+        } else {
+            "Halo Battery Next couldn't start. Try opening the app again. If this keeps happening, check that the app can save files in its data folder."
+        });
         unsafe {
             windows::Win32::UI::WindowsAndMessaging::MessageBoxW(
                 None,

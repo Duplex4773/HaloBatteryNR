@@ -23,10 +23,10 @@ use windows::{
         UI::{
             Controls::{
                 DRAWITEMSTRUCT, MEASUREITEMSTRUCT, ODS_CHECKED, ODS_DISABLED, ODS_GRAYED,
-                ODS_NOACCEL, ODS_SELECTED, ODT_MENU,
+                ODS_NOACCEL, ODS_SELECTED, ODT_MENU, SetScrollInfo,
             },
             HiDpi::*,
-            Input::KeyboardAndMouse::EnableWindow,
+            Input::KeyboardAndMouse::{EnableWindow, GetFocus, SetFocus},
             Shell::*,
             WindowsAndMessaging::*,
         },
@@ -34,6 +34,19 @@ use windows::{
     core::{GUID, PCWSTR, w},
 };
 const TRAY: u32 = WM_APP + 1;
+const PAGE_TOP: i32 = 60;
+const PAGE_FOOTER: i32 = 62;
+const ICON_CHOICES: &[&str] = &[
+    "Automatic",
+    "Mouse",
+    "Keyboard",
+    "Headset",
+    "Controller",
+    "Bluetooth",
+    "PlayStation 4",
+    "PlayStation 5",
+];
+const THEME_CHOICES: &[&str] = &["Automatic", "White", "Black", "Windows style", "Top bar"];
 fn providers() -> Vec<&'static str> {
     hb_providers::provider::FAMILIES
         .iter()
@@ -41,25 +54,100 @@ fn providers() -> Vec<&'static str> {
         .chain(["bluetooth", "xinput"])
         .collect()
 }
+fn user_message(message: &str) -> &str {
+    if message.is_empty()
+        || message.starts_with("Enter ")
+        || message.starts_with("Low battery alert ")
+        || message == "Settings saved"
+        || message == "Device settings saved"
+    {
+        return message;
+    }
+    if message.starts_with("Exported ") {
+        return "Support report saved in the app's data folder.";
+    }
+    if message.starts_with("History") {
+        return "Couldn't load battery history. Select Refresh to try again.";
+    }
+    if message.starts_with("Storage") {
+        return "Couldn't save this change. Try again or save a support report.";
+    }
+    "Couldn't finish this action. Try again or save a support report."
+}
+fn polling_message(message: &str) -> &str {
+    if message.starts_with("Hardware may have changed.") {
+        return "Refresh rate to check. The change may have applied and will not be retried.";
+    }
+    if message.starts_with("Confirmed configured rate:")
+        || message.starts_with("Rate set to ")
+        || message.starts_with("Reading ")
+        || message.starts_with("Applying ")
+        || message.starts_with("Restoring ")
+        || message.starts_with("Rate checked")
+    {
+        return message;
+    }
+    if message.contains("Startup rate") || message.contains("startup rate verified") {
+        return "The rate was checked when the app started.";
+    }
+    if message.contains("game") || message.contains("presentation") {
+        return "Close the game or presentation before changing the rate.";
+    }
+    if message.contains("cancel") || message.contains("changed") || message.contains("generation") {
+        return "The device changed or disconnected. Select Refresh rate before trying again.";
+    }
+    if message.contains("permission")
+        || message.contains("disabled")
+        || message.contains("unavailable for")
+    {
+        return "Allow polling-rate changes in Settings, then select Refresh rate.";
+    }
+    if message.contains("pending") || message.contains("progress") {
+        return "A rate check or change is already in progress.";
+    }
+    if message.contains("unsupported") || message.contains("supported") {
+        return "This connection does not support that rate. Refresh and choose another rate.";
+    }
+    if message.contains("not been read") || message.contains("needs verification") {
+        return "Select Refresh rate to check the current setting.";
+    }
+    if message.contains("Hardware rate read") {
+        return "Rate checked. Select Apply to change it.";
+    }
+    if message.contains("did not report") {
+        return "This device did not report its current rate.";
+    }
+    "Couldn't confirm the rate. Wake the device and select Refresh rate."
+}
+fn polling_unavailable(device: &ConfigurationDevice) -> &'static str {
+    if device.source == "corsair" {
+        "Rate changes are unavailable. This model needs software running continuously, which this app does not use."
+    } else if matches!(&device.capability, PollingCapability::Unavailable(reason) if reason.contains("multiple"))
+    {
+        "More than one connection was found for this device. Reconnect it and select Refresh."
+    } else {
+        "This device's rate controls are unavailable. Reconnect it and select Refresh."
+    }
+}
 const CHECKS: &[(&str, &str)] = &[
-    ("notify", "Battery notifications"),
-    ("full_alert", "Full charge alert"),
-    ("bluetooth", "Bluetooth devices"),
-    ("animation", "Charging animation"),
-    ("badges", "Charging badge"),
-    ("fluent_menu", "Device flyout"),
-    ("time_left", "Estimated time remaining"),
-    ("percent_in_icon", "Percentage in icon"),
-    ("quiet_fullscreen", "Quiet while gaming / presenting"),
-    ("status_file", "Write status.json"),
+    ("notify", "Low battery alerts"),
+    ("full_alert", "Alert when fully charged"),
+    ("bluetooth", "Include Bluetooth devices"),
+    ("animation", "Animate charging icons"),
+    ("badges", "Show a charging symbol"),
+    ("fluent_menu", "Show devices in the tray menu"),
+    ("time_left", "Show estimated time left"),
+    ("percent_in_icon", "Show battery percentage in icons"),
+    (
+        "quiet_fullscreen",
+        "Pause alerts during games and presentations",
+    ),
+    ("status_file", "Save battery information for other apps"),
     (
         "playstation_full_mode",
-        "PlayStation full Bluetooth mode (opt in)",
+        "Allow extra PlayStation Bluetooth checks",
     ),
-    (
-        "update_check",
-        "Release checks (not available in this build)",
-    ),
+    ("update_check", "Check for updates (currently unavailable)"),
 ];
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TrayUpdate {
@@ -198,7 +286,7 @@ impl PollingUi {
     fn revoke_observation(&mut self, key: &str) {
         self.observations.remove(key);
         self.status
-            .insert(key.into(), "Hardware rate needs verification.".into());
+            .insert(key.into(), "Current rate needs verification.".into());
     }
     fn abandon(&mut self) {
         self.pending = None;
@@ -319,11 +407,9 @@ impl PollingUi {
         self.status.insert(
             target.device.key.clone(),
             match intent {
-                PollingIntent::Read => "Reading hardware configuration…".into(),
-                PollingIntent::Apply { restore: true, .. } => {
-                    "Restoring the previous hardware rate…".into()
-                }
-                _ => "Applying and verifying the hardware rate…".into(),
+                PollingIntent::Read => "Reading the device's rate…".into(),
+                PollingIntent::Apply { restore: true, .. } => "Restoring the previous rate…".into(),
+                _ => "Applying and checking the new rate…".into(),
             },
         );
         Ok(ControlRequest {
@@ -382,11 +468,11 @@ impl PollingUi {
         } else {
             match pending.intent {
                 PollingIntent::Read if observed.is_some() => {
-                    "Hardware rate read. Changes require Apply.".into()
+                    "Rate checked. Select Apply to change it.".into()
                 }
                 PollingIntent::Read => "Hardware did not report a polling rate.".into(),
                 PollingIntent::Apply { rate, .. } if observed == Some(rate) => {
-                    format!("Confirmed configured rate: {} Hz", rate.hz())
+                    format!("Rate set to {} Hz.", rate.hz())
                 }
                 _ => "Change was not verified. Refresh the hardware rate before continuing.".into(),
             }
@@ -395,8 +481,7 @@ impl PollingUi {
         true
     }
 }
-// UTC is stable between updates and does not imply a continuously refreshed age.
-fn polling_timestamp(timestamp: i64) -> String {
+fn timestamp_utc(timestamp: i64) -> Option<SYSTEMTIME> {
     let days = timestamp.div_euclid(86_400);
     let seconds = timestamp.rem_euclid(86_400);
     let z = days + 719_468;
@@ -409,12 +494,49 @@ fn polling_timestamp(timestamp: i64) -> String {
     let day = doy - (153 * mp + 2) / 5 + 1;
     let month = mp + if mp < 10 { 3 } else { -9 };
     year += i64::from(month <= 2);
-    format!(
-        "{year:04}-{month:02}-{day:02} {:02}:{:02}:{:02} UTC",
-        seconds / 3600,
-        seconds / 60 % 60,
-        seconds % 60
-    )
+    if !(1601..=30827).contains(&year) {
+        return None;
+    }
+    Some(SYSTEMTIME {
+        wYear: year as u16,
+        wMonth: month as u16,
+        wDay: day as u16,
+        wHour: (seconds / 3600) as u16,
+        wMinute: (seconds / 60 % 60) as u16,
+        wSecond: (seconds % 60) as u16,
+        ..Default::default()
+    })
+}
+fn timestamp_local(timestamp: i64) -> Option<SYSTEMTIME> {
+    let utc = timestamp_utc(timestamp)?;
+    let mut local = SYSTEMTIME::default();
+    unsafe {
+        windows::Win32::System::Time::SystemTimeToTzSpecificLocalTime(None, &utc, &mut local)
+            .ok()?;
+    }
+    Some(local)
+}
+fn month_name(month: u16) -> &'static str {
+    [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
+    .get(month.saturating_sub(1) as usize)
+    .copied()
+    .unwrap_or("")
+}
+fn polling_timestamp(timestamp: i64) -> String {
+    timestamp_local(timestamp)
+        .map(|date| {
+            format!(
+                "{} {} {}, {:02}:{:02}",
+                date.wDay,
+                month_name(date.wMonth),
+                date.wYear,
+                date.wHour,
+                date.wMinute
+            )
+        })
+        .unwrap_or_else(|| "Date unavailable".into())
 }
 struct HistorySelection {
     axis: HistoryAxis,
@@ -455,10 +577,10 @@ impl HistorySelection {
     fn description(&self) -> &'static str {
         match self.axis {
             HistoryAxis::Usage => {
-                "Battery level: 0–100% · Estimated awake time; pauses sleeping, unavailable or charging"
+                "Estimated time used · Pauses during sleep, charging or disconnection"
             }
             HistoryAxis::Calendar => {
-                "Battery level: 0–100% · Last known level held between readings"
+                "Calendar time · Shows the last known battery level between readings"
             }
         }
     }
@@ -520,30 +642,24 @@ impl InsightsUi {
                 self.status = insight_coverage_text(&data);
                 self.data = Some(data);
             }
-            Err(error) => {
-                self.status =
-                    format!("Could not read local insights: {error}. Use Refresh to retry.")
+            Err(_) => {
+                self.status = "Couldn't load battery insights. Select Refresh to try again.".into()
             }
         }
         true
     }
 }
-const INSIGHTS_EMPTY: &str = "For rate comparisons, enable polling controls and confirm a supported device's rate using Refresh or a verified rate change in Devices or the tray menu. Saved requested rates are never evidence.";
+const INSIGHTS_EMPTY: &str = "To compare rates, allow polling-rate changes in Settings, then select Refresh rate in Devices or the tray menu. Only rates confirmed by the device are included.";
 fn insight_coverage_text(data: &BatteryInsights) -> String {
     let c = &data.coverage;
-    let last = c
-        .last_reading_timestamp
-        .map(polling_timestamp)
-        .unwrap_or_else(|| "none".into());
-    let rate_time = data.rates.iter().map(|rate| rate.awake_seconds).sum();
     format!(
-        "Local data refreshed. {} readings · {} discharging · {} counted use ({} with confirmed rate).\r\nLast stored reading: {last} · {} intervals excluded · {} unreadable rows.",
-        c.observation_count,
-        c.discharge_sample_count,
+        "Updated · {} of estimated use in the last 30 days. {}",
         insight_hours(c.awake_seconds),
-        insight_hours(rate_time),
-        c.excluded_interval_count,
-        c.unreadable_row_count
+        if c.unreadable_row_count > 0 {
+            "Some saved readings could not be used."
+        } else {
+            "Sleeping, charging and gaps are excluded."
+        }
     )
 }
 fn insight_empty_text(data: Option<&BatteryInsights>) -> String {
@@ -551,97 +667,101 @@ fn insight_empty_text(data: Option<&BatteryInsights>) -> String {
         return INSIGHTS_EMPTY.into();
     };
     let explanation = if data.coverage.observation_count == 0 {
-        "No retained readings for this device yet."
+        "No battery history yet. Keep the device connected while using it."
     } else if data.coverage.discharge_sample_count == 0 {
-        "No usable discharge readings yet. Charging, unavailable, imprecise or unknown-state readings cannot establish battery life."
+        "More time on battery is needed to build an estimate. Sleeping and charging do not count."
     } else {
-        "Discharge readings exist, but there is no continuous confirmed-rate usage to compare yet."
+        "Battery history is available. Check the device's current rate to start a comparison."
     };
     format!("{explanation}\r\n\r\n{INSIGHTS_EMPTY}")
 }
 fn insight_hours(seconds: u64) -> String {
-    format!("{:.1} h", seconds as f64 / 3600.0)
+    if seconds < 3600 {
+        format!("{} min", seconds / 60)
+    } else {
+        format!("{:.1} hours", seconds as f64 / 3600.0)
+    }
 }
 fn insight_estimate(hours: Option<f64>) -> String {
     hours
         .filter(|value| value.is_finite() && *value >= 0.0)
         .map(|value| {
             if value < 1.0 {
-                "less than 1 h".into()
+                "less than 1 hour".into()
+            } else if value.round() == 1.0 {
+                "about 1 hour".into()
             } else {
-                format!("about {value:.0} h")
+                format!("about {value:.0} hours")
             }
         })
-        .unwrap_or_else(|| "Not enough discharge evidence".into())
+        .unwrap_or_else(|| "Keep using the device to build an estimate".into())
 }
 fn rate_insight_text(rate: &RateInsight) -> String {
     let confidence = match rate.confidence {
-        InsightConfidence::Insufficient => "Insufficient",
-        InsightConfidence::Low => "Low",
-        InsightConfidence::Moderate => "Moderate",
+        InsightConfidence::Insufficient => "Still learning",
+        InsightConfidence::Low => "Early estimate",
+        InsightConfidence::Moderate => "Based on recorded use",
     };
     let guidance = match rate.confidence {
         InsightConfidence::Insufficient => {
-            "Needs 30 min and 3 points between observed drops within continuous periods."
+            "Keep using the device on battery so the app can learn its battery use."
         }
-        InsightConfidence::Low => {
-            "Tentative: needs 2 h, 10 points and 3 complete drop intervals for moderate evidence."
-        }
+        InsightConfidence::Low => "More use on battery will make this estimate more reliable.",
         InsightConfidence::Moderate => {
-            "Observed average; usage conditions and battery rounding still affect the estimate."
+            "Battery life varies with settings and how the device is used."
         }
     };
     format!(
-        "{} Hz · {} confidence\r\n{} awake · {} percentage points consumed\r\n{} samples · {} observed drops\r\nProjection evidence: {} · {} points · {} complete drop intervals\r\nEstimated full-charge use: {}\r\nRemaining at recent qualifying reading: {}\r\n{guidance}",
-        rate.hz,
-        confidence,
-        insight_hours(rate.awake_seconds),
-        rate.consumed_percent,
-        rate.sample_count,
-        rate.drop_count,
-        insight_hours(rate.projection_seconds),
-        rate.projection_consumed_percent,
-        rate.projection_drop_count,
+        "Estimated use from a full battery: {}\r\nEstimated time left: {}\r\n\r\n{} · {} Hz\r\nBased on {} of recorded use.\r\n{guidance}",
         insight_estimate(rate.projected_full_charge_hours),
         rate.remaining_hours
             .filter(|hours| hours.is_finite() && *hours >= 0.0)
             .map(|hours| insight_estimate(Some(hours)))
-            .unwrap_or_else(|| "Unavailable (stale, paused or unconfirmed)".into())
+            .unwrap_or_else(|| "Not available right now".into()),
+        confidence,
+        rate.hz,
+        insight_hours(rate.awake_seconds),
     )
 }
 fn charge_cycle_row(cycle: &ChargeCycle) -> String {
-    let timestamp = polling_timestamp(cycle.start_timestamp);
-    format!(
-        "{} · {}",
-        &timestamp[5..16],
-        insight_hours(cycle.awake_seconds)
-    )
+    let timestamp = timestamp_local(cycle.start_timestamp)
+        .map(|date| {
+            format!(
+                "{} {} {:02}:{:02}",
+                date.wDay,
+                month_name(date.wMonth),
+                date.wHour,
+                date.wMinute
+            )
+        })
+        .unwrap_or_else(|| "Date unavailable".into());
+    format!("{} · {}", timestamp, insight_hours(cycle.awake_seconds))
 }
 fn charge_cycle_text(cycle: &ChargeCycle) -> String {
     let evidence = match cycle.evidence {
-        CycleEvidence::ObservedCharge => "Observed charge (does not imply a full charge)",
-        CycleEvidence::InferredCharge => "Inferred charge from a battery rise",
-        CycleEvidence::Partial => "Partial cycle; charge start was not observed",
+        CycleEvidence::ObservedCharge => "Started after charging",
+        CycleEvidence::InferredCharge => "Possible charging detected from a rising battery level",
+        CycleEvidence::Partial => "Charging was not recorded at the start",
     };
     let drain = if cycle.awake_seconds > 0 {
         format!(
-            "{:.1} percentage points/h",
+            "{:.1}% per hour",
             cycle.consumed_percent as f64 * 3600.0 / cycle.awake_seconds as f64
         )
     } else {
-        "Not enough awake evidence".into()
+        "Not enough recorded use yet".into()
     };
     format!(
-        "{} discharge summary · {}\r\n{} to {}\r\n{}% to {}% · {} percentage points consumed\r\n{} estimated awake time\r\nAverage observed drain: {}\r\nObserved segment, not a measured full-charge runtime.",
-        if cycle.current { "Latest" } else { "Previous" },
-        evidence,
-        polling_timestamp(cycle.start_timestamp),
-        polling_timestamp(cycle.end_timestamp),
+        "Battery: {}% to {}% · {}% used\r\nEstimated time used: {}\r\nAverage battery use: {}\r\n\r\n{} session · {}\r\n{} to {}\r\nThis session may cover only part of a charge.",
         cycle.start_percent,
         cycle.end_percent,
         cycle.consumed_percent,
         insight_hours(cycle.awake_seconds),
-        drain
+        drain,
+        if cycle.current { "Latest" } else { "Previous" },
+        evidence,
+        polling_timestamp(cycle.start_timestamp),
+        polling_timestamp(cycle.end_timestamp),
     )
 }
 struct UiContext {
@@ -762,6 +882,7 @@ struct State {
     page: u16,
     selected: usize,
     selected_device: Option<String>,
+    device_form_key: Option<String>,
     configuration_devices: Vec<ConfigurationDevice>,
     configuration_generation: u64,
     configuration_failure: Option<String>,
@@ -769,6 +890,7 @@ struct State {
     theme: Option<Rc<DashboardTheme>>,
     series: HistorySeries,
     history: HistorySelection,
+    history_resize: HistoryResize,
     request: u64,
     taskbar: u32,
     notify: Option<HDEVNOTIFY>,
@@ -776,11 +898,42 @@ struct State {
     tray_theme: TrayThemeCache,
     error: String,
     font: HFONT,
+    heading_font: HFONT,
+    font_dpi: u32,
+    page_host: Option<HWND>,
+    page_scroll: i32,
+    page_height: i32,
+    more_options: bool,
     polling: PollingUi,
     tray_polling: PollingUi,
     insights: InsightsUi,
     polling_intents: BTreeMap<String, (u64, PollingRate)>,
     tooltip_rates: BTreeMap<String, PollingObservation>,
+}
+/// Resize painting can use the existing series. Reload its downsampled data
+/// only after the native move/size loop finishes, rather than once per pixel.
+#[derive(Default)]
+struct HistoryResize {
+    active: bool,
+    pending: bool,
+}
+impl HistoryResize {
+    fn begin(&mut self) {
+        self.active = true;
+        self.pending = false;
+    }
+    fn changed(&mut self) -> bool {
+        if self.active {
+            self.pending = true;
+            false
+        } else {
+            true
+        }
+    }
+    fn finish(&mut self) -> bool {
+        self.active = false;
+        std::mem::take(&mut self.pending)
+    }
 }
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
@@ -880,22 +1033,6 @@ pub fn run(
         if RegisterClassW(&wc) == 0 {
             return Err(ProviderError::new("Register window class failed"));
         }
-        let font = CreateFontW(
-            -16,
-            0,
-            0,
-            0,
-            400,
-            0,
-            0,
-            0,
-            DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS,
-            CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY,
-            DEFAULT_PITCH.0 as u32,
-            w!("Segoe UI"),
-        );
         let context = Box::new(UiContext {
             state: RefCell::new(State {
                 context: std::ptr::null(),
@@ -911,6 +1048,7 @@ pub fn run(
                 page: 1,
                 selected: 0,
                 selected_device: None,
+                device_form_key: None,
                 configuration_devices: Vec::new(),
                 configuration_generation: 0,
                 configuration_failure: None,
@@ -918,13 +1056,20 @@ pub fn run(
                 theme: None,
                 series: HistorySeries::default(),
                 history: HistorySelection::default(),
+                history_resize: HistoryResize::default(),
                 request: 0,
                 taskbar: RegisterWindowMessageW(w!("TaskbarCreated")),
                 notify: None,
                 animating: false,
                 tray_theme: TrayThemeCache::default(),
                 error: initial_error.unwrap_or_default(),
-                font,
+                font: HFONT::default(),
+                heading_font: HFONT::default(),
+                font_dpi: 0,
+                page_host: None,
+                page_scroll: 0,
+                page_height: 0,
+                more_options: false,
                 polling: PollingUi::default(),
                 tray_polling: PollingUi::default(),
                 insights: InsightsUi::default(),
@@ -988,6 +1133,7 @@ pub fn run(
                 continue;
             }
             if dashboard.is_some_and(|h| IsDialogMessageW(h, &message).as_bool()) {
+                context.state.borrow_mut().keep_focus_visible();
                 continue;
             }
             let _ = TranslateMessage(&message);
@@ -1005,6 +1151,7 @@ pub fn run(
         }
         let _ = DestroyWindow(state.monitor);
         let _ = DeleteObject(state.font.into());
+        let _ = DeleteObject(state.heading_font.into());
         state.runtime.stop();
         let _ = UnregisterClassW(class, Some(instance.into()));
         Ok(())
@@ -1191,15 +1338,37 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 let dpi = GetDpiForWindow(hwnd).max(96) as i32;
                 m.ptMinTrackSize = POINT {
                     x: 840 * dpi / 96,
-                    y: 820 * dpi / 96,
+                    y: 420 * dpi / 96,
                 };
                 LRESULT(0)
             }
-            WM_SIZE => {
-                if Some(hwnd) == s.dashboard && s.page == 2 {
+            WM_ENTERSIZEMOVE => {
+                if Some(hwnd) == s.dashboard {
+                    s.history_resize.begin();
+                }
+                LRESULT(0)
+            }
+            WM_EXITSIZEMOVE => {
+                if Some(hwnd) == s.dashboard && s.history_resize.finish() && s.page == 2 {
                     s.query();
+                }
+                LRESULT(0)
+            }
+            WM_SIZE => {
+                if Some(hwnd) == s.dashboard && wp.0 as u32 != SIZE_MINIMIZED {
+                    s.layout_page();
+                }
+                if Some(hwnd) == s.dashboard && s.page == 2 && wp.0 as u32 != SIZE_MINIMIZED {
+                    if s.history_resize.changed() {
+                        s.query();
+                    }
                     let _ = InvalidateRect(Some(hwnd), None, false);
                 }
+                LRESULT(0)
+            }
+            WM_MOUSEWHEEL if Some(hwnd) == s.dashboard && s.page_host.is_some() => {
+                let delta = ((wp.0 >> 16) as u16 as i16) as i32;
+                s.scroll_page(s.page_scroll - delta * 48 / 120);
                 LRESULT(0)
             }
             WM_DPICHANGED => {
@@ -1327,6 +1496,87 @@ struct DashboardRedraw {
     hwnd: HWND,
     paused: bool,
 }
+fn is_fixed_control(id: u16) -> bool {
+    matches!(id, 1..=6 | 78 | 95 | 97 | 210)
+}
+// One ordinary child window clips scrolling controls below the navigation.
+// It exists only with a dashboard; it owns no images, fonts or timers.
+unsafe extern "system" fn page_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        if msg == WM_NCCREATE {
+            let cs = &*(lp.0 as *const CREATESTRUCTW);
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, cs.lpCreateParams as isize);
+        }
+        let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const UiContext;
+        if ptr.is_null() {
+            return DefWindowProcW(hwnd, msg, wp, lp);
+        }
+        if matches!(
+            msg,
+            WM_COMMAND
+                | WM_NOTIFY
+                | WM_DRAWITEM
+                | WM_MEASUREITEM
+                | WM_SYSCHAR
+                | WM_CTLCOLORSTATIC
+                | WM_CTLCOLOREDIT
+                | WM_CTLCOLORLISTBOX
+                | WM_CTLCOLORBTN
+        ) && let Ok(parent) = GetParent(hwnd)
+        {
+            return send(parent, msg, wp, lp);
+        }
+        if matches!(msg, WM_PAINT | WM_ERASEBKGND | WM_PRINTCLIENT) {
+            let theme = (*ptr)
+                .paint
+                .borrow()
+                .as_ref()
+                .map(|(_, theme)| theme.clone());
+            if let Some(theme) = theme {
+                let mut paint = PAINTSTRUCT::default();
+                let dc = if msg == WM_PAINT {
+                    BeginPaint(hwnd, &mut paint)
+                } else {
+                    HDC(wp.0 as _)
+                };
+                let mut rect = RECT::default();
+                let _ = GetClientRect(hwnd, &mut rect);
+                FillRect(dc, &rect, theme.background_brush());
+                if msg == WM_PAINT {
+                    let _ = EndPaint(hwnd, &paint);
+                }
+                return LRESULT(i32::from(msg == WM_ERASEBKGND) as isize);
+            }
+        }
+        if msg == WM_VSCROLL {
+            if let Ok(mut state) = (*ptr).state.try_borrow_mut() {
+                let mut info = SCROLLINFO {
+                    cbSize: size_of::<SCROLLINFO>() as u32,
+                    fMask: SIF_ALL,
+                    ..Default::default()
+                };
+                let _ = GetScrollInfo(hwnd, SB_VERT, &mut info);
+                let page = (info.nPage as i32 - 32).max(32);
+                let position = match wp.0 as u16 {
+                    n if n == SB_LINEUP.0 as u16 => state.page_scroll - 32,
+                    n if n == SB_LINEDOWN.0 as u16 => state.page_scroll + 32,
+                    n if n == SB_PAGEUP.0 as u16 => state.page_scroll - page,
+                    n if n == SB_PAGEDOWN.0 as u16 => state.page_scroll + page,
+                    n if n == SB_TOP.0 as u16 => 0,
+                    n if n == SB_BOTTOM.0 as u16 => i32::MAX,
+                    n if n == SB_THUMBTRACK.0 as u16 || n == SB_THUMBPOSITION.0 as u16 => {
+                        info.nTrackPos
+                    }
+                    _ => state.page_scroll,
+                };
+                state.scroll_page(position);
+            }
+            return LRESULT(0);
+        }
+        DefWindowProcW(hwnd, msg, wp, lp)
+    }))
+    .unwrap_or(LRESULT(0))
+}
 impl DashboardRedraw {
     fn new(hwnd: HWND) -> Self {
         let paused = unsafe { IsWindowVisible(hwnd).as_bool() };
@@ -1354,6 +1604,241 @@ impl Drop for DashboardRedraw {
     }
 }
 impl State {
+    fn heading(&mut self, id: u16, text: &str, x: i32, y: i32, width: i32) {
+        self.label(id, text, x, y, width);
+        if let Some(h) = self.controls.get(&id) {
+            unsafe {
+                send(
+                    *h,
+                    WM_SETFONT,
+                    WPARAM(self.heading_font.0 as usize),
+                    LPARAM(0),
+                );
+            }
+        }
+    }
+    fn prepare_page(&mut self) {
+        if self.page == 2 {
+            self.page_height = 0;
+            return;
+        }
+        static CLASS: std::sync::Once = std::sync::Once::new();
+        unsafe {
+            CLASS.call_once(|| {
+                let _ = RegisterClassW(&WNDCLASSW {
+                    lpfnWndProc: Some(page_proc),
+                    lpszClassName: w!("HaloBatteryNext.Page"),
+                    hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
+                    ..Default::default()
+                });
+            });
+            self.page_host = CreateWindowExW(
+                WS_EX_CONTROLPARENT,
+                w!("HaloBatteryNext.Page"),
+                w!(""),
+                WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_VSCROLL,
+                0,
+                0,
+                0,
+                0,
+                self.dashboard,
+                None,
+                None,
+                Some(self.context.cast()),
+            )
+            .ok();
+        }
+        self.page_height = match self.page {
+            3 if self.more_options => 1206,
+            3 => 640,
+            6 => 724,
+            _ => 640,
+        } - PAGE_TOP;
+        self.layout_page();
+    }
+    fn position_control(&self, id: u16, x: i32, y: i32, width: i32, height: i32) {
+        if let Some(h) = self.controls.get(&id) {
+            let dpi = unsafe { GetDpiForWindow(*h).max(96) } as i32;
+            let f = |n| n * dpi / 96;
+            unsafe {
+                let _ = SetWindowPos(
+                    *h,
+                    None,
+                    f(x),
+                    f(y),
+                    f(width),
+                    f(height),
+                    SWP_NOZORDER | SWP_NOACTIVATE,
+                );
+            }
+        }
+    }
+    fn update_more_options(&mut self) {
+        for id in [109, 110, 111, 207, 208, 209, 213, 219]
+            .into_iter()
+            .chain((0..providers().len()).map(|index| 300 + index as u16))
+        {
+            if let Some(h) = self.controls.get(&id) {
+                unsafe {
+                    let _ = ShowWindow(*h, if self.more_options { SW_SHOW } else { SW_HIDE });
+                }
+            }
+        }
+        self.page_height = if self.more_options { 1206 } else { 640 } - PAGE_TOP;
+        self.set_control_text(
+            212,
+            if self.more_options {
+                "Fewer options"
+            } else {
+                "More options"
+            },
+        );
+        self.layout_page();
+    }
+    fn layout_page(&mut self) {
+        let Some(hwnd) = self.dashboard else {
+            return;
+        };
+        let dpi = unsafe { GetDpiForWindow(hwnd).max(96) } as i32;
+        let mut rect = RECT::default();
+        unsafe {
+            let _ = GetClientRect(hwnd, &mut rect);
+        }
+        let height = rect.bottom * 96 / dpi;
+        if let Some(host) = self.page_host {
+            unsafe {
+                let _ = SetWindowPos(
+                    host,
+                    None,
+                    0,
+                    PAGE_TOP * dpi / 96,
+                    rect.right,
+                    (height - PAGE_TOP - PAGE_FOOTER).max(1) * dpi / 96,
+                    SWP_NOZORDER | SWP_NOACTIVATE,
+                );
+            }
+            self.scroll_page(self.page_scroll);
+        }
+        match self.page {
+            1 => {
+                self.position_control(5, 20, height - 46, 205, 30);
+                self.position_control(95, 245, height - 49, 535, 46);
+            }
+            3 => {
+                self.position_control(210, 20, height - 46, 160, 30);
+                self.position_control(5, 194, height - 46, 205, 30);
+                self.position_control(95, 415, height - 49, 365, 46);
+            }
+            2 => self.position_control(97, 20, height - 36, 760, 24),
+            6 => self.position_control(78, 20, height - 52, 760, 46),
+            _ => {}
+        }
+    }
+    fn scroll_page(&mut self, position: i32) {
+        let Some(host) = self.page_host else {
+            return;
+        };
+        let dpi = unsafe { GetDpiForWindow(host).max(96) } as i32;
+        let mut rect = RECT::default();
+        unsafe {
+            let _ = GetClientRect(host, &mut rect);
+        }
+        let viewport = (rect.bottom * 96 / dpi).max(1);
+        let max = (self.page_height - viewport).max(0);
+        let position = position.clamp(0, max);
+        let delta = self.page_scroll * dpi / 96 - position * dpi / 96;
+        self.page_scroll = position;
+        unsafe {
+            let info = SCROLLINFO {
+                cbSize: size_of::<SCROLLINFO>() as u32,
+                fMask: SIF_RANGE | SIF_PAGE | SIF_POS,
+                nMin: 0,
+                nMax: self.page_height - 1,
+                nPage: viewport as u32,
+                nPos: position,
+                ..Default::default()
+            };
+            SetScrollInfo(host, SB_VERT, &info, true);
+            if delta != 0 {
+                // Move even controls outside the viewport. ScrollWindowEx with
+                // SW_SCROLLCHILDREN cannot reliably update partially clipped
+                // children. These transient positions exist only during input.
+                let mut batch = BeginDeferWindowPos(self.controls.len() as i32).ok();
+                for (id, child) in &self.controls {
+                    if is_fixed_control(*id) {
+                        continue;
+                    }
+                    let mut rect = RECT::default();
+                    if GetWindowRect(*child, &mut rect).is_err() {
+                        continue;
+                    }
+                    let mut point = [POINT {
+                        x: rect.left,
+                        y: rect.top,
+                    }];
+                    MapWindowPoints(None, Some(host), &mut point);
+                    let flags = SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW;
+                    if let Some(defer) = batch {
+                        batch = DeferWindowPos(
+                            defer,
+                            *child,
+                            None,
+                            point[0].x,
+                            point[0].y + delta,
+                            0,
+                            0,
+                            flags,
+                        )
+                        .ok();
+                        if batch.is_some() {
+                            continue;
+                        }
+                        // The failed batch applies nothing. Rebuild restores
+                        // every control from its logical position below.
+                        self.build();
+                        return;
+                    }
+                    let _ = SetWindowPos(*child, None, point[0].x, point[0].y + delta, 0, 0, flags);
+                }
+                if let Some(batch) = batch
+                    && EndDeferWindowPos(batch).is_err()
+                {
+                    self.build();
+                    return;
+                }
+                let _ = RedrawWindow(
+                    Some(host),
+                    None,
+                    None,
+                    RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN,
+                );
+            }
+        }
+    }
+    fn keep_focus_visible(&mut self) {
+        let Some(host) = self.page_host else {
+            return;
+        };
+        unsafe {
+            let focus = GetFocus();
+            if !IsChild(host, focus).as_bool() {
+                return;
+            }
+            let mut child = RECT::default();
+            let mut page = RECT::default();
+            let _ = GetWindowRect(focus, &mut child);
+            let _ = GetWindowRect(host, &mut page);
+            let dpi = GetDpiForWindow(host).max(96) as i32;
+            let delta = if child.top < page.top {
+                child.top - page.top - 8
+            } else if child.bottom > page.bottom {
+                child.bottom - page.bottom + 8
+            } else {
+                0
+            };
+            self.scroll_page(self.page_scroll + delta * 96 / dpi);
+        }
+    }
     fn refresh_theme(&mut self) {
         if self.dashboard.is_none() {
             return;
@@ -1396,6 +1881,10 @@ impl State {
             return;
         }
         self.dashboard = None;
+        self.page_host = None;
+        self.page_scroll = 0;
+        self.page_height = 0;
+        self.history_resize = HistoryResize::default();
         self.configuration_visibility();
         self.chart = None;
         self.release_history();
@@ -1405,11 +1894,18 @@ impl State {
         }
         self.polling.abandon();
         self.insights.abandon();
+        self.insights.data = None;
+        self.insights.key = None;
+        self.insights.status = String::new();
         self.controls.clear();
+        self.device_form_key = None;
         unsafe {
             let _ = DeleteObject(self.font.into());
+            let _ = DeleteObject(self.heading_font.into());
         }
         self.font = HFONT::default();
+        self.heading_font = HFONT::default();
+        self.font_dpi = 0;
     }
     fn close_dashboard(&mut self, hwnd: HWND) {
         if self.dashboard != Some(hwnd) {
@@ -1444,10 +1940,18 @@ impl State {
                 PCWSTR(text.as_ptr()),
                 WS_CHILD | WS_VISIBLE | style,
                 f(x),
-                f(y),
+                f(if !is_fixed_control(id) && self.page_host.is_some() {
+                    y - PAGE_TOP - self.page_scroll
+                } else {
+                    y
+                }),
                 f(width),
                 f(height),
-                self.dashboard,
+                if is_fixed_control(id) {
+                    self.dashboard
+                } else {
+                    self.page_host.or(self.dashboard)
+                },
                 Some(HMENU(id as usize as *mut _)),
                 None,
                 None,
@@ -1565,7 +2069,7 @@ impl State {
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
                 840 * dpi / 96,
-                820 * dpi / 96,
+                740 * dpi / 96,
                 None,
                 None,
                 None,
@@ -1573,6 +2077,30 @@ impl State {
             ) {
                 Ok(h) => {
                     self.dashboard = Some(h);
+                    let mut info = MONITORINFO {
+                        cbSize: size_of::<MONITORINFO>() as u32,
+                        ..Default::default()
+                    };
+                    let mut bounds = RECT::default();
+                    if GetMonitorInfoW(MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST), &mut info)
+                        .as_bool()
+                        && GetWindowRect(h, &mut bounds).is_ok()
+                    {
+                        let work = info.rcWork;
+                        let width = (bounds.right - bounds.left).min(work.right - work.left);
+                        let height = (bounds.bottom - bounds.top).min(work.bottom - work.top);
+                        if width > 0 && height > 0 {
+                            let _ = SetWindowPos(
+                                h,
+                                None,
+                                bounds.left.clamp(work.left, work.right - width),
+                                bounds.top.clamp(work.top, work.bottom - height),
+                                width,
+                                height,
+                                SWP_NOZORDER | SWP_NOACTIVATE,
+                            );
+                        }
+                    }
                     self.configuration_visibility();
                     self.refresh_theme();
                     self.polling.abandon();
@@ -1590,6 +2118,25 @@ impl State {
         let Some(hwnd) = self.dashboard else {
             return;
         };
+        let focused = self
+            .controls
+            .iter()
+            .find_map(|(id, h)| (*h == unsafe { GetFocus() }).then_some(*id));
+        let current_key = (self.page == 1)
+            .then(|| self.current_device().map(|(d, _)| d.key))
+            .flatten();
+        let draft = (current_key.is_some()
+            && current_key == self.device_form_key
+            && self.controls.contains_key(&11))
+        .then(|| {
+            (
+                self.text(11),
+                self.checked(12),
+                self.text(13),
+                self.choice(14),
+            )
+        });
+        self.device_form_key = current_key;
         let _redraw = DashboardRedraw::new(hwnd);
         self.chart = None;
         if self.page != 2 {
@@ -1597,36 +2144,77 @@ impl State {
         }
         let controls = std::mem::take(&mut self.controls);
         unsafe {
+            if let Some(host) = self.page_host.take() {
+                let _ = DestroyWindow(host);
+            }
             for h in controls.values() {
                 let _ = DestroyWindow(*h);
             }
         }
         unsafe {
-            let dpi = GetDpiForWindow(self.dashboard.unwrap()) as i32;
-            let old = self.font;
-            self.font = CreateFontW(
-                -16 * dpi / 96,
-                0,
-                0,
-                0,
-                400,
-                0,
-                0,
-                0,
-                DEFAULT_CHARSET,
-                OUT_DEFAULT_PRECIS,
-                CLIP_DEFAULT_PRECIS,
-                CLEARTYPE_QUALITY,
-                DEFAULT_PITCH.0 as u32,
-                w!("Segoe UI"),
-            );
-            let _ = DeleteObject(old.into());
+            let dpi = GetDpiForWindow(self.dashboard.unwrap());
+            if self.font_dpi != dpi || self.font.is_invalid() {
+                let _ = DeleteObject(self.font.into());
+                let _ = DeleteObject(self.heading_font.into());
+                let make_font = |weight| {
+                    CreateFontW(
+                        -16 * dpi as i32 / 96,
+                        0,
+                        0,
+                        0,
+                        weight,
+                        0,
+                        0,
+                        0,
+                        DEFAULT_CHARSET,
+                        OUT_DEFAULT_PRECIS,
+                        CLIP_DEFAULT_PRECIS,
+                        CLEARTYPE_QUALITY,
+                        DEFAULT_PITCH.0 as u32,
+                        w!("Segoe UI"),
+                    )
+                };
+                self.font = make_font(400);
+                self.heading_font = make_font(600);
+                self.font_dpi = dpi;
+            }
         }
-        self.button(1, "&Devices", 20, 16, 110);
-        self.button(2, "&History", 140, 16, 110);
-        self.button(3, "&Settings", 260, 16, 110);
-        self.button(6, "&Insights", 380, 16, 110);
+        for (i, (id, title)) in [
+            (1, "&Devices"),
+            (2, "&History"),
+            (6, "&Insights"),
+            (3, "&Settings"),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let h = self.control(
+                *id,
+                w!("BUTTON"),
+                title,
+                WS_TABSTOP
+                    | WINDOW_STYLE((BS_AUTORADIOBUTTON | BS_PUSHLIKE) as u32)
+                    | if i == 0 {
+                        WS_GROUP
+                    } else {
+                        WINDOW_STYLE::default()
+                    },
+                20 + i as i32 * 116,
+                16,
+                108,
+                32,
+            );
+            unsafe {
+                send(
+                    h,
+                    BM_SETCHECK,
+                    WPARAM(usize::from(self.page == *id)),
+                    LPARAM(0),
+                );
+            }
+        }
         self.button(4, "&Refresh", 660, 16, 120);
+        self.prepare_page();
         let names: Vec<_> = self
             .snapshot
             .devices
@@ -1636,13 +2224,7 @@ impl State {
         self.selected = self.selected.min(names.len().saturating_sub(1));
         match self.page {
             1 => {
-                self.label(
-                    90,
-                    "Select a device to customize its name and available settings",
-                    20,
-                    64,
-                    740,
-                );
+                self.heading(90, "Choose a device", 20, 64, 740);
                 let rows = self.device_rows();
                 let index = self
                     .selected_device
@@ -1668,10 +2250,10 @@ impl State {
                 if let Some((device, battery)) = self.current_device() {
                     if let Some(d) = battery {
                         self.label(91, &device_detail(&d), 20, 138, 740);
-                        self.label(92, "&Name", 20, 184, 120);
-                        self.edit(11, &d.name, 150, 180, 360);
-                        self.check(12, "&Hide tray icon", d.hidden, 20, 222, 350);
-                        self.label(93, "Low alert % (blank = default)", 20, 270, 230);
+                        self.label(92, "&Name", 20, 172, 120);
+                        self.edit(11, &d.name, 150, 168, 360);
+                        self.check(12, "&Hide tray icon", d.hidden, 20, 204, 350);
+                        self.label(93, "Low battery alert (%)", 20, 242, 230);
                         let low = self
                             .settings
                             .devices
@@ -1679,7 +2261,14 @@ impl State {
                             .and_then(|p| p.low)
                             .map(|v| v.to_string())
                             .unwrap_or_default();
-                        self.edit(13, &low, 260, 266, 80);
+                        self.edit(13, &low, 260, 238, 80);
+                        self.label(
+                            96,
+                            "Leave blank to use the general setting. Use 0 to turn alerts off.",
+                            20,
+                            271,
+                            740,
+                        );
                         self.label(94, "Tray &icon", 20, 310, 120);
                         let kinds: Vec<_> = [
                             "automatic",
@@ -1701,9 +2290,13 @@ impl State {
                             .and_then(|p| p.icon.as_ref())
                             .and_then(|icon| kinds.iter().position(|s| s == icon))
                             .unwrap_or(0);
-                        self.combo(14, &kinds, chosen, 150, 306, 240);
-                        self.button(15, "&Save device", 20, 360, 160);
-                        self.button(16, "Reset to defaults", 190, 360, 160);
+                        let labels = ICON_CHOICES
+                            .iter()
+                            .map(|s| (*s).to_owned())
+                            .collect::<Vec<_>>();
+                        self.combo(14, &labels, chosen, 150, 306, 240);
+                        self.button(15, "&Save device", 20, 348, 160);
+                        self.button(16, "Reset to defaults", 190, 348, 160);
                     } else {
                         self.label(91, "Wired keyboard · No battery", 20, 138, 740);
                         self.label(92, "&Name", 20, 184, 120);
@@ -1714,15 +2307,25 @@ impl State {
                 } else {
                     self.label(
                         91,
-                        "No devices detected yet. Use Refresh or review provider diagnostics.",
+                        "No devices found. Connect or wake your device, then select Refresh.",
                         20,
                         150,
                         740,
                     );
                 }
                 self.polling_controls();
-                self.label(95, &self.error.clone(), 20, 680, 750);
-                self.button(5, "Export &diagnostics", 20, 725, 200);
+                let message = user_message(&self.error).to_owned();
+                self.control(
+                    95,
+                    w!("STATIC"),
+                    &message,
+                    WINDOW_STYLE::default(),
+                    245,
+                    680,
+                    535,
+                    46,
+                );
+                self.button(5, "Save support &report", 20, 725, 205);
             }
             2 => {
                 self.combo(10, &names, self.selected, 20, 65, 380);
@@ -1745,7 +2348,7 @@ impl State {
                 self.label(96, self.history.description(), 20, 105, 750);
                 self.label(
                     97,
-                    "30-day retention · Estimated device awake time · No input tracking",
+                    "History is saved for 30 days. Mouse and keyboard activity is not tracked.",
                     20,
                     735,
                     760,
@@ -1754,83 +2357,111 @@ impl State {
             }
             3 => {
                 let value = serde_json::to_value(&self.settings).unwrap_or_default();
-                for (i, (key, label)) in CHECKS.iter().enumerate() {
+                self.heading(90, "Alerts and battery", 20, 70, 740);
+                self.heading(91, "Appearance", 20, 238, 740);
+                self.heading(92, "Battery checks", 20, 402, 740);
+                self.heading(93, "Polling rate", 20, 480, 740);
+                for (i, x, y, width) in [
+                    (0, 20, 104, 360),
+                    (1, 400, 104, 380),
+                    (6, 20, 138, 360),
+                    (8, 400, 138, 380),
+                    (3, 20, 272, 360),
+                    (4, 400, 272, 380),
+                    (7, 20, 306, 370),
+                    (5, 400, 306, 380),
+                    (2, 400, 432, 380),
+                    (9, 20, 938, 760),
+                    (10, 20, 972, 760),
+                    (11, 20, 1048, 760),
+                ] {
+                    let (key, label) = CHECKS[i];
                     self.check(
                         100 + i as u16,
                         label,
-                        value[*key].as_bool().unwrap_or(false),
-                        20 + (i as i32 / 6) * 390,
-                        65 + (i as i32 % 6) * 32,
-                        385,
+                        value[key].as_bool().unwrap_or(false),
+                        x,
+                        y,
+                        width,
                     );
                 }
-                if let Some(h) = self.controls.get(&111) {
-                    unsafe {
-                        SetWindowLongW(
-                            *h,
-                            GWL_STYLE,
-                            GetWindowLongW(*h, GWL_STYLE) | WS_DISABLED.0 as i32,
-                        );
-                    }
-                }
+                self.enable_control(111, false);
+                self.label(202, "Low battery alert (%)", 20, 186, 180);
+                self.edit(203, &self.settings.low.to_string(), 210, 182, 80);
+                self.label(214, "Orange icon below (%)", 400, 186, 220);
+                self.edit(215, &self.settings.warning_level.to_string(), 650, 182, 80);
+                self.label(204, "Tray icon colour", 20, 350, 150);
+                let themes = THEME_CHOICES
+                    .iter()
+                    .map(|s| (*s).to_owned())
+                    .collect::<Vec<_>>();
+                let chosen = ["auto", "white", "black", "windows", "topbar"]
+                    .iter()
+                    .position(|s| *s == self.settings.icon_theme)
+                    .unwrap_or(0);
+                self.combo(205, &themes, chosen, 170, 346, 215);
+                self.check(
+                    206,
+                    "Start at sign-in",
+                    hb_windows::system::is_startup(),
+                    400,
+                    346,
+                    380,
+                );
+                self.label(200, "Check battery every (seconds)", 20, 436, 240);
+                self.edit(201, &self.settings.interval.to_string(), 270, 432, 100);
                 self.check(
                     112,
-                    "Enable polling-rate controls",
+                    "Allow polling-rate changes",
                     self.settings.polling_controls,
                     20,
-                    258,
-                    365,
+                    514,
+                    360,
                 );
                 self.check(
                     113,
-                    "Restore saved rates at startup",
+                    "Restore saved rates when the app starts",
                     self.settings.restore_polling_on_startup,
-                    410,
-                    258,
-                    370,
+                    400,
+                    514,
+                    380,
                 );
-                self.label(200, "Battery refresh interval", 20, 302, 230);
-                self.edit(201, &self.settings.interval.to_string(), 260, 298, 100);
-                self.label(202, "Low alert %", 390, 302, 95);
-                self.edit(203, &self.settings.low.to_string(), 490, 298, 55);
-                self.label(214, "Orange warning %", 560, 302, 150);
-                self.edit(215, &self.settings.warning_level.to_string(), 720, 298, 55);
-                let themes: Vec<_> = ["auto", "white", "black", "windows", "topbar"]
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect();
-                self.label(204, "Icon theme", 20, 342, 150);
-                self.combo(
-                    205,
-                    &themes,
-                    themes
-                        .iter()
-                        .position(|s| s == &self.settings.icon_theme)
-                        .unwrap_or(0),
-                    180,
-                    338,
-                    180,
-                );
-                self.check(
-                    206,
-                    "Launch at sign in",
-                    hb_windows::system::is_startup(),
-                    410,
-                    338,
-                    360,
-                );
-                self.label(207, "Provider switches", 20, 382, 740);
+                self.control(216, w!("STATIC"),
+                    "Higher rates can use more battery. Each change is made once; unconfirmed changes are not retried.",
+                    WINDOW_STYLE::default(), 20, 550, 760, 46);
+                self.heading(207, "Device brands", 20, 654, 740);
                 for (i, p) in providers().iter().enumerate() {
                     self.check(
                         300 + i as u16,
                         provider_label(p),
                         self.settings.enabled(p),
                         20 + (i as i32 % 4) * 190,
-                        412 + (i as i32 / 4) * 30,
+                        686 + (i as i32 / 4) * 28,
                         180,
                     );
                 }
-                self.label(208, "Release repository (owner/name)", 20, 636, 300);
+                self.button(
+                    212,
+                    if self.more_options {
+                        "Fewer options"
+                    } else {
+                        "More options"
+                    },
+                    20,
+                    606,
+                    160,
+                );
+                self.control(
+                    213,
+                    w!("STATIC"),
+                    "Extra PlayStation checks are optional and may affect other controller apps.",
+                    WINDOW_STYLE::default(),
+                    20,
+                    1004,
+                    760,
+                    40,
+                );
+                self.label(208, "Update source (GitHub account/project)", 20, 1090, 740);
                 self.edit(
                     209,
                     self.settings
@@ -1838,16 +2469,56 @@ impl State {
                         .clone()
                         .as_deref()
                         .unwrap_or(""),
-                    330,
-                    632,
-                    410,
+                    20,
+                    1122,
+                    740,
                 );
-                self.button(210, "&Save settings", 20, 682, 180);
-                self.button(5, "Export &diagnostics", 220, 682, 200);
-                self.label(95, &self.error.clone(), 20, 732, 750);
+                self.label(
+                    219,
+                    "Leave blank to keep updates off. Updates are unavailable in this version.",
+                    20,
+                    1156,
+                    760,
+                );
+                self.button(210, "&Save settings", 20, 682, 160);
+                self.button(5, "Save support &report", 194, 682, 205);
+                let message = user_message(&self.error).to_owned();
+                self.control(
+                    95,
+                    w!("STATIC"),
+                    &message,
+                    WINDOW_STYLE::default(),
+                    415,
+                    732,
+                    365,
+                    46,
+                );
+                self.update_more_options();
             }
             6 => self.build_insights(&names),
             _ => {}
+        }
+        self.layout_page();
+        if let Some((name, hidden, low, icon)) = draft {
+            self.set_control_text(11, &name);
+            self.set_control_text(13, &low);
+            unsafe {
+                if let Some(h) = self.controls.get(&12) {
+                    send(*h, BM_SETCHECK, WPARAM(usize::from(hidden)), LPARAM(0));
+                }
+                if let Some(h) = self.controls.get(&14) {
+                    send(*h, CB_SETCURSEL, WPARAM(icon), LPARAM(0));
+                }
+            }
+        }
+        drop(_redraw);
+        if let Some(h) = focused.and_then(|id| self.controls.get(&id))
+            && unsafe { IsWindowVisible(*h).as_bool() }
+        {
+            unsafe {
+                let _ = SetFocus(Some(*h));
+            }
+            self.keep_focus_visible();
         }
     }
     fn set_control_text(&self, id: u16, text: &str) {
@@ -1870,9 +2541,9 @@ impl State {
                 | WS_BORDER
                 | WS_VSCROLL
                 | WINDOW_STYLE((ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL) as u32),
-            225,
+            260,
             y,
-            555,
+            520,
             height,
         );
     }
@@ -1887,7 +2558,7 @@ impl State {
                 | WINDOW_STYLE((LBS_NOTIFY | LBS_NOINTEGRALHEIGHT) as u32),
             20,
             y,
-            190,
+            225,
             height,
         );
     }
@@ -1899,34 +2570,16 @@ impl State {
             .map(|d| d.reading.key.clone());
         self.insights.select(key);
         self.combo(10, names, self.selected, 20, 65, 760);
-        self.label(
-            72,
-            "Battery Insights · local 30-day data · Refresh updates this page",
-            20,
-            105,
-            760,
-        );
-        self.label(
-            73,
-            "Polling-rate comparison · estimated full-charge awake runtime",
-            20,
-            140,
-            760,
-        );
-        self.insights_list(70, 170, 155);
-        self.insights_edit(74, 170, 155);
-        self.label(
-            75,
-            "Recent charge summaries · newest first · UTC start time (up to 10)",
-            20,
-            340,
-            760,
-        );
-        self.insights_list(71, 370, 165);
-        self.insights_edit(76, 370, 165);
+        self.heading(72, "Battery insights", 20, 105, 760);
+        self.heading(73, "Battery life by polling rate", 20, 140, 760);
+        self.insights_list(70, 174, 180);
+        self.insights_edit(74, 174, 180);
+        self.heading(75, "Use between charges · newest first", 20, 374, 760);
+        self.insights_list(71, 406, 184);
+        self.insights_edit(76, 406, 184);
         self.control(77, w!("STATIC"),
-            "Awake use measures observed device availability, not input activity. Rate comparisons average up to 30 days; the tray estimate follows recent discharge and can differ. Neither measures battery health.\r\n\r\nRates use the last confirmed setting. Confirm again after changing it elsewhere. Sleep, charging, missing readings and connection boundaries are excluded from learning. No hardware polling is added by this page.",
-            WINDOW_STYLE::default(), 20, 550, 760, 140);
+            "Time used is estimated from the device's connection. Mouse and keyboard activity is not tracked.\r\n\r\nEstimates use up to 30 days of battery history. Sleep and charging are excluded. Refresh the rate after changing it in another app. Dates use your computer's local time.",
+            WINDOW_STYLE::default(), 20, 608, 760, 96);
         self.control(
             78,
             w!("STATIC"),
@@ -1958,7 +2611,7 @@ impl State {
         self.insights.sequence = self.insights.sequence.wrapping_add(1).max(1);
         let request = self.insights.sequence;
         self.insights.pending = Some((request, key.clone()));
-        self.insights.status = "Reading local discharge evidence…".into();
+        self.insights.status = "Loading battery history…".into();
         self.set_control_text(78, &self.insights.status);
         self.runtime.send(Command::Insights {
             key,
@@ -1987,8 +2640,8 @@ impl State {
                             let estimate = rate
                                 .projected_full_charge_hours
                                 .filter(|hours| hours.is_finite() && *hours >= 0.0)
-                                .map(|hours| format!("~{hours:.0} h"))
-                                .unwrap_or_else(|| "limited data".into());
+                                .map(|hours| format!("about {hours:.0} h"))
+                                .unwrap_or_else(|| "Still learning".into());
                             format!("{} Hz · {estimate}", rate.hz)
                         })
                         .collect::<Vec<_>>(),
@@ -2016,6 +2669,18 @@ impl State {
                 }
             }
         }
+        for (id, placeholder) in [(70, "Still learning"), (71, "No sessions yet")] {
+            if let Some(h) = self.controls.get(&id) {
+                let empty = unsafe { send(*h, LB_GETCOUNT, WPARAM(0), LPARAM(0)).0 == 0 };
+                self.enable_control(id, !empty);
+                if empty {
+                    let text = wide(placeholder);
+                    unsafe {
+                        send(*h, LB_ADDSTRING, WPARAM(0), LPARAM(text.as_ptr() as isize));
+                    }
+                }
+            }
+        }
         self.insights_details();
         self.set_control_text(78, &self.insights.status);
     }
@@ -2036,7 +2701,7 @@ impl State {
             .map(rate_insight_text)
             .unwrap_or_else(|| insight_empty_text(self.insights.data.as_ref()));
         let cycle = self.insights.data.as_ref().and_then(|data| data.cycles.iter().rev().nth(selected(71)))
-            .map(charge_cycle_text).unwrap_or_else(|| "No charge summaries yet. Collect awake discharge readings; partial cycles appear when sufficient connected data is available.".into());
+            .map(charge_cycle_text).unwrap_or_else(|| "No charging sessions recorded yet. Keep using the device on battery to build a history.".into());
         self.set_control_text(74, &rate);
         self.set_control_text(76, &cycle);
     }
@@ -2050,6 +2715,7 @@ impl State {
                 self.polling.abandon();
                 self.insights.abandon();
                 self.page = id;
+                self.page_scroll = 0;
                 self.configuration_visibility();
                 self.build();
                 self.read_polling();
@@ -2071,7 +2737,13 @@ impl State {
             }
             5 => {
                 let path = self.dir.join("diagnostics.json");
-                let value = serde_json::json!({"snapshot":self.snapshot,"providers":self.diagnostics,"settings":self.settings,"application_error":self.error});
+                let readings: BTreeMap<_, _> = self.polling.observations.iter()
+                    .map(|(key, reading)| (key, serde_json::json!({"rate":reading.rate,
+                        "supported":reading.supported,"timestamp":reading.timestamp,"evidence":reading.evidence})))
+                    .collect();
+                let value = serde_json::json!({"snapshot":self.snapshot,"providers":self.diagnostics,"settings":self.settings,"application_error":self.error,
+                    "polling_messages":self.polling.status,"tray_polling_messages":self.tray_polling.status,
+                    "polling_readings":readings,"insights_debug":format!("{:?}",self.insights.data)});
                 self.error = match hb_storage::atomic_write(
                     &path,
                     &serde_json::to_vec_pretty(&value).unwrap(),
@@ -2079,7 +2751,7 @@ impl State {
                     Ok(()) => format!("Exported {}", path.display()),
                     Err(e) => e.to_string(),
                 };
-                self.build()
+                self.set_control_text(95, user_message(&self.error));
             }
             10 if notification == CBN_SELCHANGE as u16 => {
                 self.polling.abandon();
@@ -2100,6 +2772,7 @@ impl State {
                 } else {
                     self.selected = self.choice(10);
                 }
+                self.page_scroll = 0;
                 self.build();
                 self.read_polling();
                 self.query_insights()
@@ -2128,6 +2801,8 @@ impl State {
                     self.settings.devices.entry(device.key).or_default().name =
                         (!name.trim().is_empty()).then_some(name);
                     self.save();
+                    self.error = "Device settings saved".into();
+                    self.set_control_text(95, user_message(&self.error));
                     self.build();
                     return;
                 }
@@ -2139,7 +2814,7 @@ impl State {
                         Ok(low) => low,
                         Err(e) => {
                             self.error = e.into();
-                            self.build();
+                            self.set_control_text(95, user_message(&self.error));
                             return;
                         }
                     };
@@ -2175,6 +2850,8 @@ impl State {
                         },
                     );
                     self.save();
+                    self.error = "Device settings saved".into();
+                    self.set_control_text(95, user_message(&self.error));
                 }
             }
             16 => {
@@ -2185,6 +2862,7 @@ impl State {
                         preferences.name = None;
                     }
                     self.save();
+                    self.device_form_key = None;
                     self.build();
                 }
             }
@@ -2202,9 +2880,8 @@ impl State {
                 let warning = self.text(215).parse::<u8>().ok().filter(|n| *n <= 100);
                 if interval.is_none() || low.is_none() || warning.is_none() {
                     self.error =
-                        "Battery refresh interval must be 5–3600 seconds; alert must be 0–100"
-                            .into();
-                    self.build();
+                        "Enter 5–3600 seconds and battery percentages from 0 to 100.".into();
+                    self.set_control_text(95, user_message(&self.error));
                     return;
                 }
                 value["polling_controls"] = self.checked(112).into();
@@ -2216,8 +2893,8 @@ impl State {
                     ["auto", "white", "black", "windows", "topbar"][self.choice(205).min(4)].into();
                 let repo = self.text(209);
                 if !repo.is_empty() && !hb_core::settings::valid_repository(&repo) {
-                    self.error = "Use owner/name for the release repository".into();
-                    self.build();
+                    self.error = "Enter the GitHub account and project as account/project.".into();
+                    self.set_control_text(95, user_message(&self.error));
                     return;
                 }
                 value["release_repository"] = if repo.is_empty() {
@@ -2244,6 +2921,11 @@ impl State {
                     self.tray_polling.invalidate(self.tray_polling.generation);
                 }
                 self.build()
+            }
+            212 => {
+                self.more_options = !self.more_options;
+                self.update_more_options();
+                self.keep_focus_visible();
             }
             503 => {
                 self.page = 1;
@@ -2308,7 +2990,7 @@ impl State {
         self.configuration_failure = failure;
         if devices == self.configuration_devices {
             if failure_changed && self.dashboard.is_some() && self.page == 1 {
-                self.set_control_text(95, &self.error.clone());
+                self.set_control_text(95, user_message(&self.error));
             }
             return;
         }
@@ -2376,39 +3058,60 @@ impl State {
                 }
             }
         }
-        self.label(98, "Device polling rate", 20, 420, 750);
-        self.label(
+        self.heading(98, "Polling rate", 20, 396, 750);
+        self.control(
             99,
-            "Hardware configuration only. Apply before starting a game.",
+            w!("STATIC"),
+            "How often the device sends updates. Close games and presentations before changing it.",
+            WINDOW_STYLE::default(),
             20,
-            448,
+            427,
             750,
+            30,
         );
         if !self.settings.polling_controls {
-            self.label(
+            self.control(
                 44,
-                &self.current_device().and_then(|(d, _)| match d.capability { PollingCapability::Unavailable(reason) => Some(format!("{reason} Enable polling-rate controls in Settings for supported devices.")), _ => None }).unwrap_or_else(|| "Enable polling-rate controls in Settings to read supported devices.".into()),
+                w!("STATIC"),
+                &self
+                    .current_device()
+                    .and_then(|(d, _)| match &d.capability {
+                        PollingCapability::Unavailable(_) => {
+                            Some(polling_unavailable(&d).to_owned())
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| {
+                        "Allow polling-rate changes in Settings to use this option.".into()
+                    }),
+                WINDOW_STYLE::default(),
                 20,
-                484,
+                464,
                 750,
+                80,
             );
             return;
         }
         let Some(reading) = self.visible_polling_device() else {
-            self.label(
+            self.control(
                 44,
-                "Select a connected device to read its hardware rate.",
+                w!("STATIC"),
+                "Choose a connected device to check its polling rate.",
+                WINDOW_STYLE::default(),
                 20,
-                484,
+                464,
                 750,
+                48,
             );
             return;
         };
         let available =
             reading.online() && matches!(reading.capability, PollingCapability::ReadWrite);
         let unavailable = match &reading.capability {
-            PollingCapability::Unavailable(reason) => Some(reason.clone()),
-            _ if !reading.online() => Some("Device is offline".into()),
+            PollingCapability::Unavailable(_) => Some(polling_unavailable(&reading).to_owned()),
+            _ if !reading.online() => {
+                Some("Wake or reconnect the device to check its rate.".into())
+            }
             _ => None,
         };
         let key = reading.key;
@@ -2417,11 +3120,11 @@ impl State {
         self.label(
             44,
             &format!(
-                "Device-reported configured rate: {}",
-                current.map_or_else(|| "unavailable".into(), |r| format!("{} Hz", r.hz()))
+                "Last confirmed rate: {}",
+                current.map_or_else(|| "not checked yet".into(), |r| format!("{} Hz", r.hz()))
             ),
             20,
-            484,
+            464,
             750,
         );
         let evidence = observation.as_ref().map_or_else(
@@ -2432,9 +3135,8 @@ impl State {
             },
             |o| {
                 format!(
-                    "Last read: {} · {}",
+                    "Checked {} · Refresh after changing the rate in another app.",
                     polling_timestamp(o.timestamp),
-                    o.evidence
                 )
             },
         );
@@ -2444,9 +3146,9 @@ impl State {
             &evidence,
             WINDOW_STYLE::default(),
             20,
-            516,
+            496,
             750,
-            48,
+            40,
         );
         let requested = self
             .settings
@@ -2456,11 +3158,11 @@ impl State {
         self.label(
             46,
             &format!(
-                "Last requested: {} · Choose a supported rate",
+                "Saved choice: {} · This may differ from the device's current rate.",
                 requested.map_or_else(|| "none".into(), |r| format!("{} Hz", r.hz()))
             ),
             20,
-            568,
+            544,
             750,
         );
         let supported = observation
@@ -2474,10 +3176,10 @@ impl State {
             .iter()
             .map(|r| format!("{} Hz", r.hz()))
             .collect::<Vec<_>>();
-        self.combo(43, &options, chosen, 20, 600, 240);
-        self.button(40, "&Apply rate", 280, 600, 120);
-        self.button(41, "Refresh rate", 410, 600, 140);
-        self.button(42, "Restore previous", 560, 600, 190);
+        self.combo(43, &options, chosen, 20, 574, 230);
+        self.button(40, "&Apply rate", 270, 574, 120);
+        self.button(41, "Refresh rate", 402, 574, 140);
+        self.button(42, "Restore previous rate", 554, 574, 226);
         let pending = self.polling.pending.is_some() || !available;
         let verified = observation
             .as_ref()
@@ -2500,12 +3202,12 @@ impl State {
         self.control(
             47,
             w!("STATIC"),
-            &status,
+            polling_message(&status),
             WINDOW_STYLE::default(),
             20,
-            638,
+            612,
             750,
-            38,
+            28,
         );
     }
     fn read_polling(&mut self) {
@@ -2680,8 +3382,20 @@ impl State {
             return;
         }
         match result {
-            Ok(series) => self.series = series,
-            Err(e) => self.error = e.to_string(),
+            Ok(series) => {
+                self.series = series;
+                self.set_control_text(
+                    97,
+                    "History is saved for 30 days. Mouse and keyboard activity is not tracked.",
+                );
+            }
+            Err(e) => {
+                self.error = e.to_string();
+                self.set_control_text(
+                    97,
+                    "Couldn't load battery history. Select Refresh to try again.",
+                );
+            }
         }
         unsafe {
             if let Some(h) = self.dashboard {
@@ -2738,7 +3452,10 @@ impl State {
                     polling_invalidated = true;
                 }
                 Event::Diagnostics(d) => self.diagnostics = d,
-                Event::Error(e) => self.error = e,
+                Event::Error(e) => {
+                    self.error = e;
+                    self.set_control_text(95, user_message(&self.error));
+                }
                 Event::Alert(n) => {
                     let result = self
                         .trays
@@ -2769,22 +3486,22 @@ impl State {
                 .iter()
                 .enumerate()
                 .filter_map(|(index, next)| {
-                    (self
-                        .snapshot
-                        .devices
-                        .get(index)
-                        .map(|previous| &previous.text)
-                        != Some(&next.text))
+                    (self.controls.contains_key(&10)
+                        && self
+                            .snapshot
+                            .devices
+                            .get(index)
+                            .map(|previous| &previous.text)
+                            != Some(&next.text))
                     .then_some(index)
                 })
                 .collect();
-            let identity: Vec<_> = self
+            let identity_changed = self
                 .snapshot
                 .devices
                 .iter()
-                .map(|d| d.reading.key.clone())
-                .collect();
-            let next: Vec<_> = s.devices.iter().map(|d| d.reading.key.clone()).collect();
+                .map(|d| &d.reading.key)
+                .ne(s.devices.iter().map(|d| &d.reading.key));
             let previous_key = self
                 .snapshot
                 .devices
@@ -2832,13 +3549,13 @@ impl State {
                 polling_selection_changed = true;
             }
             if self.page == 1
-                && let Some((_, Some(d))) = self.current_device()
                 && self.controls.contains_key(&91)
+                && let Some((_, Some(d))) = self.current_device()
             {
                 self.set_control_text(91, &device_detail(&d));
             }
             self.sync_trays(TrayUpdate::Changed);
-            if identity != next {
+            if identity_changed && self.page != 3 {
                 self.build()
             } else if let Some(h) = self.controls.get(&10) {
                 for i in changed_labels {
@@ -3111,7 +3828,7 @@ impl State {
         if let Some(message) = self.tray_polling.status.get(key)
             && let Some(tray) = self.trays.get_mut(key)
         {
-            let _ = tray.show_message("Polling rate", message);
+            let _ = tray.show_message("Polling rate", polling_message(message));
         }
     }
 }
@@ -3227,27 +3944,49 @@ impl Tray {
 pub(crate) static NATIVE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn device_detail(d: &DeviceView) -> String {
-    let age = (SystemClock::default().unix() - d.reading.timestamp).max(0);
-    let fresh = if age < 60 {
-        format!("{age}s ago")
+    let age = SystemClock::default()
+        .unix()
+        .saturating_sub(d.reading.timestamp)
+        .max(0);
+    let fresh = if age < 5 {
+        "just now".into()
+    } else if age < 60 {
+        format!("{age} seconds ago")
+    } else if age < 3600 {
+        format!("{} min ago", age / 60)
+    } else if age < 86400 {
+        format!(
+            "{} {} ago",
+            age / 3600,
+            if age / 3600 == 1 { "hour" } else { "hours" }
+        )
     } else {
-        format!("{}m ago", age / 60)
+        format!(
+            "{} {} ago",
+            age / 86400,
+            if age / 86400 == 1 { "day" } else { "days" }
+        )
     };
     let charging = match d.reading.charging {
         Some(true) => {
             if d.reading.charging_inferred {
-                "charging (inferred)"
+                "appears to be charging"
             } else {
                 "charging"
             }
         }
         Some(false) => "not charging",
-        None => "charging unknown",
+        None => "charging status unavailable",
+    };
+    let connection = match d.reading.connection {
+        Connection::Online => "Connected",
+        Connection::Sleeping => "Sleeping",
+        Connection::Stale => "Waiting for an update",
     };
     format!(
-        "{} · {:?} · {} · read {}",
+        "{} · {} · {} · updated {}",
         provider_label(&d.reading.source),
-        d.reading.connection,
+        connection,
         charging,
         fresh
     )
@@ -3291,7 +4030,9 @@ fn device_threshold(text: &str) -> Result<Option<u8>, &'static str> {
         .ok()
         .filter(|v| *v <= 100)
         .map(Some)
-        .ok_or("Enter 0–100, or leave blank for the default alert threshold")
+        .ok_or(
+            "Enter a battery percentage from 0 to 100, or leave blank to use the general setting.",
+        )
 }
 
 fn tray_devices<'a>(snapshot: &'a Snapshot, settings: &Settings) -> Vec<Cow<'a, DeviceView>> {
@@ -3481,14 +4222,44 @@ mod behaviour_tests {
             hidden: false,
         };
         let text = device_detail(&d);
-        assert!(text.contains("Stale"));
+        assert!(text.contains("Waiting for an update"));
         assert!(text.contains("not charging"));
-        assert!(text.contains("2m ago"));
+        assert!(text.contains("2 min ago"));
         d.reading.charging = None;
-        assert!(device_detail(&d).contains("charging unknown"));
+        assert!(device_detail(&d).contains("charging status unavailable"));
         d.reading.charging = Some(true);
         d.reading.charging_inferred = true;
-        assert!(device_detail(&d).contains("charging (inferred)"));
+        assert!(device_detail(&d).contains("appears to be charging"));
+    }
+    #[test]
+    fn user_messages_keep_recovery_actions_and_hide_protocol_details() {
+        let raw = "Hardware may have changed. HID interface 3 report 0x1F timed out after SET.";
+        let message = polling_message(raw);
+        assert!(message.starts_with("Refresh rate"));
+        assert!(message.contains("may have applied") && message.contains("will not be retried"));
+        assert!(message.len() <= 90);
+        assert!(!message.contains("HID") && !message.contains("0x1F"));
+        assert!(polling_message("Access denied by HID driver").contains("Wake the device"));
+        assert!(polling_message("Cannot change rate during game").contains("Close the game"));
+        assert!(user_message("Storage: SQLITE_CORRUPT").contains("Couldn't save"));
+        assert!(user_message("History: SQLITE_BUSY").contains("Refresh"));
+        assert!(!user_message("Exported private data-folder path").contains("private"));
+        assert_eq!(
+            user_message("Enter a valid percentage."),
+            "Enter a valid percentage."
+        );
+    }
+    #[test]
+    fn unavailable_controls_explain_the_actual_constraint() {
+        let mut device =
+            ConfigurationDevice::from_reading(&Reading::new("test", "Keyboard", "razer", 0));
+        device.capability = PollingCapability::Unavailable("multiple collections".into());
+        assert!(polling_unavailable(&device).contains("More than one connection"));
+        device.capability = PollingCapability::Unavailable("missing interface".into());
+        assert!(polling_unavailable(&device).contains("Reconnect"));
+        assert!(!polling_unavailable(&device).contains("software running"));
+        device.source = "corsair".into();
+        assert!(polling_unavailable(&device).contains("software running continuously"));
     }
 }
 
@@ -3880,7 +4651,7 @@ fn tray_polling_choices(
     if !settings.polling_controls {
         return vec![choice(
             512,
-            "Enable polling controls in &Settings…".into(),
+            "Allow polling-rate changes in &Settings…".into(),
             true,
             TrayPollingAction::Settings,
         )];
@@ -3900,7 +4671,7 @@ fn tray_polling_choices(
                 "Device request in progress…".into()
             } else {
                 current.map_or_else(
-                    || "Select a rate; hardware support is checked before changing".into(),
+                    || "Choose a rate; the device is checked before changing".into(),
                     |r| format!("Last confirmed: {} Hz", r.hz()),
                 )
             },
@@ -3909,7 +4680,7 @@ fn tray_polling_choices(
         ),
         choice(
             510,
-            "&Refresh hardware rate".into(),
+            "&Refresh rate".into(),
             available,
             TrayPollingAction::Read,
         ),
@@ -3945,6 +4716,7 @@ fn tray_polling_choices(
         ));
     }
     if let Some(status) = polling.status.get(&device.key) {
+        let status = polling_message(status);
         let mut text: String = status.chars().take(90).collect();
         if status.chars().count() > 90 {
             text.push('…');
@@ -4000,7 +4772,7 @@ fn popup_menu(
         {
             let text = wide(&d.text);
             let _ = AppendMenuW(menu.0, MF_STRING | MF_DISABLED, 0, PCWSTR(text.as_ptr()));
-            let _ = AppendMenuW(menu.0, MF_STRING, 503, w!("Device &controls"));
+            let _ = AppendMenuW(menu.0, MF_STRING, 503, w!("Device &settings"));
             let _ = AppendMenuW(menu.0, MF_STRING, 504, w!("Battery &history"));
             let _ = AppendMenuW(menu.0, MF_STRING, 505, w!("&Hide tray icon"));
             let _ = AppendMenuW(menu.0, MF_SEPARATOR, 0, None);
@@ -4017,7 +4789,7 @@ fn popup_menu(
             }
             let _ = AppendMenuW(menu.0, MF_SEPARATOR, 0, None);
         }
-        let _ = AppendMenuW(menu.0, MF_STRING, 500, w!("Open &dashboard"));
+        let _ = AppendMenuW(menu.0, MF_STRING, 500, w!("Open &app"));
         let _ = AppendMenuW(menu.0, MF_STRING, 501, w!("&Refresh"));
         let _ = AppendMenuW(menu.0, MF_STRING, 502, w!("E&xit Halo Battery Next"));
 
@@ -4360,8 +5132,8 @@ mod popup_theme_tests {
     #[test]
     fn menu_mnemonics_skip_escaped_ampersands() {
         assert_eq!(
-            menu_mnemonic(&"Open &dashboard".encode_utf16().collect::<Vec<_>>()),
-            Some('d')
+            menu_mnemonic(&"Open &app".encode_utf16().collect::<Vec<_>>()),
+            Some('a')
         );
         assert_eq!(
             menu_mnemonic(&"Mouse && keyboard".encode_utf16().collect::<Vec<_>>()),
@@ -4392,7 +5164,7 @@ mod popup_theme_tests {
                 assert!(appearance.width > 100);
                 assert_eq!(
                     appearance.items[0].text,
-                    "Open &dashboard".encode_utf16().collect::<Vec<_>>()
+                    "Open &app".encode_utf16().collect::<Vec<_>>()
                 );
                 let mut info = MENUITEMINFOW {
                     cbSize: size_of::<MENUITEMINFOW>() as u32,
@@ -4403,7 +5175,7 @@ mod popup_theme_tests {
                 assert_ne!(info.fType.0 & MFT_OWNERDRAW.0, 0);
                 assert_eq!(info.dwItemData, 1);
                 let result = appearance
-                    .message(WM_MENUCHAR, WPARAM('d' as usize), LPARAM(menu.0.0 as isize))
+                    .message(WM_MENUCHAR, WPARAM('a' as usize), LPARAM(menu.0.0 as isize))
                     .unwrap()
                     .0 as u32;
                 assert_eq!(result >> 16, MNC_EXECUTE);
@@ -4687,10 +5459,41 @@ mod polling_tests {
         assert!(ui.observations.is_empty() && ui.status.is_empty());
     }
     #[test]
-    fn absolute_read_timestamp_handles_epoch_and_leap_day() {
-        assert_eq!(polling_timestamp(0), "1970-01-01 00:00:00 UTC");
-        assert_eq!(polling_timestamp(-1), "1969-12-31 23:59:59 UTC");
-        assert_eq!(polling_timestamp(1709210096), "2024-02-29 12:34:56 UTC");
+    fn local_read_timestamp_handles_epoch_leap_day_and_invalid_dates() {
+        for (timestamp, expected) in [
+            (0, (1970, 1, 1, 0, 0, 0)),
+            (-1, (1969, 12, 31, 23, 59, 59)),
+            (1709210096, (2024, 2, 29, 12, 34, 56)),
+        ] {
+            let utc = timestamp_utc(timestamp).unwrap();
+            assert_eq!(
+                (
+                    utc.wYear,
+                    utc.wMonth,
+                    utc.wDay,
+                    utc.wHour,
+                    utc.wMinute,
+                    utc.wSecond
+                ),
+                expected
+            );
+            let local = timestamp_local(timestamp).unwrap();
+            assert_eq!(
+                polling_timestamp(timestamp),
+                format!(
+                    "{} {} {}, {:02}:{:02}",
+                    local.wDay,
+                    month_name(local.wMonth),
+                    local.wYear,
+                    local.wHour,
+                    local.wMinute
+                )
+            );
+        }
+        for timestamp in [i64::MIN, i64::MAX] {
+            assert!(timestamp_utc(timestamp).is_none());
+            assert_eq!(polling_timestamp(timestamp), "Date unavailable");
+        }
     }
 }
 
@@ -4870,6 +5673,25 @@ mod configuration_device_ui_tests {
 mod history_tests {
     use super::*;
     #[test]
+    fn interactive_resize_defers_queries_until_finished() {
+        let mut resize = HistoryResize::default();
+        assert!(
+            resize.changed(),
+            "Maximize/restore resizes reload immediately"
+        );
+        resize.begin();
+        for _ in 0..500 {
+            assert!(
+                !resize.changed(),
+                "Dragging must not enqueue queries per pixel"
+            );
+        }
+        assert!(resize.finish(), "One query is needed for the final width");
+        assert!(!resize.finish(), "No duplicate query after finishing");
+        resize.begin();
+        assert!(!resize.finish(), "Moving without resizing needs no query");
+    }
+    #[test]
     fn time_used_is_default_and_routes_24_hours_to_usage_query() {
         let selection = HistorySelection::default();
         assert_eq!(selection.axis, HistoryAxis::Usage);
@@ -4889,7 +5711,11 @@ mod history_tests {
             (key.as_str(), seconds, until, width, request),
             ("mouse", 86400, 123456, 640, 7)
         );
-        assert!(selection.description().contains("pauses"));
+        assert!(
+            selection
+                .description()
+                .contains("Pauses during sleep, charging or disconnection")
+        );
     }
     #[test]
     fn calendar_and_usage_keep_independent_ranges_and_route_the_requested_width() {
@@ -4909,7 +5735,11 @@ mod history_tests {
             panic!("Calendar history must use timestamps")
         };
         assert_eq!((since, until, width, request), (395200, 1_000_000, 333, 8));
-        assert!(selection.description().contains("Last known level held"));
+        assert!(
+            selection
+                .description()
+                .contains("last known battery level between readings")
+        );
         selection.axis = HistoryAxis::Usage;
         assert_eq!(selection.index(), 0);
         assert_eq!(selection.labels()[0], "2 hours used");
@@ -5146,49 +5976,42 @@ mod insights_tests {
         let text = rate_insight_text(&rate);
         for expected in [
             "1000 Hz",
-            "Low confidence",
-            "2.0 h awake",
-            "20 percentage points",
-            "15 samples",
-            "4 observed drops",
-            "Estimated full-charge use: about 10 h",
-            "Remaining at recent qualifying reading: Unavailable",
-            "Tentative:",
+            "Early estimate",
+            "2.0 hours of recorded use",
+            "Estimated use from a full battery: about 10 hours",
+            "Estimated time left: Not available right now",
+            "More use on battery will make this estimate more reliable.",
         ] {
             assert!(text.contains(expected), "Missing {expected}: {text}");
         }
         assert_eq!(
             insight_estimate(Some(f64::NAN)),
-            "Not enough discharge evidence"
+            "Keep using the device to build an estimate"
         );
         assert_eq!(
             insight_estimate(Some(-1.0)),
-            "Not enough discharge evidence"
+            "Keep using the device to build an estimate"
         );
         assert!(INSIGHTS_EMPTY.contains("tray menu"));
-        assert!(INSIGHTS_EMPTY.contains("Saved requested rates are never evidence"));
+        assert!(INSIGHTS_EMPTY.contains("Only rates confirmed by the device are included"));
+        assert!(!text.contains("samples") && !text.contains("confidence"));
     }
     #[test]
     fn insight_coverage_explains_empty_rate_evidence_and_corruption() {
         let mut data = BatteryInsights::default();
-        assert!(insight_empty_text(Some(&data)).contains("No retained readings"));
+        assert!(insight_empty_text(Some(&data)).contains("No battery history yet"));
         data.coverage.observation_count = 12;
-        assert!(insight_empty_text(Some(&data)).contains("No usable discharge readings"));
+        assert!(insight_empty_text(Some(&data)).contains("More time on battery is needed"));
         data.coverage.discharge_sample_count = 5;
         data.coverage.awake_seconds = 3600;
         data.coverage.excluded_interval_count = 6;
         data.coverage.unreadable_row_count = 1;
         data.coverage.last_reading_timestamp = Some(0);
-        assert!(insight_empty_text(Some(&data)).contains("no continuous confirmed-rate usage"));
+        assert!(insight_empty_text(Some(&data)).contains("Check the device's current rate"));
         let text = insight_coverage_text(&data);
         for expected in [
-            "12 readings",
-            "5 discharging",
-            "1.0 h counted",
-            "0.0 h with confirmed rate",
-            "6 intervals excluded",
-            "1 unreadable rows",
-            "1970-01-01",
+            "1.0 hours of estimated use in the last 30 days",
+            "Some saved readings could not be used",
         ] {
             assert!(text.contains(expected), "{text}");
         }
@@ -5206,20 +6029,23 @@ mod insights_tests {
             current: true,
         };
         let text = charge_cycle_text(&cycle);
-        assert!(text.contains("Latest discharge summary"));
-        assert!(text.contains("Partial cycle"));
+        assert!(text.contains("Latest session"));
+        assert!(text.contains("Charging was not recorded at the start"));
         assert!(text.contains("70% to 65%"));
-        assert!(text.contains("0.5 h estimated awake time"));
-        assert_eq!(charge_cycle_row(&cycle), "01-01 00:00 · 0.5 h");
-        assert!(text.contains("Average observed drain: 10.0 percentage points/h"));
+        assert!(text.contains("Estimated time used: 30 min"));
+        assert!(charge_cycle_row(&cycle).ends_with(" · 30 min"));
+        assert!(text.contains("Average battery use: 10.0% per hour"));
         cycle.awake_seconds = 0;
         assert!(
-            charge_cycle_text(&cycle).contains("Average observed drain: Not enough awake evidence")
+            charge_cycle_text(&cycle).contains("Average battery use: Not enough recorded use yet")
         );
         cycle.evidence = CycleEvidence::InferredCharge;
-        assert!(charge_cycle_text(&cycle).contains("Inferred charge"));
+        assert!(
+            charge_cycle_text(&cycle)
+                .contains("Possible charging detected from a rising battery level")
+        );
         cycle.evidence = CycleEvidence::ObservedCharge;
-        assert!(charge_cycle_text(&cycle).contains("does not imply a full charge"));
+        assert!(charge_cycle_text(&cycle).contains("may cover only part of a charge"));
     }
     #[test]
     fn closed_or_switched_selection_ignores_insight_replies() {
@@ -5308,6 +6134,7 @@ mod dashboard_lifecycle_tests {
                     page: 1,
                     selected: 0,
                     selected_device: None,
+                    device_form_key: None,
                     configuration_devices: Vec::new(),
                     configuration_generation: 0,
                     configuration_failure: None,
@@ -5315,6 +6142,7 @@ mod dashboard_lifecycle_tests {
                     theme: None,
                     series: HistorySeries::default(),
                     history: HistorySelection::default(),
+                    history_resize: HistoryResize::default(),
                     request: 0,
                     taskbar: RegisterWindowMessageW(w!("TaskbarCreated")),
                     notify: None,
@@ -5322,6 +6150,12 @@ mod dashboard_lifecycle_tests {
                     tray_theme: TrayThemeCache::default(),
                     error: String::new(),
                     font: HFONT::default(),
+                    heading_font: HFONT::default(),
+                    font_dpi: 0,
+                    page_host: None,
+                    page_scroll: 0,
+                    page_height: 0,
+                    more_options: false,
                     polling: PollingUi::default(),
                     tray_polling: PollingUi::default(),
                     insights: InsightsUi::default(),
@@ -5426,7 +6260,7 @@ mod dashboard_lifecycle_tests {
                 let mnemonic = send(
                     state.monitor,
                     WM_MENUCHAR,
-                    WPARAM('d' as usize),
+                    WPARAM('a' as usize),
                     LPARAM(popup.0.0 as isize),
                 );
                 assert_eq!(mnemonic.0 as u32 >> 16, MNC_EXECUTE);
@@ -5496,6 +6330,30 @@ mod dashboard_lifecycle_tests {
             }
             {
                 let mut state = context.state.borrow_mut();
+                state.command(2, 0);
+                state.series =
+                    HistorySeries::calendar(vec![Reading::new("test", "Test", "test", 0)], 0, 10);
+            }
+            let resize_request = context.state.borrow().request;
+            send(first, WM_ENTERSIZEMOVE, WPARAM(0), LPARAM(0));
+            for _ in 0..500 {
+                send(first, WM_SIZE, WPARAM(SIZE_RESTORED as usize), LPARAM(0));
+            }
+            assert_eq!(context.state.borrow().request, resize_request);
+            assert!(!context.state.borrow().series.samples.is_empty());
+            send(first, WM_EXITSIZEMOVE, WPARAM(0), LPARAM(0));
+            assert_eq!(
+                context.state.borrow().request,
+                resize_request.wrapping_add(1)
+            );
+            send(first, WM_SIZE, WPARAM(SIZE_MINIMIZED as usize), LPARAM(0));
+            assert_eq!(
+                context.state.borrow().request,
+                resize_request.wrapping_add(1)
+            );
+            context.state.borrow_mut().command(1, 0);
+            {
+                let mut state = context.state.borrow_mut();
                 let mut keyboard = ConfigurationDevice::from_reading(&Reading::new(
                     "keyboard-only",
                     "Test keyboard",
@@ -5562,7 +6420,7 @@ mod dashboard_lifecycle_tests {
                         0
                     );
                 }
-                assert!(state.text(45).contains("Unsupported keyboard protocol"));
+                assert!(state.text(45).contains("rate controls are unavailable"));
                 state.command(2, 0);
                 assert_eq!(
                     send(state.controls[&10], CB_GETCOUNT, WPARAM(0), LPARAM(0)).0,
@@ -5610,8 +6468,14 @@ mod dashboard_lifecycle_tests {
             }
             {
                 let mut state = context.state.borrow_mut();
-                let mut reading = Reading::new("synthetic-mouse", "Test mouse", "razer", 0);
+                let mut reading = Reading::new(
+                    "synthetic-mouse",
+                    "Test mouse",
+                    "razer",
+                    SystemClock::default().unix(),
+                );
                 reading.level = Some(50);
+                reading.charging = Some(false);
                 state.snapshot.devices = vec![DeviceView {
                     reading,
                     name: "Test mouse".into(),
@@ -5621,6 +6485,67 @@ mod dashboard_lifecycle_tests {
                     text: "Test mouse: 50%".into(),
                     hidden: false,
                 }];
+                state.error.clear();
+                state.settings.polling_controls = true;
+                state
+                    .settings
+                    .devices
+                    .entry("synthetic-mouse".into())
+                    .or_default()
+                    .requested_polling_rate = Some(PollingRate::try_from(8000).unwrap());
+                let target = ControlTarget {
+                    device: ConfigurationDevice::from_reading(&state.snapshot.devices[0].reading),
+                    generation: state.polling.generation,
+                };
+                state.polling.observations.insert(
+                    "synthetic-mouse".into(),
+                    PollingObservation {
+                        target,
+                        rate: Some(PollingRate::try_from(1000).unwrap()),
+                        supported: [125, 250, 500, 1000, 2000, 4000, 8000]
+                            .into_iter()
+                            .map(|hz| PollingRate::try_from(hz).unwrap())
+                            .collect(),
+                        timestamp: SystemClock::default().unix(),
+                        evidence: "Synthetic UI fixture".into(),
+                    },
+                );
+                let now = SystemClock::default().unix();
+                let insights = BatteryInsights {
+                    rates: vec![RateInsight {
+                        hz: 1000,
+                        awake_seconds: 7200,
+                        projection_seconds: 7200,
+                        projection_consumed_percent: 20,
+                        projection_drop_count: 4,
+                        consumed_percent: 20,
+                        sample_count: 15,
+                        drop_count: 4,
+                        confidence: InsightConfidence::Low,
+                        projected_full_charge_hours: Some(10.0),
+                        remaining_hours: Some(5.0),
+                    }],
+                    cycles: vec![ChargeCycle {
+                        start_timestamp: now - 7200,
+                        end_timestamp: now,
+                        awake_seconds: 7200,
+                        start_percent: 70,
+                        end_percent: 50,
+                        consumed_percent: 20,
+                        evidence: CycleEvidence::ObservedCharge,
+                        current: true,
+                    }],
+                    coverage: InsightCoverage {
+                        observation_count: 15,
+                        discharge_sample_count: 15,
+                        awake_seconds: 7200,
+                        last_reading_timestamp: Some(now),
+                        ..Default::default()
+                    },
+                };
+                state.insights.status = insight_coverage_text(&insights);
+                state.insights.data = Some(insights);
+                state.insights.key = Some("synthetic-mouse".into());
             }
             // Exercise each page against actual native brushes/controls without
             // changing the user's Windows appearance or stored settings.
@@ -5630,6 +6555,7 @@ mod dashboard_lifecycle_tests {
                     {
                         let mut state = context.state.borrow_mut();
                         state.page = page;
+                        state.page_scroll = 0;
                         state.apply_theme(DashboardTheme::new(dark, false));
                         expected = state.theme.as_ref().unwrap().palette.background;
                         state.build();
@@ -5664,7 +6590,7 @@ mod dashboard_lifecycle_tests {
                                     LPARAM(PRF_CLIENT as isize),
                                 );
                                 assert_eq!(
-                                    GetPixel(dc, rect.right / 2, rect.bottom / 2),
+                                    GetPixel(dc, rect.right - 40, rect.bottom / 2),
                                     background,
                                     "reentrant control {id}, dark={dark}"
                                 );
@@ -5723,12 +6649,27 @@ mod dashboard_lifecycle_tests {
                         "client paint page {page}, dark={dark}"
                     );
                     if std::env::var_os("HALO_CAPTURE_DASHBOARD_TEST").is_some() {
+                        // WM_PRINT uses window-relative coordinates even without
+                        // PRF_NONCLIENT. Compensate for the frame so the capture
+                        // contains the entire client, including its fixed footer.
+                        let mut origin = POINT::default();
+                        let mut window = RECT::default();
+                        let _ = ClientToScreen(reopened, &mut origin);
+                        GetWindowRect(reopened, &mut window).unwrap();
+                        let mut previous_origin = POINT::default();
+                        let _ = SetViewportOrgEx(
+                            dc,
+                            window.left - origin.x,
+                            window.top - origin.y,
+                            Some(&mut previous_origin),
+                        );
                         send(
                             reopened,
                             WM_PRINT,
                             WPARAM(dc.0 as usize),
                             LPARAM((PRF_CLIENT | PRF_CHILDREN | PRF_ERASEBKGND) as isize),
                         );
+                        let _ = SetViewportOrgEx(dc, previous_origin.x, previous_origin.y, None);
                         SelectObject(dc, old);
                         let mut info = BITMAPINFO::default();
                         info.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
@@ -5793,6 +6734,104 @@ mod dashboard_lifecycle_tests {
                     assert_eq!(state.page, 3);
                     assert_eq!(state.dashboard, Some(reopened));
                 }
+                let fonts = (state.font, state.heading_font);
+                let more = state.controls[&212];
+                state.command(212, 0);
+                assert!(state.more_options);
+                assert_eq!(state.controls[&212], more);
+                assert_eq!(state.controls[&201], interval);
+                assert_eq!(state.text(201), "1234");
+                assert!(IsWindowVisible(state.controls[&209]).as_bool());
+                state.command(212, 0);
+                assert!(!IsWindowVisible(state.controls[&209]).as_bool());
+                assert_eq!(state.text(201), "1234");
+                state.set_control_text(201, "invalid");
+                state.command(210, 0);
+                assert_eq!(state.controls[&201], interval);
+                assert_eq!(state.text(201), "invalid");
+                assert!(state.text(95).starts_with("Enter "));
+                state.set_control_text(201, "60");
+                let dpi = GetDpiForWindow(reopened).max(96) as i32;
+                SetWindowPos(
+                    reopened,
+                    None,
+                    0,
+                    0,
+                    840 * dpi / 96,
+                    480 * dpi / 96,
+                    SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+                )
+                .unwrap();
+                state.layout_page();
+                let host = state.page_host.unwrap();
+                let save = state.controls[&210];
+                let mut footer = RECT::default();
+                GetWindowRect(save, &mut footer).unwrap();
+                state.scroll_page(i32::MAX);
+                assert!(state.page_scroll > 0);
+                let mut scroll = SCROLLINFO {
+                    cbSize: size_of::<SCROLLINFO>() as u32,
+                    fMask: SIF_ALL,
+                    ..Default::default()
+                };
+                GetScrollInfo(host, SB_VERT, &mut scroll).unwrap();
+                assert_eq!(state.page_scroll, scroll.nPos);
+                let mut current_footer = RECT::default();
+                GetWindowRect(save, &mut current_footer).unwrap();
+                assert_eq!(footer, current_footer);
+                let mut content = RECT::default();
+                let mut pane = RECT::default();
+                GetWindowRect(state.controls[&212], &mut content).unwrap();
+                GetWindowRect(host, &mut pane).unwrap();
+                assert!(content.top >= pane.top && content.bottom <= pane.bottom);
+                state.scroll_page(0);
+                let _ = SetFocus(Some(state.controls[&212]));
+                state.keep_focus_visible();
+                assert!(state.page_scroll > 0);
+                GetWindowRect(state.controls[&212], &mut content).unwrap();
+                assert!(content.top >= pane.top && content.bottom <= pane.bottom);
+                let _ = SetFocus(Some(state.controls[&201]));
+                state.keep_focus_visible();
+                state.build();
+                assert_eq!(GetFocus(), state.controls[&201]);
+                assert_eq!((state.font, state.heading_font), fonts);
+                assert!(!IsWindow(Some(host)).as_bool());
+                state.command(1, 0);
+                assert_eq!(
+                    send(state.controls[&1], BM_GETCHECK, WPARAM(0), LPARAM(0)).0,
+                    1
+                );
+                assert_eq!(
+                    send(state.controls[&3], BM_GETCHECK, WPARAM(0), LPARAM(0)).0,
+                    0
+                );
+                state.set_control_text(11, "Unsaved mouse name");
+                state.set_control_text(13, "invalid");
+                let name = state.controls[&11];
+                state.command(15, 0);
+                assert_eq!(state.controls[&11], name);
+                assert_eq!(state.text(11), "Unsaved mouse name");
+                assert_eq!(state.text(13), "invalid");
+                state.build();
+                assert_eq!(state.text(11), "Unsaved mouse name");
+                assert_eq!(state.text(13), "invalid");
+                state.command(16, 0);
+                assert_ne!(state.text(11), "Unsaved mouse name");
+                assert!(state.text(13).is_empty());
+                state.set_control_text(11, "Another unsaved name");
+                let name = state.controls[&11];
+                state.error = "Storage: native database diagnostic".into();
+                state.command(5, 0);
+                assert_eq!(state.controls[&11], name);
+                assert!(!state.text(95).contains("database"));
+                let report: serde_json::Value = serde_json::from_slice(
+                    &std::fs::read(state.dir.join("diagnostics.json")).unwrap(),
+                )
+                .unwrap();
+                assert_eq!(
+                    report["application_error"],
+                    "Storage: native database diagnostic"
+                );
             }
             // The titlebar X enters DefWindowProc(SC_CLOSE), which synchronously
             // reenters WM_CLOSE. Default processing must release State first.
@@ -5804,6 +6843,47 @@ mod dashboard_lifecycle_tests {
             );
             dispatch_monitor(monitor);
             assert!(context.state.borrow().dashboard.is_none());
+            if !restore {
+                use windows::Win32::System::Threading::{
+                    GR_GDIOBJECTS, GR_USEROBJECTS, GetCurrentProcess, GetGuiResources,
+                };
+                let process = GetCurrentProcess();
+                let mut baseline = None;
+                for cycle in 0..40 {
+                    let mut state = context.state.borrow_mut();
+                    state.open();
+                    let window = state.dashboard.unwrap();
+                    state.page = 3;
+                    state.build();
+                    state.command(212, 0);
+                    state.scroll_page(i32::MAX);
+                    state.close_dashboard(window);
+                    assert!(state.dashboard.is_none() && state.page_host.is_none());
+                    assert!(
+                        state.controls.is_empty() && state.chart.is_none() && state.theme.is_none()
+                    );
+                    assert!(state.font.is_invalid() && state.heading_font.is_invalid());
+                    let handles = (
+                        GetGuiResources(process, GR_GDIOBJECTS),
+                        GetGuiResources(process, GR_USEROBJECTS),
+                    );
+                    if cycle == 0 {
+                        baseline = Some(handles);
+                    }
+                    if cycle == 39 {
+                        let first = baseline.unwrap();
+                        assert!(
+                            handles.0 <= first.0 && handles.1 <= first.1,
+                            "closed dashboard native resources grew: {first:?} -> {handles:?}"
+                        );
+                        if std::env::var_os("HALO_CAPTURE_DASHBOARD_TEST").is_some() {
+                            eprintln!(
+                                "Closed dashboard native handles, cycles 1 and 40: {first:?} -> {handles:?}"
+                            );
+                        }
+                    }
+                }
+            }
             context.state.borrow_mut().runtime.stop();
             DestroyWindow(monitor).unwrap();
             UnregisterClassW(class, Some(instance.into())).unwrap();

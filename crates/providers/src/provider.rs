@@ -110,6 +110,61 @@ impl HidProvider {
             razer_cache: BTreeMap::new(),
         }
     }
+    /// Called only after all vendor enumerations succeeded. Absence is then
+    /// evidence for releasing protocol hints, not a transient enumeration error.
+    fn prune_enumerated(&mut self, infos: &[HidInfo], now: Duration) {
+        if self.last.is_empty()
+            && self.last_observed.is_empty()
+            && self.razer_dead.is_empty()
+            && self.razer_cache.is_empty()
+            && self.steel_path.is_empty()
+            && self.family_names.is_empty()
+            && self.mchose_models.is_empty()
+        {
+            return;
+        }
+        let paths: BTreeSet<_> = infos.iter().map(|i| i.path.as_str()).collect();
+        self.razer_dead
+            .retain(|path, until| *until > now && paths.contains(path.as_str()));
+        self.razer_cache
+            .retain(|_, (path, _)| paths.contains(path.as_str()));
+        self.steel_path
+            .retain(|_, path| paths.contains(path.as_str()));
+        self.mchose_models
+            .retain(|path, _| paths.contains(path.as_str()));
+        if self.last.is_empty() && self.family_names.is_empty() {
+            self.last_observed.clear();
+            return;
+        }
+        let live: BTreeSet<_> = infos
+            .iter()
+            .filter_map(|i| {
+                DEVICES
+                    .iter()
+                    .find(|d| {
+                        d.provider == self.id && d.vid == i.vendor_id && d.pid == i.product_id
+                    })
+                    .map(|d| reading_key(self.id, d, i))
+                    .or_else(|| {
+                        (self.id == "mchose" && [0x5253, 0x3837].contains(&i.vendor_id))
+                            .then(|| format!("mchose:{:04x}:{}", i.vendor_id, trusted_identity(i)))
+                    })
+            })
+            .collect();
+        self.family_names.retain(|key, _| live.contains(key));
+        self.last.retain(|key, reading| {
+            let recent = self
+                .last_observed
+                .get(key)
+                .is_some_and(|at| now.saturating_sub(*at) < Duration::from_secs(300));
+            live.contains(key)
+                && (recent || self.id == "jbl" || self.id == "razer" && reading.kind == "mouse")
+                || self.id == "mchose" && recent
+        });
+        self.last_observed
+            .retain(|key, _| self.last.contains_key(key));
+    }
+
     fn log(&mut self, text: impl Into<String>) {
         if self.diagnostics.len() < 120 {
             self.diagnostics.push(text.into());
@@ -1305,6 +1360,20 @@ impl HidProvider {
         for (key, info) in headsets {
             groups.entry(key).or_default().entry(2).or_insert(info);
         }
+        let active_slots: BTreeSet<_> = groups
+            .keys()
+            .flat_map(|(pid, group)| {
+                [1, 2, 3, 4, 5, 6, 255]
+                    .into_iter()
+                    .map(move |slot| format!("{pid:04x}:{group}:{slot}"))
+            })
+            .collect();
+        self.logitech_identity
+            .retain(|slot, _| active_slots.contains(slot));
+        self.logitech_asleep
+            .retain(|slot| active_slots.contains(slot));
+        self.logitech_slots
+            .retain(|slot, _| active_slots.contains(slot));
         let mut found: BTreeMap<String, Reading> = BTreeMap::new();
         for ((pid, group), paths) in &groups {
             if !c.active() {
@@ -1354,6 +1423,10 @@ impl HidProvider {
                             self.logitech_asleep.remove(&slot_key);
                             if error == 8 {
                                 self.logitech_identity.remove(&slot_key);
+                                if let Some(old) = self.logitech_slots.remove(&slot_key) {
+                                    self.last.remove(&old);
+                                    self.last_observed.remove(&old);
+                                }
                             }
                         } else {
                             self.log(format!("slot {slot}: no reply, device asleep"));
@@ -1469,6 +1542,8 @@ impl HidProvider {
                 false
             }
         });
+        self.last_observed
+            .retain(|key, _| self.last.contains_key(key));
         Ok(out)
     }
     fn cached(&self, key: &str, now: Duration) -> Option<Reading> {
@@ -1537,6 +1612,35 @@ fn set_battery(r: &mut Reading, b: Battery) {
 pub fn is_bluetooth(path: &str) -> bool {
     let p = path.to_lowercase();
     p.contains("vid&") || p.contains("00001124-0000-1000-8000-00805f9b34fb")
+}
+fn reading_key(id: &str, d: &Device, i: &HidInfo) -> String {
+    let identity = trusted_identity(i);
+    if ["wlmouse", "gwolves", "lamzu", "am_infinity", "lofree"].contains(&id) {
+        format!("{}:{identity}", id)
+    } else if id == "mchose" {
+        format!("mchose:{:04x}:{identity}", d.vid)
+    } else if id == "asus" {
+        format!(
+            "asus:{}:{identity}",
+            d.name.to_lowercase().replace(' ', "-")
+        )
+    } else if id == "pulsar" {
+        format!("pulsar:{:04x}{:04x}:{identity}", d.vid, d.pid)
+    } else if id == "audeze" {
+        format!("audeze:{identity}")
+    } else if id == "playstation" {
+        format!("ps:{:04x}:{identity}", d.pid)
+    } else if id == "eightbitdo" {
+        format!("8bitdo:{:04x}:{identity}", d.pid)
+    } else if id == "razer" {
+        format!("razer:{:04x}:{identity}", d.pid)
+    } else if id == "nintendo" {
+        format!("switch:{:04x}:{identity}", d.pid)
+    } else if ["hyperx_cloud3", "hyperx_alpha2"].contains(&id) {
+        format!("hyperx:{:04x}:{identity}", d.pid)
+    } else {
+        format!("{}:{:04x}:{identity}", id, d.pid)
+    }
 }
 pub fn receiver_key(info: &HidInfo) -> String {
     info.container
@@ -1708,6 +1812,9 @@ impl BatteryProvider for HidProvider {
         for &vendor in &self.vendors {
             infos.extend(hid.enumerate(vendor)?);
         }
+        if self.id != "logitech" {
+            self.prune_enumerated(&infos, c.clock.monotonic());
+        }
         if self.id == "pulsar" {
             for info in &infos {
                 if DEVICES.iter().any(|d| {
@@ -1862,34 +1969,7 @@ impl BatteryProvider for HidProvider {
             {
                 continue;
             }
-            let identity = trusted_identity(i);
-            let key = if ["wlmouse", "gwolves", "lamzu", "am_infinity", "lofree"].contains(&self.id)
-            {
-                format!("{}:{identity}", self.id)
-            } else if self.id == "mchose" {
-                format!("mchose:{:04x}:{identity}", d.vid)
-            } else if self.id == "asus" {
-                format!(
-                    "asus:{}:{identity}",
-                    d.name.to_lowercase().replace(' ', "-")
-                )
-            } else if self.id == "pulsar" {
-                format!("pulsar:{:04x}{:04x}:{identity}", d.vid, d.pid)
-            } else if self.id == "audeze" {
-                format!("audeze:{identity}")
-            } else if self.id == "playstation" {
-                format!("ps:{:04x}:{identity}", d.pid)
-            } else if self.id == "eightbitdo" {
-                format!("8bitdo:{:04x}:{identity}", d.pid)
-            } else if self.id == "razer" {
-                format!("razer:{:04x}:{identity}", d.pid)
-            } else if self.id == "nintendo" {
-                format!("switch:{:04x}:{identity}", d.pid)
-            } else if ["hyperx_cloud3", "hyperx_alpha2"].contains(&self.id) {
-                format!("hyperx:{:04x}:{identity}", d.pid)
-            } else {
-                format!("{}:{:04x}:{identity}", self.id, d.pid)
-            };
+            let key = reading_key(self.id, &d, i);
             if ["wlmouse", "gwolves", "lamzu"].contains(&self.id)
                 && output
                     .iter()
@@ -2421,5 +2501,162 @@ mod allocation_tests {
             )),
             0
         );
+    }
+}
+
+#[cfg(test)]
+#[path = "../tests/common/mod.rs"]
+mod cache_test_support;
+
+#[cfg(test)]
+mod cache_retention_tests {
+    use super::cache_test_support::{FakeClock, FakeHid, context, info};
+    use super::*;
+    use std::sync::atomic::AtomicBool;
+
+    struct EnumerationFailure;
+    impl HidTransport for EnumerationFailure {
+        fn enumerate(&self, _: u16) -> Result<Vec<HidInfo>, ProviderError> {
+            Err(ProviderError::new("synthetic enumeration failure"))
+        }
+        fn open(&self, _: &HidInfo) -> Result<Box<dyn HidSession>, ProviderError> {
+            panic!("enumeration failure must not open hardware")
+        }
+    }
+
+    #[test]
+    fn confirmed_hotplug_absence_releases_protocol_hints_but_enumeration_errors_do_not() {
+        let clock = FakeClock::default();
+        let cancel = AtomicBool::new(false);
+        for id in ["razer", "steelseries", "wlmouse", "mchose"] {
+            let mut provider = HidProvider::new(id);
+            for index in 0..1000 {
+                let key = format!("invented-{index}");
+                provider
+                    .last
+                    .insert(key.clone(), Reading::new(&key, "Invented", id, 0));
+                provider.last_observed.insert(key.clone(), Duration::ZERO);
+                provider
+                    .razer_dead
+                    .insert(key.clone(), Duration::from_secs(300));
+                provider.razer_cache.insert(key.clone(), (key.clone(), 0));
+                provider.steel_path.insert(key.clone(), key.clone());
+                provider.family_names.insert(key.clone(), "Invented".into());
+                provider.mchose_models.insert(key, 0x31);
+            }
+            assert!(
+                provider
+                    .poll(&EnumerationFailure, &context(&clock, &cancel))
+                    .is_err()
+            );
+            assert_eq!(provider.last.len(), 1000);
+            assert_eq!(provider.razer_dead.len(), 1000);
+            // After the existing finite MCHOSE absent-receiver grace, all rows
+            // must be released; errors above did not establish absence.
+            clock.0.store(301_000, std::sync::atomic::Ordering::Relaxed);
+            assert!(
+                provider
+                    .poll(&FakeHid::new(vec![], vec![]), &context(&clock, &cancel))
+                    .unwrap()
+                    .is_empty()
+            );
+            assert!(provider.last.is_empty());
+            assert!(provider.last_observed.is_empty());
+            assert!(provider.razer_dead.is_empty());
+            assert!(provider.razer_cache.is_empty());
+            assert!(provider.steel_path.is_empty());
+            assert!(provider.family_names.is_empty());
+            assert!(provider.mchose_models.is_empty());
+            clock.0.store(0, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    #[test]
+    fn present_razer_mouse_keeps_long_sleep_identity_without_expired_dead_paths() {
+        let mut provider = HidProvider::new("razer");
+        let device = info(0x1532, 0x00b9, 1);
+        let d = DEVICES
+            .iter()
+            .find(|d| d.provider == "razer" && d.pid == device.product_id)
+            .unwrap();
+        let key = reading_key("razer", d, &device);
+        let mut reading = Reading::new(&key, "Invented mouse", "razer", 0);
+        reading.kind = "mouse".into();
+        reading.level = Some(71);
+        provider.last.insert(key.clone(), reading);
+        provider.last_observed.insert(key.clone(), Duration::ZERO);
+        provider
+            .razer_dead
+            .insert(device.path.clone(), Duration::from_secs(300));
+        provider
+            .razer_cache
+            .insert("hint".into(), (device.path.clone(), 0x1f));
+        provider.prune_enumerated(std::slice::from_ref(&device), Duration::from_secs(3600));
+        let sleeping = provider.cached(&key, Duration::from_secs(3600)).unwrap();
+        assert_eq!(sleeping.connection, Connection::Sleeping);
+        assert_eq!((sleeping.level, sleeping.charging), (None, None));
+        assert_eq!(provider.last_observed.len(), 1);
+        assert_eq!(provider.razer_cache.len(), 1);
+        assert!(provider.razer_dead.is_empty());
+        provider.prune_enumerated(&[], Duration::from_secs(3601));
+        assert!(provider.last.is_empty());
+        assert!(provider.last_observed.is_empty());
+        assert!(provider.razer_cache.is_empty());
+    }
+
+    #[test]
+    fn absent_mchose_grace_is_preserved_then_released_and_logitech_slots_do_not_accumulate() {
+        let clock = FakeClock::default();
+        let cancel = AtomicBool::new(false);
+        let mut provider = HidProvider::new("mchose");
+        let mut reading = Reading::new("invented", "Invented", "mchose", 0);
+        reading.level = Some(80);
+        provider.last.insert("invented".into(), reading);
+        provider
+            .last_observed
+            .insert("invented".into(), Duration::ZERO);
+        let empty = FakeHid::new(vec![], vec![]);
+        clock.0.store(299_000, std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(
+            provider
+                .poll(&empty, &context(&clock, &cancel))
+                .unwrap()
+                .len(),
+            1
+        );
+        clock.0.store(300_000, std::sync::atomic::Ordering::Relaxed);
+        assert!(
+            provider
+                .poll(&empty, &context(&clock, &cancel))
+                .unwrap()
+                .is_empty()
+        );
+        assert!(provider.last.is_empty());
+        assert!(provider.last_observed.is_empty());
+        let mut provider = HidProvider::new("logitech");
+        for index in 0..1000 {
+            let key = format!("invented-{index}");
+            provider.logitech_identity.insert(
+                key.clone(),
+                ("Invented".into(), "mouse".into(), key.clone()),
+            );
+            provider.logitech_asleep.insert(key.clone());
+            provider.logitech_slots.insert(key.clone(), key.clone());
+            provider
+                .last
+                .insert(key.clone(), Reading::new(&key, "Invented", "logitech", 0));
+            provider.last_observed.insert(key, Duration::ZERO);
+        }
+        assert!(
+            provider
+                .poll(&empty, &context(&clock, &cancel))
+                .unwrap()
+                .is_empty()
+        );
+        assert!(provider.logitech_identity.is_empty());
+        assert!(provider.logitech_asleep.is_empty());
+        assert!(provider.logitech_slots.is_empty());
+        assert!(provider.last.is_empty());
+        assert!(provider.last_observed.is_empty());
     }
 }

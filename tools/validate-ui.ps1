@@ -29,7 +29,17 @@ public static class HaloShot {
  [DllImport("user32.dll")] public static extern IntPtr GetFocus();
  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr w);
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr w);
- [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr w,int i);
+ [DllImport("user32.dll",EntryPoint="GetDlgItem")] static extern IntPtr DirectDlgItem(IntPtr w,int i);
+ [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr w,EnumProc c,IntPtr p);
+ [DllImport("user32.dll")] static extern int GetDlgCtrlID(IntPtr w);
+ public static IntPtr GetDlgItem(IntPtr w,int i){
+  if(w==IntPtr.Zero)return IntPtr.Zero;
+  uint owner;GetWindowThreadProcessId(w,out owner);if(owner!=TargetPid)return IntPtr.Zero;
+  var found=DirectDlgItem(w,i);if(found!=IntPtr.Zero)return found;
+  // Page controls can be nested; enumeration stays within this owned parent.
+  EnumChildWindows(w,(h,p)=>{uint pid;GetWindowThreadProcessId(h,out pid);if(pid==TargetPid&&GetDlgCtrlID(h)==i){found=h;return false;}return true;},IntPtr.Zero);
+  return found;
+ }
  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr w,uint m,UIntPtr p,IntPtr l);
  public delegate bool EnumProc(IntPtr h,IntPtr p);
  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc c,IntPtr p);
@@ -46,6 +56,17 @@ public static class HaloShot {
 "@ -ReferencedAssemblies System.Drawing.Common,System.Runtime,System.Drawing.Primitives,System.Runtime.InteropServices,System.Private.Windows.GdiPlus,System.Private.Windows.Core,System.Text.Encoding.Extensions
 [HaloShot]::SetThreadDpiAwarenessContext([IntPtr](-4))|Out-Null
 $exe=Join-Path $repo 'target/x86_64-pc-windows-msvc/release/HaloBatteryNext.exe'
+# Saving Settings writes the shared Windows startup registration, even when
+# config/history live in an isolated data directory. Restore its exact value.
+$startupRunPath='Software\Microsoft\Windows\CurrentVersion\Run'
+$startupRunKey=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($startupRunPath)
+try {
+ $originalStartupExists=$null-ne$startupRunKey-and($startupRunKey.GetValueNames()-contains'HaloBatteryNext')
+ if($originalStartupExists){
+  $originalStartupValue=$startupRunKey.GetValue('HaloBatteryNext',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+  $originalStartupKind=$startupRunKey.GetValueKind('HaloBatteryNext')
+ }
+}finally{if($null-ne$startupRunKey){$startupRunKey.Dispose()}}
 $p=Start-Process $exe -ArgumentList @('--background','--simulate','--data-dir',"`"$folder`"") -PassThru -WindowStyle Hidden
 [HaloShot]::TargetPid=$p.Id
 try {
@@ -71,12 +92,12 @@ foreach($page in 1..3){[HaloShot]::PostMessage($dashboard,273,[UIntPtr]$page,[In
 [HaloShot]::PostMessage($dashboard,273,[UIntPtr]2,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 250
 $axis=[HaloShot]::GetDlgItem($dashboard,21);$range=[HaloShot]::GetDlgItem($dashboard,20)
 if([HaloShot]::SendMessage($axis,327,[UIntPtr]::Zero,[IntPtr]::Zero).ToInt32()-ne0-or[HaloShot]::SendMessage($range,327,[UIntPtr]::Zero,[IntPtr]::Zero).ToInt32()-ne2){throw 'History must default to Time used/24hours used'}
-if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,96))-notlike'*Estimated awake time*pauses*'){throw 'Usage explanation missing'}
+if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,96))-notlike'*Estimated*time used*pauses*sleep*charging*disconnection*'){throw 'Usage explanation missing'}
 [HaloShot]::Save($dashboard,(Join-Path $folder 'history-usage.png'))
 # CBN_SELCHANGE=1 in the high word invokes the actual native selection handler.
 [HaloShot]::SendMessage($axis,334,[UIntPtr]1,[IntPtr]::Zero)|Out-Null
 [HaloShot]::PostMessage($dashboard,273,[UIntPtr](65536+21),[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 250
-if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,96))-notlike'*Last known level held*'){throw 'Calendar explanation missing'}
+if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,96))-notlike'*Calendar time*last known*battery level*between readings*'){throw 'Calendar explanation missing'}
 $range=[HaloShot]::GetDlgItem($dashboard,20)
 if([HaloShot]::SendMessage($range,327,[UIntPtr]::Zero,[IntPtr]::Zero).ToInt32()-ne0){throw 'Calendar must initially select24hours'}
 [HaloShot]::Save($dashboard,(Join-Path $folder 'history-calendar-24h.png'))
@@ -143,8 +164,8 @@ Write-Output 'Per-device low threshold30,0disable and blank/default persisted wi
 # Polling-rate automation is exclusively the runtime simulation, never a hardware device.
 function Wait-Rate([int]$hz){
  $deadline=[DateTime]::UtcNow.AddSeconds(5)
- do {Start-Sleep -Milliseconds 100;$text=[HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,44));$ready=[HaloShot]::IsWindowEnabled([HaloShot]::GetDlgItem($dashboard,41))}while((!$ready-or$text-ne"Device-reported configured rate: $hz Hz")-and[DateTime]::UtcNow-lt$deadline)
- if(!$ready-or$text-ne"Device-reported configured rate: $hz Hz"){throw "Simulation rate not verified: wanted $hz, saw $text"}
+ do {Start-Sleep -Milliseconds 100;$text=[HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,44));$ready=[HaloShot]::IsWindowEnabled([HaloShot]::GetDlgItem($dashboard,41))}while((!$ready-or$text-notlike"Last confirmed rate: $hz Hz*")-and[DateTime]::UtcNow-lt$deadline)
+ if(!$ready-or$text-notlike"Last confirmed rate: $hz Hz*"){throw "Simulation rate not verified: wanted $hz, saw $text"}
 }
 function Set-SimRate([int]$index,[int]$hz){
  [HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,43),334,[UIntPtr]$index,[IntPtr]::Zero)|Out-Null
@@ -159,7 +180,7 @@ if([HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,112),240,[UIntPtr]:
 [HaloShot]::PostMessage($dashboard,273,[UIntPtr]210,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 200
 [HaloShot]::PostMessage($dashboard,273,[UIntPtr]1,[IntPtr]::Zero)|Out-Null
 Wait-Rate 1000
-if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,45))-notlike'*UTC*Simulation*'){throw 'Hardware read time/evidence missing'}
+if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,45))-notlike'Checked *Refresh*another app*'){throw 'Rate check time and refresh guidance missing'}
 Set-SimRate 5 8000
 # Saving ordinary device preferences must preserve intent without changing hardware.
 [HaloShot]::PostMessage($dashboard,273,[UIntPtr]15,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
@@ -183,7 +204,7 @@ $p.Refresh();$cold=@{user=[HaloShot]::GetGuiResources($p.Handle,1);gdi=[HaloShot
 [HaloShot]::PostMessage($monitor,32776,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 400
 $dashboard=[HaloShot]::FindWindow($null,'Halo Battery Next')
 Wait-Rate 1000
-if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,46))-notlike'*8000 Hz*'){throw 'Restart lost the last requested intent'}
+if([HaloShot]::Text([HaloShot]::GetDlgItem($dashboard,46))-notlike'Saved choice: 8000 Hz*'){throw 'Restart lost the last requested intent'}
 [HaloShot]::PostMessage($dashboard,273,[UIntPtr]3,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
 [HaloShot]::SendMessage([HaloShot]::GetDlgItem($dashboard,112),241,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
 [HaloShot]::PostMessage($dashboard,273,[UIntPtr]210,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 150
@@ -261,4 +282,13 @@ Write-Output 'Forty titlebar-close/reopen cycles passed; normal duplicate opens 
 [HaloShot]::PostMessage($monitor,32778,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null
 if(!$p.WaitForExit(30000)){throw 'Quit timeout'}
 Write-Output "Screenshots saved. Closed dashboard retains monitor; quit exit=$($p.ExitCode)."
-}finally{if(!$p.HasExited){Stop-Process -Id $p.Id}}
+}finally{
+ try{if(!$p.HasExited){Stop-Process -Id $p.Id}}
+ finally{
+  $startupRunKey=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($startupRunPath)
+  try{
+   if($originalStartupExists){$startupRunKey.SetValue('HaloBatteryNext',$originalStartupValue,$originalStartupKind)}
+   else{$startupRunKey.DeleteValue('HaloBatteryNext',$false)}
+  }finally{$startupRunKey.Dispose()}
+ }
+}

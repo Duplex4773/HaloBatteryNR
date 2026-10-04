@@ -176,6 +176,14 @@ pub struct BluetoothProvider {
     diagnostics: Vec<String>,
 }
 impl BluetoothProvider {
+    fn retain_inventory(&mut self, nodes: &BTreeMap<String, Node>) {
+        // Call only after a complete successful PnP inventory. Disconnected
+        // paired devices still have nodes, so their last level survives sleep.
+        self.links.retain(|mac, _| nodes.contains_key(mac));
+        self.link_status
+            .retain(|mac, _| self.links.contains_key(mac));
+        self.levels.retain(|mac, _| nodes.contains_key(mac));
+    }
     pub fn invalidate(&mut self) {
         self.changed.store(true, Ordering::Relaxed);
     }
@@ -303,9 +311,7 @@ impl BluetoothProvider {
                 node.fallback = Some(node.fallback.unwrap_or(false) || value != 0)
             }
         }
-        self.links.retain(|mac, _| nodes.contains_key(mac));
-        self.link_status
-            .retain(|mac, _| self.links.contains_key(mac));
+        self.retain_inventory(&nodes);
         let mut out = Vec::new();
         self.diagnostics.clear();
         for (mac, node) in nodes {
@@ -555,6 +561,26 @@ impl BatteryProvider for ControllerProvider {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bluetooth_level_cache_tracks_inventory_and_retains_sleeping_paired_devices() {
+        let mut provider = BluetoothProvider::default();
+        provider.levels.insert("sleeping-paired".into(), 75);
+        provider.levels.insert("removed-pairing".into(), 40);
+        let mut nodes = BTreeMap::new();
+        nodes.insert("sleeping-paired".into(), Node::default());
+        provider.retain_inventory(&nodes);
+        assert_eq!(provider.levels.get("sleeping-paired"), Some(&75));
+        assert!(!provider.levels.contains_key("removed-pairing"));
+        for index in 0..1000 {
+            let mac = format!("new-pairing-{index}");
+            provider.levels.insert(mac.clone(), 50);
+            nodes.retain(|key, _| key == "sleeping-paired");
+            nodes.insert(mac, Node::default());
+            provider.retain_inventory(&nodes);
+            assert_eq!(provider.levels.len(), 2);
+        }
+        assert_eq!(provider.levels["sleeping-paired"], 75);
+    }
     use super::*;
     #[test]
     fn service_node_mac_and_boundaries() {
