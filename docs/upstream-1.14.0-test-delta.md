@@ -1,0 +1,321 @@
+# Upstream 1.14.0 test delta
+
+Source reference: upstream 1.14.0, revision `0e383bb`. The frozen 1.13.0 baseline is revision `a566a046da5984f687d2bc973c6db92a171d60a2` and contains **459 inventoried IDs**: 365 mapped, 37 intentional differences and 57 obsolete implementation tests. The latest source contains **601 collected test IDs**, including two inherited Razer test methods, and **142 new IDs** across the areas below.
+
+This list was derived by Python AST parsing of the external reference, without importing or executing its application or tests. Existing baseline IDs and inherited-method declarations were checked against that source. It is a provenance and evidence index, not a claim that all 601 upstream behaviors have Rust parity.
+
+`docs/provider-test-inventory.json` and its existing mapping/checker remain the frozen baseline. When the fixture generator sees a different test-ID set, it writes a separate `docs/reference-test-inventory-1.14.0.json` candidate, preserves old mappings by ID, and leaves every new ID `not_mapped`. Parser evidence alone does not promote an ID to mapped. The candidate is generated only when the explicit reference capture is run.
+
+The Rust regression functions below exist in the repository and describe relevant evidence. Their presence is not an assertion that this document ran them, or that all assertions in the listed Python IDs are equivalent. Each area states remaining limits.
+
+## Bluetooth snapshots and wake scheduling (12 new IDs)
+
+Partial evidence: Rust uses independent provider jobs and immutable snapshots. These tests cover scheduling and proven-identity deduplication, but do not map every Python WakeEvent/coalescing assertion.
+
+Rust evidence:
+
+- `crates/app/src/runtime.rs::native_connection_events_refresh_hid_providers_without_defeating_quiet_cadence`
+- `crates/app/src/runtime.rs::disabled_bluetooth_providers_and_suspended_jobs_are_not_dispatched`
+- `crates/core/tests/ported_behaviour.rs::bluetooth_dedup_requires_identity_and_live_known_hid`
+- `crates/core/tests/ported_behaviour.rs::controller_bluetooth_preferred_only_with_proven_live_identity`
+
+New upstream IDs:
+
+```text
+test_bluetooth_poll.BluetoothSnapshotTests.test_fallback_poll_shows_bluetooth_without_polling_hid
+test_bluetooth_poll.BluetoothSnapshotTests.test_many_snapshots_do_not_poll_hid
+test_bluetooth_poll.BluetoothSnapshotTests.test_poll_interval_still_polls_hid
+test_bluetooth_poll.BluetoothSnapshotTests.test_refresh_during_a_poll_is_not_lost_to_a_snapshot
+test_bluetooth_poll.BluetoothSnapshotTests.test_refresh_now_still_polls_hid
+test_bluetooth_poll.BluetoothSnapshotTests.test_snapshot_does_not_count_a_missed_hid_device_again
+test_bluetooth_poll.BluetoothSnapshotTests.test_snapshot_drops_the_xinput_copy_of_a_bluetooth_controller
+test_bluetooth_poll.BluetoothSnapshotTests.test_snapshot_removes_disconnected_bluetooth_device_without_polling_hid
+test_bluetooth_poll.BluetoothSnapshotTests.test_snapshot_shows_bluetooth_device_without_polling_hid
+test_bluetooth_poll.WakeEventTests.test_bluetooth_wake_is_not_a_full_poll
+test_bluetooth_poll.WakeEventTests.test_clear_forgets_a_full_poll
+test_bluetooth_poll.WakeEventTests.test_set_is_a_full_poll_once
+```
+
+## G-Wolves receiver and cable models (11 new IDs)
+
+Partial evidence: fake-HID exchanges and separate parser fixtures cover protocol bytes, receiver/cable IDs and model identity. No per-ID assertion audit or physical-device validation is claimed.
+
+Rust evidence:
+
+- `crates/providers/tests/upstream114_io.rs::all_gwolves_own_receiver_and_cable_ids_select_the_documented_exchange`
+- `crates/providers/tests/upstream114_io.rs::gwolves_ace_cable_wins_and_distinct_models_stay_separate`
+- `crates/providers/tests/upstream114_parity.rs::separate_upstream114_parser_fixtures_match_external_reference`
+
+New upstream IDs:
+
+```text
+test_gwolves_models.ModelTest.test_a_new_protocol_model_on_its_own_receiver
+test_gwolves_models.ModelTest.test_asleep_keeps_the_last_value_greyed_then_goes
+test_gwolves_models.ModelTest.test_hsk_pro_ace_issue_105
+test_gwolves_models.ModelTest.test_no_64_byte_feature_report_sends_nothing
+test_gwolves_models.ModelTest.test_reply_with_or_without_a_leading_report_id
+test_gwolves_models.ModelTest.test_the_cable_sends_00_and_shares_the_icon
+test_gwolves_models.ModelTest.test_two_models_are_two_icons_next_to_the_shared_receiver
+test_gwolves_models.TableTest.test_every_model_has_its_receiver_and_a_cable
+test_gwolves_models.TableTest.test_hsk_pro_ace_is_an_old_protocol_model
+test_gwolves_models.TableTest.test_no_overlap_with_the_shared_receiver
+test_gwolves_models.TableTest.test_request_bytes
+```
+
+## Hide and removal during UI updates (4 new IDs)
+
+Partial evidence: core state cleanup is tested. Python icon-thread locking and stop races have no direct equivalent in the single UI owner with immutable published snapshots; these four Python tests remain unmapped.
+
+Rust evidence:
+
+- `crates/core/tests/ported_behaviour.rs::hidden_missing_device_and_disabled_errors_are_cleaned`
+- `crates/core/tests/ported_behaviour.rs::disabled_provider_and_hidden_device_do_not_alert_or_learn`
+
+New upstream IDs:
+
+```text
+test_hide_rename.HideDuringApplyTests.test_gone_icon_is_stopped_without_the_lock
+test_hide_rename.HideDuringApplyTests.test_hide_while_apply_does_not_make_a_new_icon
+test_hide_rename.HideDuringApplyTests.test_hide_while_apply_does_not_update_a_stopped_icon
+test_hide_rename.HideDuringApplyTests.test_hide_while_apply_removes_a_missing_device
+```
+
+## HyperX Cloud III S (13 new IDs)
+
+Partial evidence: output-report fallback, cross-collection reads, bounded invalid responses, charging decoding and transport errors have regression evidence. This is not a complete mapping of all 13 upstream assertions or a hardware claim.
+
+Rust evidence:
+
+- `crates/providers/tests/upstream114_io.rs::cloud3s_output_fallback_and_cross_collection_reply_then_cached_writer`
+- `crates/providers/tests/upstream114_io.rs::cloud3s_invalid_battery_times_out_without_charging_command_or_icon`
+- `crates/providers/tests/upstream114_io.rs::new_headsets_report_transport_failures_and_preserve_family_identity_metadata`
+- `crates/providers/tests/upstream114_parity.rs::separate_upstream114_parser_fixtures_match_external_reference`
+
+New upstream IDs:
+
+```text
+test_hyperx_cloud3s.Cloud3STest.test_a_battery_notification_is_a_reading
+test_hyperx_cloud3s.Cloud3STest.test_a_charging_reply_is_not_taken_for_the_battery
+test_hyperx_cloud3s.Cloud3STest.test_a_level_above_100_is_refused
+test_hyperx_cloud3s.Cloud3STest.test_a_refused_write_returns_minus_one_and_the_next_collection_is_tried
+test_hyperx_cloud3s.Cloud3STest.test_a_silent_dongle_gives_no_icon_and_says_what_to_do
+test_hyperx_cloud3s.Cloud3STest.test_charging_and_fully_charged
+test_hyperx_cloud3s.Cloud3STest.test_cloud_iii_ids_are_not_touched
+test_hyperx_cloud3s.Cloud3STest.test_issue_106
+test_hyperx_cloud3s.Cloud3STest.test_other_reports_before_the_reply_are_skipped
+test_hyperx_cloud3s.Cloud3STest.test_output_reports_only_never_feature_reports
+test_hyperx_cloud3s.Cloud3STest.test_switched_off_headset_gives_no_icon
+test_hyperx_cloud3s.Cloud3STest.test_the_answer_is_read_on_another_collection
+test_hyperx_cloud3s.Cloud3STest.test_vendor_pages_first_and_the_collection_is_remembered
+```
+
+## Passive JBL collection (10 new IDs)
+
+Partial evidence: persistent handles, late/newest reports, availability timestamps, reconnect, backoff and one-shot probe behavior are tested. Rust services bounded nonblocking reads through the existing scheduler, rather than adopting upstream reader threads. Physical delivery timing remains unverified.
+
+Rust evidence:
+
+- `crates/providers/tests/passive_jbl.rs::persistent_collection_captures_late_reports_newest_wins_and_quiet_keeps_timestamp`
+- `crates/providers/tests/passive_jbl.rs::removal_generation_invalidate_cancel_and_drop_close_sessions`
+- `crates/providers/tests/passive_jbl.rs::open_and_read_failure_use_fifteen_second_backoff_then_recover`
+- `crates/providers/tests/passive_jbl.rs::explicit_probe_waits_only_on_first_open`
+- `crates/providers/tests/passive_jbl.rs::reports_sessions_and_diagnostics_are_bounded`
+
+New upstream IDs:
+
+```text
+test_jbl.PollTest.test_level_heard_between_polls
+test_jbl.PollTest.test_newest_level_wins
+test_jbl.PollTest.test_open_failure_is_reported
+test_jbl.PollTest.test_poll_does_not_wait_for_the_headset
+test_jbl.PollTest.test_power_report_explains_silence
+test_jbl.PollTest.test_probe_listens_on_its_first_poll
+test_jbl.PollTest.test_quiet_headset_keeps_the_last_level_greyed
+test_jbl.PollTest.test_reader_stops_when_the_receiver_is_gone
+test_jbl.PollTest.test_receiver_unplugged_and_back
+test_jbl.PollTest.test_the_collection_stays_open_between_polls
+```
+
+## Logitech Centurion (17 new IDs)
+
+Partial evidence: discovery/cache, bridged exchanges, legacy battery signature, power-off and parser cases are tested. All error/retry/stale-frame scenarios have not been audited against each of the 17 upstream IDs; no full mapping is asserted.
+
+Rust evidence:
+
+- `crates/providers/tests/upstream114_io.rs::centurion_discovers_feature_index_caches_and_accepts_charge_complete`
+- `crates/providers/tests/upstream114_io.rs::centurion_legacy_fallback_requires_battery_signature_and_hides_power_off`
+- `crates/providers/tests/upstream114_io.rs::unknown_ids_wrong_elite_interface_and_centurion_collection_never_open`
+- `crates/providers/tests/upstream114_parity.rs::separate_upstream114_parser_fixtures_match_external_reference`
+
+New upstream IDs:
+
+```text
+test_logitech_centurion.CenturionTest.test_a_receiver_error_reply_ends_the_attempt
+test_logitech_centurion.CenturionTest.test_a_reply_for_another_function_is_not_taken
+test_logitech_centurion.CenturionTest.test_charging_states
+test_logitech_centurion.CenturionTest.test_discovery_runs_once
+test_logitech_centurion.CenturionTest.test_features_are_discovered_again_after_an_error
+test_logitech_centurion.CenturionTest.test_firmware_without_the_battery_feature_uses_the_fixed_request
+test_logitech_centurion.CenturionTest.test_frames_are_headsetcontrols
+test_logitech_centurion.CenturionTest.test_headset_notifications_and_stale_replies_are_not_the_answer
+test_logitech_centurion.CenturionTest.test_headset_off_gives_no_icon_and_is_discovered_later
+test_logitech_centurion.CenturionTest.test_headset_switched_off_after_a_reading_leaves_the_tray
+test_logitech_centurion.CenturionTest.test_issue_103
+test_logitech_centurion.CenturionTest.test_legacy_power_off_report
+test_logitech_centurion.CenturionTest.test_legacy_skips_other_events
+test_logitech_centurion.CenturionTest.test_level_above_100_is_refused
+test_logitech_centurion.CenturionTest.test_only_reading_functions_are_sent
+test_logitech_centurion.CenturionTest.test_only_the_ffa0_collection_of_0af7_is_opened
+test_logitech_centurion.CenturionTest.test_other_frames_are_skipped
+```
+
+## Optional low-battery sound (23 new IDs)
+
+Partial mapping: decision, settings, cooldown, fresh/charging states, quiet-mode behavior, Windows media/alias flags and checkbox wiring have direct Rust regression evidence. The Windows callback test does not play sound; audible playback and full native end-to-end toggling remain unverified. No complete 23-ID equivalence audit is claimed.
+
+Rust evidence:
+
+- `crates/core/tests/low_sound.rs::repeats_only_after_five_minutes_and_keeps_the_toast_once`
+- `crates/core/tests/low_sound.rs::quiet_holds_the_toast_but_sound_is_independent_of_popup_preferences`
+- `crates/core/tests/low_sound.rs::per_device_threshold_changes_disable_hide_and_reenable_are_respected`
+- `crates/core/tests/low_sound.rs::suspend_resume_clock_reset_and_confirmed_reconnect_require_fresh_readings`
+- `crates/windows/src/system.rs::production_playback_uses_windows_files_and_asynchronous_fallback_aliases`
+- `crates/app/src/ui.rs::low_sound_checkbox_keeps_polling_permission_controls_separate`
+
+New upstream IDs:
+
+```text
+test_low_sound.LowSoundDecisionTests.test_critical_sound_at_5_percent_or_below
+test_low_sound.LowSoundDecisionTests.test_first_alert_plays_the_low_sound
+test_low_sound.LowSoundDecisionTests.test_no_sound_above_the_threshold
+test_low_sound.LowSoundDecisionTests.test_no_sound_when_offline_or_level_unknown
+test_low_sound.LowSoundDecisionTests.test_no_sound_when_the_low_battery_alert_is_off
+test_low_sound.LowSoundDecisionTests.test_no_sound_while_charging
+test_low_sound.LowSoundDecisionTests.test_not_before_five_minutes
+test_low_sound.LowSoundDecisionTests.test_repeat_is_five_minutes
+test_low_sound.LowSoundDecisionTests.test_repeats_after_five_minutes
+test_low_sound.LowSoundWiringTests.test_a_sound_error_does_not_break_the_poll
+test_low_sound.LowSoundWiringTests.test_alert_plays_windows_battery_low_async
+test_low_sound.LowSoundWiringTests.test_critical_level_plays_windows_battery_critical
+test_low_sound.LowSoundWiringTests.test_follows_the_alert_level_of_the_device
+test_low_sound.LowSoundWiringTests.test_missing_file_falls_back_to_a_system_sound
+test_low_sound.LowSoundWiringTests.test_off_by_default
+test_low_sound.LowSoundWiringTests.test_plays_while_quiet_while_gaming_holds_the_notification
+test_low_sound.LowSoundWiringTests.test_repeats_every_five_minutes_while_low
+test_low_sound.LowSoundWiringTests.test_setting_is_in_preferences_and_toggles
+test_low_sound.LowSoundWiringTests.test_setting_is_read_from_the_settings_file
+test_low_sound.LowSoundWiringTests.test_stops_above_the_threshold
+test_low_sound.LowSoundWiringTests.test_stops_when_charging_and_starts_again_after
+test_low_sound.LowSoundWiringTests.test_stops_when_the_option_is_turned_off
+test_low_sound.LowSoundWiringTests.test_stops_while_offline
+```
+
+## Portable data directory (5 new IDs)
+
+Partial mapping: marker detection, application-specific directory selection and writable/fallback decisions are tested. Native permission failures depend on the actual filesystem; Python APPDATA/module globals do not map directly to Rust process startup.
+
+Rust evidence:
+
+- `crates/storage/src/lib.rs::marker_requires_file_and_writable_app_specific_folder`
+
+New upstream IDs:
+
+```text
+test_portable.PortableModeTest.test_default_appdata_is_the_module_one
+test_portable.PortableModeTest.test_marker_keeps_data_in_app_folder
+test_portable.PortableModeTest.test_read_only_app_folder_falls_back_to_appdata
+test_portable.PortableModeTest.test_without_marker_data_goes_to_appdata
+test_portable.PortableModeTest.test_writable_check
+```
+
+## Razer keyboards (8 new IDs)
+
+Partial evidence: catalog selection, transaction IDs, preferred interface and polling-control exclusion are exercised. Exhaustive keyboard fallback/sleep/icon equivalence and physical hardware validation are not claimed.
+
+Rust evidence:
+
+- `crates/providers/tests/upstream114_io.rs::every_new_razer_keyboard_uses_known_tid_and_preferred_interface`
+- `crates/providers/tests/upstream114_io.rs::new_catalog_devices_do_not_expand_polling_write_allowlists`
+
+New upstream IDs:
+
+```text
+test_razer_keyboards.KeyboardPollTest.test_another_interface_is_still_a_fallback
+test_razer_keyboards.KeyboardPollTest.test_deathstalker_v2_pro_tkl_issue_106
+test_razer_keyboards.KeyboardPollTest.test_interface_2_is_asked_first
+test_razer_keyboards.KeyboardPollTest.test_mice_keep_their_automatic_icon
+test_razer_keyboards.KeyboardPollTest.test_the_icon_stays_a_keyboard_while_asleep
+test_razer_keyboards.KeyboardTableTest.test_every_keyboard_agrees_with_openrazer
+test_razer_keyboards.KeyboardTableTest.test_the_receiver_is_polled_although_its_name_has_no_wireless_word
+test_razer_keyboards.KeyboardTableTest.test_wireless_and_wired_share_a_name
+```
+
+## SteelSeries Arctis Nova Elite (33 new IDs)
+
+Partial evidence: direct/split status decoding, charging, powered-off state, catalog filtering and malformed parser fixtures are covered. All 33 upstream diagnostics, stale reports, remembered-collection and retry scenarios have not been mapped individually; hardware remains unverified.
+
+Rust evidence:
+
+- `crates/providers/tests/upstream114_io.rs::elite_direct_status_matches_issue138_and_offline_hides_icon`
+- `crates/providers/tests/upstream114_io.rs::elite_split_notifications_report_cable_charging`
+- `crates/providers/tests/upstream114_io.rs::unknown_ids_wrong_elite_interface_and_centurion_collection_never_open`
+- `crates/providers/tests/upstream114_parity.rs::separate_upstream114_parser_fixtures_match_external_reference`
+
+New upstream IDs:
+
+```text
+test_steelseries_elite.EliteTest.test_a_level_above_100_is_refused
+test_steelseries_elite.EliteTest.test_a_refused_write_returns_minus_one_and_the_next_collection_is_tried
+test_steelseries_elite.EliteTest.test_a_remembered_collection_that_refuses_is_forgotten
+test_steelseries_elite.EliteTest.test_a_write_that_raises_counts_as_refused
+test_steelseries_elite.EliteTest.test_battery_frame_without_power_frame
+test_steelseries_elite.EliteTest.test_cable_charging_power_state
+test_steelseries_elite.EliteTest.test_charging
+test_steelseries_elite.EliteTest.test_direct_reply_charging
+test_steelseries_elite.EliteTest.test_direct_reply_headset_off
+test_steelseries_elite.EliteTest.test_direct_reply_level_above_100_is_refused
+test_steelseries_elite.EliteTest.test_direct_reply_logs_bytes_14_and_15
+test_steelseries_elite.EliteTest.test_direct_reply_on_the_cable
+test_steelseries_elite.EliteTest.test_direct_reply_spare_battery_is_not_the_level
+test_steelseries_elite.EliteTest.test_discharging
+test_steelseries_elite.EliteTest.test_frames_are_logged_in_hex
+test_steelseries_elite.EliteTest.test_headset_offline_gives_no_reading
+test_steelseries_elite.EliteTest.test_issue_138
+test_steelseries_elite.EliteTest.test_issue_138_direct_reply
+test_steelseries_elite.EliteTest.test_level_0_and_100
+test_steelseries_elite.EliteTest.test_no_reply_gives_no_level
+test_steelseries_elite.EliteTest.test_nothing_for_other_product_ids
+test_steelseries_elite.EliteTest.test_only_vendor_collections_of_interface_3_get_the_request
+test_steelseries_elite.EliteTest.test_other_reports_are_ignored
+test_steelseries_elite.EliteTest.test_standby_still_shows_the_level
+test_steelseries_elite.EliteTest.test_the_answer_is_read_on_another_collection
+test_steelseries_elite.EliteTest.test_the_collection_that_took_it_is_remembered
+test_steelseries_elite.EliteTest.test_the_read_window_is_bounded
+test_steelseries_elite.EliteTest.test_the_request_is_01_b0_as_a_64_byte_output_report
+test_steelseries_elite.EliteTest.test_the_spare_battery_is_ignored
+test_steelseries_elite.EliteTest.test_unsolicited_battery_frame
+test_steelseries_elite.EliteTest.test_unsolicited_frame_before_the_answer
+test_steelseries_elite.ExistingProviderTest.test_the_nova_provider_does_not_touch_the_elite
+test_steelseries_elite.RegistrationTest.test_the_provider_is_registered
+```
+
+## Tray rendering cache (6 new IDs)
+
+Partial evidence: Rust icon signatures suppress timestamp-only redraws and cover visual changes. Upstream PIL per-colour draw counts and cache shape do not establish equivalent native HICON allocation behavior; those exact six assertions remain unmapped.
+
+Rust evidence:
+
+- `crates/app/src/ui.rs::icon_changes_on_precision_transition_but_not_timestamp_refresh`
+- `crates/app/src/ui.rs::tray_cache_signature_covers_visual_changes_but_ignores_text_and_freshness`
+- `crates/app/src/ui.rs::sleep_wake_settings_and_theme_modify_same_guid_without_recreating_icon`
+
+New upstream IDs:
+
+```text
+test_tray_icons.RenderOnceTests.test_a_charging_level_change_draws_one_colour
+test_tray_icons.RenderOnceTests.test_a_still_icon_draws_one_colour
+test_tray_icons.RenderOnceTests.test_an_unchanged_state_draws_nothing
+test_tray_icons.RenderOnceTests.test_the_cache_keeps_one_state
+test_tray_icons.RenderOnceTests.test_the_other_colour_is_drawn_once_on_the_first_flip
+test_tray_icons.RenderOnceTests.test_the_percentage_in_the_icon_is_drawn_in_both_colours
+```

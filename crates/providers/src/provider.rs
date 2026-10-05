@@ -10,12 +10,15 @@ use std::{
 };
 
 pub const FAMILIES: &[(&str, &str)] = &[
-    ("razer", "Razer mice and headsets"),
+    ("razer", "Razer mice, keyboards and headsets"),
     ("audeze", "Audeze Maxwell"),
     ("wlmouse", "WLmouse"),
     ("mchose", "MCHOSE"),
     ("hyperx_alpha2", "HyperX Cloud Alpha 2"),
     ("hyperx_cloud3", "HyperX Cloud III Wireless"),
+    ("hyperx_cloud3s", "HyperX Cloud III S Wireless"),
+    ("logitech_centurion", "Logitech G PRO X 2 LIGHTSPEED"),
+    ("steelseries_elite", "SteelSeries Arctis Nova Elite"),
     ("hyperx", "HyperX Cloud II Wireless"),
     ("keychron", "Keychron"),
     ("pulsar", "Pulsar / ATK / VXE / Hitscan"),
@@ -41,6 +44,7 @@ pub fn providers() -> Vec<Box<dyn BatteryProvider>> {
         .collect()
 }
 pub struct HidProvider {
+    jbl: crate::passive_jbl::PassiveJbl,
     id: &'static str,
     // The catalog is static; retain its ordered vendor set across polls.
     vendors: Box<[u16]>,
@@ -70,10 +74,12 @@ pub struct HidProvider {
     counter: u8,
     razer_status: u16,
     razer_cache: BTreeMap<String, (String, u8)>,
+    centurion_features: BTreeMap<String, (u8, Option<u8>)>,
 }
 impl HidProvider {
     pub fn new(id: &'static str) -> Self {
         Self {
+            jbl: Default::default(),
             id,
             vendors: DEVICES
                 .iter()
@@ -108,6 +114,94 @@ impl HidProvider {
             counter: 0,
             razer_status: 0,
             razer_cache: BTreeMap::new(),
+            centurion_features: BTreeMap::new(),
+        }
+    }
+    /// Enable the bounded first-listen window only for a one-shot diagnostic probe.
+    pub fn with_probe_listen(mut self) -> Self {
+        self.jbl.probe_listen = true;
+        self
+    }
+    fn poll_jbl(
+        &mut self,
+        infos: &[HidInfo],
+        hid: &dyn HidTransport,
+        c: &PollContext<'_>,
+    ) -> PollResult {
+        if !c.active() {
+            self.jbl.clear();
+            return Ok(Vec::new());
+        }
+        let selected: Vec<_> = infos
+            .iter()
+            .filter_map(|i| {
+                DEVICES
+                    .iter()
+                    .find(|d| d.provider == "jbl" && d.vid == i.vendor_id && d.pid == i.product_id)
+                    .filter(|d| candidate_group("jbl", d, i, infos))
+                    .map(|d| (*d, i))
+            })
+            .collect();
+        let paths = selected.iter().map(|(_, i)| i.path.clone()).collect();
+        self.jbl.prepare(hid.generation(), &paths);
+        let mut out = Vec::new();
+        let mut seen = BTreeSet::new();
+        let mut healthy = 0;
+        let mut failures = Vec::new();
+        for (d, info) in selected.into_iter().take(crate::passive_jbl::MAX_SESSIONS) {
+            let key = reading_key("jbl", &d, info);
+            if !seen.insert(key.clone()) {
+                continue;
+            }
+            let (result, lines) = self.jbl.listen(info, hid, c);
+            for line in lines {
+                self.log(line);
+            }
+            if !c.active() {
+                self.jbl.clear();
+                break;
+            }
+            let (level, online) = match result {
+                Ok(observation) => {
+                    healthy += 1;
+                    observation
+                }
+                Err(error) => {
+                    self.log(format!("{}: {error}", info.path));
+                    failures.push(error.to_string());
+                    if let Some(mut r) = self.last.get(&key).cloned() {
+                        r.connection = Connection::Stale;
+                        out.push(r);
+                    }
+                    continue;
+                }
+            };
+            if let Some(level) = level {
+                let mut r = Reading::new(&key, d.name, "jbl", c.clock.unix());
+                r.kind = "headset".into();
+                r.serial = (!info.serial.is_empty()).then(|| info.serial.clone());
+                r.container = info.container.clone();
+                r.level = Some(level);
+                r.charging = Some(false);
+                if !online {
+                    r.connection = Connection::Sleeping;
+                }
+                self.last_observed.insert(key.clone(), c.clock.monotonic());
+                self.last.insert(key, r.clone());
+                out.push(r);
+            } else if let Some(r) = self.cached(&key, c.clock.monotonic()) {
+                out.push(r);
+            } else {
+                self.log("nothing heard yet and no earlier level");
+            }
+        }
+        if healthy == 0 && !failures.is_empty() {
+            Err(ProviderError::new(format!(
+                "JBL collections unavailable: {}",
+                failures.join("; ")
+            )))
+        } else {
+            Ok(out)
         }
     }
     /// Called only after all vendor enumerations succeeded. Absence is then
@@ -458,7 +552,15 @@ impl HidProvider {
                 Ok(None)
             }
             "wlmouse" | "lamzu" | "gwolves" => {
-                let request = p::padded(&[0, 0, 0, 2, 2, 0, 0x83], 65);
+                let old = self.id == "gwolves" && d.variant.starts_with("old:");
+                let request = if old {
+                    p::padded(
+                        &[0, 0, 2, 0x8f, u8::from(!d.variant.contains(":wired:"))],
+                        65,
+                    )
+                } else {
+                    p::padded(&[0, 0, 0, 2, 2, 0, 0x83], 65)
+                };
                 if let Err(error) = s.send_feature(&request) {
                     if self.id == "wlmouse" {
                         self.log(format!(
@@ -479,7 +581,11 @@ impl HidProvider {
                         vec![65]
                     } {
                         if let Ok(reply) = s.feature(0, length)
-                            && let Some(b) = p::wl_feature(&reply)
+                            && let Some(b) = if old {
+                                p::gwolves_old(&reply)
+                            } else {
+                                p::wl_feature(&reply)
+                            }
                         {
                             return Ok(Some(b));
                         }
@@ -706,24 +812,6 @@ impl HidProvider {
                     let reply = s.read(64, Duration::from_millis(500))?;
                     if let Some(b) = p::keychron(&reply) {
                         return Ok(Some(b));
-                    }
-                }
-                Ok(None)
-            }
-            "jbl" => {
-                for _ in 0..40 {
-                    if !c.active() {
-                        break;
-                    }
-                    let reply = s.read(64, Duration::from_millis(250))?;
-                    if let Some(b) = p::jbl(&reply) {
-                        return Ok(Some(b));
-                    }
-                    if !reply.is_empty() {
-                        if reply.first() == Some(&9) {
-                            self.log(format!("headset power state: {:?}", reply.get(1)));
-                        }
-                        c.sleep(Duration::from_millis(20));
                     }
                 }
                 Ok(None)
@@ -1601,6 +1689,7 @@ impl HidProvider {
         Some(r)
     }
 }
+include!("upstream114.rs");
 fn set_battery(r: &mut Reading, b: Battery) {
     r.level = Some(b.level);
     r.charging = b.charging.or(Some(false));
@@ -1615,7 +1704,12 @@ pub fn is_bluetooth(path: &str) -> bool {
 }
 fn reading_key(id: &str, d: &Device, i: &HidInfo) -> String {
     let identity = trusted_identity(i);
-    if ["wlmouse", "gwolves", "lamzu", "am_infinity", "lofree"].contains(&id) {
+    if id == "gwolves" && !d.variant.is_empty() {
+        format!(
+            "gwolves:{}:{identity}",
+            d.variant.rsplit(':').next().unwrap_or("")
+        )
+    } else if ["wlmouse", "gwolves", "lamzu", "am_infinity", "lofree"].contains(&id) {
         format!("{}:{identity}", id)
     } else if id == "mchose" {
         format!("mchose:{:04x}:{identity}", d.vid)
@@ -1640,6 +1734,13 @@ fn reading_key(id: &str, d: &Device, i: &HidInfo) -> String {
         format!("hyperx:{:04x}:{identity}", d.pid)
     } else {
         format!("{}:{:04x}:{identity}", id, d.pid)
+    }
+}
+fn razer_keyboard_interface(pid: u16) -> Option<i32> {
+    match pid {
+        0x0290 | 0x0296 | 0x02d5 => Some(2),
+        0x0292 | 0x0298 | 0x02d7 | 0x0271 | 0x0258 | 0x02ba | 0x02b9 => Some(3),
+        _ => None,
     }
 }
 pub fn receiver_key(info: &HidInfo) -> String {
@@ -1801,9 +1902,20 @@ impl BatteryProvider for HidProvider {
         self.diagnostics.clone()
     }
     fn next_poll_delay(&self) -> Option<Duration> {
+        if self.id == "jbl" {
+            return self.jbl.delay();
+        }
         (self.audeze_pending || self.playstation_pending).then_some(Duration::from_secs(3))
     }
+    fn invalidate(&mut self) {
+        self.jbl.clear();
+        self.centurion_features.clear();
+    }
     fn poll(&mut self, hid: &dyn HidTransport, c: &PollContext<'_>) -> PollResult {
+        if self.id == "jbl" && !c.active() {
+            self.jbl.clear();
+            return Ok(Vec::new());
+        }
         self.diagnostics.clear();
         self.audeze_pending = false;
         self.playstation_pending = false;
@@ -1814,6 +1926,9 @@ impl BatteryProvider for HidProvider {
         }
         if self.id != "logitech" {
             self.prune_enumerated(&infos, c.clock.monotonic());
+        }
+        if self.id == "jbl" {
+            return self.poll_jbl(&infos, hid, c);
         }
         if self.id == "pulsar" {
             for info in &infos {
@@ -1828,6 +1943,9 @@ impl BatteryProvider for HidProvider {
         }
         if self.id == "logitech" {
             return self.logitech_poll(&infos, hid, c);
+        }
+        if ["hyperx_cloud3s", "steelseries_elite", "logitech_centurion"].contains(&self.id) {
+            return self.poll_114_headsets(&infos, hid, c);
         }
         if self.id == "audeze" {
             self.first_seen.retain(|key, _| {
@@ -1884,10 +2002,12 @@ impl BatteryProvider for HidProvider {
                         })
             });
         }
-        selected.sort_by_key(|(_, i)| {
+        selected.sort_by_key(|(d, i)| {
             (
                 !([0x4b1a, 0x4b1e, 0x001c].contains(&i.product_id)
-                    || self.id == "gwolves" && i.product_id != 0x3854),
+                    || self.id == "gwolves"
+                        && (d.variant.contains(":wired:")
+                            || d.variant.is_empty() && i.product_id != 0x3854)),
                 if self.id == "razer" {
                     let key = format!("{:04x}:{}", i.product_id, trusted_identity(i));
                     if self
@@ -1896,10 +2016,12 @@ impl BatteryProvider for HidProvider {
                         .is_some_and(|(path, _)| path == &i.path)
                     {
                         0
-                    } else if [1, 0xff00].contains(&i.usage_page) {
+                    } else if razer_keyboard_interface(i.product_id) == Some(i.interface) {
                         1
-                    } else {
+                    } else if [1, 0xff00].contains(&i.usage_page) {
                         2
+                    } else {
+                        3
                     }
                 } else if self.id == "corsair" {
                     i32::from(i.usage != 1)
@@ -1971,9 +2093,11 @@ impl BatteryProvider for HidProvider {
             }
             let key = reading_key(self.id, &d, i);
             if ["wlmouse", "gwolves", "lamzu"].contains(&self.id)
-                && output
-                    .iter()
-                    .any(|r: &Reading| r.key == key && r.charging == Some(true))
+                && output.iter().any(|r: &Reading| {
+                    r.key == key
+                        && (r.charging == Some(true)
+                            || self.id == "gwolves" && !d.variant.is_empty())
+                })
             {
                 continue;
             }
@@ -2138,7 +2262,9 @@ impl BatteryProvider for HidProvider {
                     r.kind = if ["playstation", "eightbitdo", "nintendo"].contains(&self.id) {
                         "gamepad"
                     } else if self.id == "lofree"
-                        || self.id == "razer" && [0x25a, 0x25c].contains(&d.pid)
+                        || self.id == "razer"
+                            && ([0x25a, 0x25c].contains(&d.pid)
+                                || razer_keyboard_interface(d.pid).is_some())
                     {
                         "keyboard"
                     } else if [
@@ -2569,6 +2695,16 @@ mod cache_retention_tests {
             assert!(provider.mchose_models.is_empty());
             clock.0.store(0, std::sync::atomic::Ordering::Relaxed);
         }
+    }
+
+    #[test]
+    fn centurion_feature_cache_is_released_on_connection_invalidation() {
+        let mut provider = HidProvider::new("logitech_centurion");
+        provider
+            .centurion_features
+            .insert("reconnected-receiver".into(), (3, Some(7)));
+        provider.invalidate();
+        assert!(provider.centurion_features.is_empty());
     }
 
     #[test]

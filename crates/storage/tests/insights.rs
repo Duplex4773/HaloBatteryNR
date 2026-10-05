@@ -265,6 +265,30 @@ fn corrupt_raw_rows_break_insight_continuity() {
 }
 
 #[test]
+fn malformed_session_metadata_cannot_become_a_continuous_unknown_session() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("history.db");
+    let mut store = Store::open(&path).unwrap();
+    for ts in [0, 60, 120] {
+        store
+            .record_usage(&observation(ts, 90 - (ts / 60) as u8, Some(1000), Some(1)))
+            .unwrap();
+    }
+    store.flush().unwrap();
+    let db = Connection::open(&path).unwrap();
+    db.execute(
+        "UPDATE usage_metadata SET session='damaged' WHERE ts IN (0,60)",
+        [],
+    )
+    .unwrap();
+    let result = store.query_insights("synthetic-a", 120).unwrap();
+    assert_eq!(result.coverage.unreadable_row_count, 2);
+    assert_eq!(result.coverage.awake_seconds, 0);
+    assert_eq!(result.coverage.observation_count, 1);
+    assert!(result.rates.is_empty());
+}
+
+#[test]
 fn old_rate_evidence_is_historical_not_current_remaining_use() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("history.db");

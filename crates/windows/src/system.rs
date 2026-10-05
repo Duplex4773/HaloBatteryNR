@@ -215,6 +215,112 @@ pub fn gaming() -> bool {
     unsafe { SHQueryUserNotificationState() }.is_ok_and(gaming_notification_state)
 }
 
+/// Use the same Windows media files and fallback aliases as upstream 1.14.
+/// WinMM handles asynchronous playback; no playback worker or timer is needed.
+pub fn play_low_battery_sound(level: u8) -> Result<(), ProviderError> {
+    use windows::Win32::Media::Audio::PlaySoundW;
+    let windows_dir = std::env::var_os("WINDIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(r"C:\Windows"));
+    play_low_battery_sound_with(
+        level,
+        &windows_dir,
+        |path| path.is_file(),
+        |name, flags| {
+            let name = wide(name);
+            unsafe { PlaySoundW(windows::core::PCWSTR(name.as_ptr()), None, flags) }.as_bool()
+        },
+    )
+}
+
+fn play_low_battery_sound_with(
+    level: u8,
+    windows_dir: &std::path::Path,
+    exists: impl FnOnce(&std::path::Path) -> bool,
+    mut play: impl FnMut(&str, windows::Win32::Media::Audio::SND_FLAGS) -> bool,
+) -> Result<(), ProviderError> {
+    use windows::Win32::Media::Audio::{SND_ALIAS, SND_ASYNC, SND_FILENAME, SND_NODEFAULT};
+    let (filename, alias) = if level <= 5 {
+        ("Windows Battery Critical.wav", "SystemHand")
+    } else {
+        ("Windows Battery Low.wav", "SystemExclamation")
+    };
+    let path = windows_dir.join("Media").join(filename);
+    let played = if exists(&path) {
+        play(
+            &path.to_string_lossy(),
+            SND_FILENAME | SND_ASYNC | SND_NODEFAULT,
+        )
+    } else {
+        play(alias, SND_ALIAS | SND_ASYNC)
+    };
+    if played {
+        Ok(())
+    } else {
+        Err(ProviderError::new("Windows battery sound unavailable"))
+    }
+}
+
+#[cfg(test)]
+mod battery_sound_tests {
+    use super::*;
+    use windows::Win32::Media::Audio::{SND_ALIAS, SND_ASYNC, SND_FILENAME, SND_NODEFAULT};
+
+    #[test]
+    fn production_playback_uses_windows_files_and_asynchronous_fallback_aliases() {
+        for (level, filename, alias) in [
+            (6, "Windows Battery Low.wav", "SystemExclamation"),
+            (5, "Windows Battery Critical.wav", "SystemHand"),
+            (0, "Windows Battery Critical.wav", "SystemHand"),
+        ] {
+            for present in [false, true] {
+                let root = std::path::Path::new(r"C:\Windows");
+                let expected = root.join("Media").join(filename);
+                let mut calls = 0;
+                play_low_battery_sound_with(
+                    level,
+                    root,
+                    |path| {
+                        assert_eq!(path, expected);
+                        present
+                    },
+                    |name, flags| {
+                        calls += 1;
+                        assert_eq!(
+                            name,
+                            if present {
+                                expected.to_str().unwrap()
+                            } else {
+                                alias
+                            }
+                        );
+                        assert_eq!(
+                            flags,
+                            if present {
+                                SND_FILENAME | SND_ASYNC | SND_NODEFAULT
+                            } else {
+                                SND_ALIAS | SND_ASYNC
+                            }
+                        );
+                        true
+                    },
+                )
+                .unwrap();
+                assert_eq!(calls, 1);
+            }
+        }
+        assert!(
+            play_low_battery_sound_with(
+                10,
+                std::path::Path::new(r"C:\Windows"),
+                |_| false,
+                |_, _| false
+            )
+            .is_err()
+        );
+    }
+}
+
 fn polling_notification_state_blocked(state: Option<QUERY_USER_NOTIFICATION_STATE>) -> bool {
     !matches!(
         state,

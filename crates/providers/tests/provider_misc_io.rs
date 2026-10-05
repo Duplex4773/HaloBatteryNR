@@ -336,12 +336,13 @@ fn jbl_read_only_reports_ignore_mute_power_and_keep_last_level_indefinitely() {
     let mut p = HidProvider::new("jbl");
     let clock = FakeClock::default();
     let c = AtomicBool::new(false);
-    let mut s = vec![
-        sized(64, 250, &[0x2f, 1]),
-        sized(64, 250, &[9, 1]),
-        sized(64, 250, &[8, 95]),
+    let s = vec![
+        sized(64, 0, &[0x2f, 1]),
+        sized(64, 0, &[9, 1]),
+        sized(64, 0, &[8, 95]),
+        sized(64, 0, &[]),
+        sized(64, 0, &[]),
     ];
-    s.extend((0..40).map(|_| sized(64, 250, &[])));
     let h = FakeHid::new(
         vec![
             d("jbl", 0x2088, 0xff13, 1, 5, "control"),
@@ -356,6 +357,7 @@ fn jbl_read_only_reports_ignore_mute_power_and_keep_last_level_indefinitely() {
     assert_eq!(sleepy[0].key, live[0].key);
     assert_eq!(sleepy[0].connection, Connection::Sleeping);
     assert_eq!(sleepy[0].level, Some(95));
+    assert_eq!(*h.opened.lock().unwrap(), vec!["control"]);
     h.done();
 }
 #[test]

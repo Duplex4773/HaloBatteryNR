@@ -4,6 +4,57 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro. Inherited parent battery reports and Rust
 hardware checks are labelled separately in [device support](device-support.md).
 
+## Source audit, 6 October 2026
+
+The executable is **3,046,400 bytes (2.91 MiB)**, SHA256
+`47B6E0388581521DDD572E3CAA926D7B813DFBCB96EA23099CE5961D622D6F42`.
+Formatting, strict Clippy, **581 passing tests** (two optional timings skipped),
+release build, production API restrictions, privacy checks and the 459-ID baseline
+gate pass. Indexed metadata expiry was additionally benchmarked.
+
+The optimized synthetic native fixture averaged **6.14 → 6.02 MiB** private memory
+and **0.200% → 0.139%** of one core in three-minute windows before/after forty
+dashboard cycles, with native handle non-growth assertions passing. These are
+lifecycle phases, not a before/after code benchmark. An additional production
+measurement was blocked by the existing single app instance; it was left running.
+See the [source audit](source-audit-20261006.md) for fixes, methods and limits.
+Package: `0.1.0-source-audit-20261006`.
+
+## Consumer UI refinement, 5 October 2026
+
+The executable is **3,038,720 bytes (2.90 MiB)**, SHA256
+`02EC4F3D7B05E12631EF779C3FD1F81548BBA540AC4D05DB75CA462F58A5899B`. Formatting, strict Clippy, **569 passing workspace tests**
+(two optional timing tests ignored), release build, production API restrictions,
+privacy checks and the complete 459-ID baseline gate pass.
+
+Both themes, expanded Settings and synthetic History were rendered and inspected.
+The optimized native fixture's three-minute samples averaged **7.85 → 8.12 MiB**
+private memory and **0.21% → 0.08%** of one core around 40 dashboard open/close
+cycles. GDI / USER counts stayed **108 / 52 → 108 / 52**. These are simulated
+fixture results, not a fresh hardware benchmark. See the [consumer UI audit](ui-audit-20261005.md)
+for limits and resource design. Package: `0.1.0-ui-modern-20261005`.
+
+## Upstream 1.14.0 updates, 5 October 2026
+
+The local executable is **3,033,600 bytes (2.89 MiB)**, SHA256
+`03AC446FEBE104A8600ADDEB9F07F9CE5890605658B3DC87453F467347F51D54`.
+Formatting, strict Clippy, **568 passing tests** (two optional timing tests ignored),
+optimized build, production API restrictions and the unchanged 459-ID baseline
+coverage gate pass.
+
+New tests cover 62 catalog rows and the added headset/keyboard/mouse protocols,
+2,752 separate parser cases, persistent bounded JBL collection and failures,
+sound rules/playback contracts without playing sound, portable-directory
+selection and lifecycle cleanup. Existing native dashboard/tray tests pass.
+The [review](upstream-1.14.0-review.md) records upstream already-covered fixes and
+intentional adaptations; the [142-ID delta](upstream-1.14.0-test-delta.md) retains
+coverage limits separately from the archived mapping.
+
+No new physical device commands, hardware verification, manual UI walkthrough or
+CPU/private-memory benchmark was performed. Historical three-minute figures below
+remain separate checkpoints. The unsigned portable package is prepared locally
+as `0.1.0-upstream114-20261005`; prepared release assets/workflows are unchanged.
+
 ## Dashboard refinement, 4 October 2026
 
 The separate local UI executable is **2,902,016 bytes (2.77 MiB)**, SHA256

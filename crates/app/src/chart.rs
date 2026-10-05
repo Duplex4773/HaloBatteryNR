@@ -187,15 +187,21 @@ impl Chart {
                 self.target.Resize(&D2D_SIZE_U { width, height })?;
             }
             self.grid.SetColor(&Palette::d2d(palette.border));
+            self.grid
+                .SetOpacity(if palette.high_contrast { 1.0 } else { 0.45 });
             self.line.SetColor(&Palette::d2d(palette.accent));
-            self.label.SetColor(&Palette::d2d(palette.text));
+            self.label.SetColor(&Palette::d2d(if palette.high_contrast {
+                palette.text
+            } else {
+                palette.disabled
+            }));
             self.target.BeginDraw();
             self.target.Clear(Some(&Palette::d2d(palette.background)));
             let grid = &self.grid;
             let line = &self.line;
             let left = 60. * self.scale;
             let right = width as f32 - 25. * self.scale;
-            let top = 140. * self.scale;
+            let top = 224. * self.scale;
             let bottom = height as f32 - 95. * self.scale;
             for level in [0, 25, 50, 75, 100] {
                 let y = bottom - (bottom - top) * level as f32 / 100.;
@@ -285,7 +291,7 @@ impl Chart {
                     Y: bottom - (bottom - top) * point.level as f32 / 100.,
                 };
                 if let Some(a) = previous {
-                    self.target.DrawLine(a, p, line, 2., None);
+                    self.target.DrawLine(a, p, line, 2. * self.scale, None);
                 }
                 if point.measured {
                     self.target.FillEllipse(

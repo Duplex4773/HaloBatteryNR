@@ -12,6 +12,11 @@ Thanks to [HeyOkay](https://github.com/HeyOkay) and all
 for the original application, protocol research, tests and hardware reports.
 The port retains upstream MIT notices and credits to the device-protocol projects.
 
+Reviewed device and feature updates through upstream 1.14.0 (`0e383bb`) are recorded
+in the [port review](upstream-1.14.0-review.md). Battery monitoring now covers 28
+provider families and 309 catalog entries; configuration-write permissions remain
+separate from the battery catalog.
+
 ## Performance compared with upstream
 
 Three-minute Windows measurements, with 60-second battery polling, status export
@@ -46,11 +51,17 @@ take priority. Tray appearance remains independently configurable. Unplugged
 or hidden devices still follow the existing per-device tray identity rules.
 
 Devices, Settings and Insights scroll when their content exceeds the available
-height; navigation stays visible above the page. Settings keeps **Save settings**,
-**Save support report** and feedback in a fixed footer. Its options are grouped
+height; navigation stays visible above the page. The page scrollbar follows the
+system theme. Buttons and selectors share a restrained rounded style, with
+event-driven hover feedback and no UI animation. Device pages put the battery
+level first; History labels each filter and Insights separates estimates from
+recent battery sessions. Settings keeps **Save settings**,
+**Export support report** and feedback in a fixed footer. Its options are grouped
 under Alerts and battery, Appearance, Battery checks and Polling rate.
-**More options** reveals device brands, status export, optional extra PlayStation checks
-and the update source; update checks remain unavailable in this version.
+**Advanced options** reveals device brands, status export, optional extra PlayStation checks
+and About. **Open data folder** opens the folder containing settings and history,
+including when portable mode is active. Update checks remain unavailable and their
+unfinished controls are hidden.
 
 Device details describe connection and charging states in plain language. Tray
 icon choices include Controller, PlayStation 4 and PlayStation 5; colour choices
@@ -64,7 +75,7 @@ use between charges use the computer's local time. Refresh the rate after changi
 in another app. Sleeping or unavailable battery readings are labelled **last
 known**; missing levels are shown as **battery level unavailable**.
 
-**Save support report** writes `diagnostics.json` in the app's data folder and
+**Export support report** writes `diagnostics.json` in the app's data folder and
 shows a plain-language result. The report retains technical provider, polling
 and Insights details for troubleshooting; it is saved locally, not sent anywhere.
 
@@ -81,10 +92,25 @@ rate queries are added, and sleeping or inaccessible devices may need Refresh la
 
 Noncharging battery rings turn orange at **30%** by default, then red at the
 device's configured low-alert threshold (20% by default). Charging remains green.
-Settings → Orange icon below (%) adjusts the visual band; zero disables orange.
+Settings → Turn icon orange below (%) adjusts the visual band; zero disables orange.
 Red takes priority if thresholds overlap. Notification thresholds are unchanged.
 
 Configuration, diagnostics, optional `status.json` and SQLite history are stored in `%APPDATA%\HaloBatteryNext`. The app has its own startup entry, singleton mutex and notification identity. It does not import upstream settings. Both applications may run together, but receivers that reject concurrent access report recoverable errors.
+
+For portable settings, create an empty **portable.txt** beside HaloBatteryNext.exe
+and restart the app. Data then lives in the adjacent **HaloBatteryNext-data** folder.
+The separate subfolder prevents using the parent app's settings if both executables
+share a folder. If it cannot be written, the app uses its usual data folder and
+tries to save a plain-language `portable-issue.txt` there. The support report includes
+the folder in use. No settings are moved or imported automatically. An explicit
+`--data-dir` takes priority over portable mode. Startup registration remains per-user.
+
+**Play a sound when battery is low (every 5 minutes)**, under Settings → Alerts and battery, defaults
+off. When enabled, a fresh low-battery reading plays Windows' Battery Low sound,
+or Battery Critical at 5% or less. It follows each device's alert threshold and
+may repeat at the next fresh check after five minutes. Charging, sleeping, hidden
+or unavailable devices do not start a sound. Sounds remain available during
+games even when visual alerts are paused. The app adds no sound timer or worker.
 
 Build with Rust and the Visual Studio C++/Windows SDK tools:
 
@@ -111,6 +137,13 @@ The release script also removes local build paths from embedded compiler message
 | `halo-battery-next` | One state owner, two HID workers, one WinRT worker, one storage worker and one native UI thread |
 
 Providers return either successful discovery (possibly empty) or an explicit communication error. Errors retain stale device readings instead of treating failures as disconnects. Immutable snapshots cross to the UI; commands cross back to the engine. Queues and worker counts are bounded. Charging HICON frames are cached; the 100 ms timer runs only while an animated charging icon exists. Dashboard graphics are created on demand and released on close. Calendar history selects the requested interval; use-time history streams retained observations to calculate awake time before bounded display sampling.
+
+JBL Quantum 910 keeps its read-only collection open to retain reports arriving
+between battery checks. Existing workers service connected JBL collections once
+per second using nonblocking reads, bounded to eight collections and 32 reports
+per collection. There is no JBL thread or battery query. Inaccessible collections
+retry after 15 seconds; disabling the provider, suspending or exiting closes them.
+The explicit diagnostic probe may listen for up to ten seconds on its first open.
 
 The grouped layout and scrolling use native Windows controls without a new
 dependency, UI framework or background graphics. Dashboard body and heading
@@ -244,6 +277,12 @@ Review generated changes before accepting them. New products in existing protoco
 families can update battery discovery; new protocols or altered transaction,
 polling, cache or recovery behavior require reviewed Rust implementation and tests.
 Parser fixture agreement alone does not establish transaction equivalence.
+The 459-ID behavior mapping is frozen to the archived 1.13.0 reference. Running
+the fixture generator against a changed test-ID set creates a separate candidate
+inventory rather than overwriting those mappings. For the 1.14.0 parser delta use
+`python tools/upstream114_fixtures.py --upstream C:\reference\HaloBattery`.
+The [142 new test IDs](upstream-1.14.0-test-delta.md) have separately described
+Rust evidence; full 601-ID behavioral equivalence is not claimed.
 Hardware configuration allowlists require separate target, protocol and readback
 evidence; catalog generation never extends rate-write permissions automatically.
 Preserve the original MIT notices, protocol credits and exact hardware-report scope.

@@ -10,23 +10,177 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 pub fn data_dir() -> PathBuf {
     std::env::var_os("APPDATA")
+        .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))
         .join("HaloBatteryNext")
+}
+/// Explicit diagnostic directories take priority. A marker beside the executable
+/// requests portable data in an app-specific subfolder, never the parent's config.
+#[derive(Debug)]
+pub struct DataDirectory {
+    pub path: PathBuf,
+    pub portable: bool,
+    pub portable_requested: bool,
+}
+pub fn resolve_data_directory(
+    executable: Option<&Path>,
+    explicit: Option<PathBuf>,
+) -> DataDirectory {
+    choose_data_directory(executable, explicit, data_dir(), writable_directory)
+}
+fn choose_data_directory(
+    executable: Option<&Path>,
+    explicit: Option<PathBuf>,
+    fallback: PathBuf,
+    writable: impl FnOnce(&Path) -> bool,
+) -> DataDirectory {
+    if let Some(path) = explicit {
+        return DataDirectory {
+            path,
+            portable: false,
+            portable_requested: false,
+        };
+    }
+    let parent = executable.and_then(Path::parent);
+    let requested = parent.is_some_and(|directory| directory.join("portable.txt").is_file());
+    if requested {
+        let path = parent.unwrap().join("HaloBatteryNext-data");
+        if writable(&path) {
+            return DataDirectory {
+                path,
+                portable: true,
+                portable_requested: true,
+            };
+        }
+    }
+    DataDirectory {
+        path: fallback,
+        portable: false,
+        portable_requested: requested,
+    }
+}
+fn writable_directory(directory: &Path) -> bool {
+    if fs::create_dir_all(directory).is_err() {
+        return false;
+    }
+    static PROBE_NUMBER: AtomicU64 = AtomicU64::new(0);
+    for _ in 0..8 {
+        let number = PROBE_NUMBER.fetch_add(1, Ordering::Relaxed);
+        let path = directory.join(format!(".writable-{}-{number}.tmp", std::process::id()));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(file) => {
+                drop(file);
+                return fs::remove_file(path).is_ok();
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => return false,
+        }
+    }
+    false
+}
+#[cfg(test)]
+mod portable_tests {
+    use super::*;
+    fn select(exe: &Path, fallback: &Path, writable: bool) -> DataDirectory {
+        choose_data_directory(Some(exe), None, fallback.to_owned(), |_| writable)
+    }
+    #[test]
+    fn marker_requires_file_and_writable_app_specific_folder() {
+        let temp = tempfile::tempdir().unwrap();
+        let exe = temp.path().join("HaloBatteryNext.exe");
+        let fallback = temp.path().join("fallback");
+        let normal = select(&exe, &fallback, true);
+        assert_eq!(normal.path, fallback);
+        assert!(!normal.portable && !normal.portable_requested);
+        fs::create_dir(temp.path().join("portable.txt")).unwrap();
+        assert!(!select(&exe, &fallback, true).portable);
+        fs::remove_dir(temp.path().join("portable.txt")).unwrap();
+        fs::write(temp.path().join("portable.txt"), []).unwrap();
+        let portable = select(&exe, &fallback, true);
+        assert!(portable.portable && portable.portable_requested);
+        assert_eq!(portable.path, temp.path().join("HaloBatteryNext-data"));
+        let failed = select(&exe, &fallback, false);
+        assert!(!failed.portable && failed.portable_requested);
+        assert_eq!(failed.path, fallback);
+    }
+    #[test]
+    fn explicit_directory_wins_and_missing_executable_uses_fallback() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("portable.txt"), []).unwrap();
+        let explicit = temp.path().join("simulation");
+        let selected = choose_data_directory(
+            Some(&temp.path().join("app.exe")),
+            Some(explicit.clone()),
+            temp.path().join("fallback"),
+            |_| panic!("explicit directory must not probe"),
+        );
+        assert_eq!(selected.path, explicit);
+        assert!(!selected.portable && !selected.portable_requested);
+        let fallback = choose_data_directory(None, None, temp.path().join("fallback"), |_| {
+            panic!("no executable must not probe")
+        });
+        assert!(!fallback.portable && !fallback.portable_requested);
+        assert_eq!(fallback.path, temp.path().join("fallback"));
+    }
+    #[test]
+    fn writable_probe_cleans_up_and_does_not_import_parent_settings() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("HaloBatteryNext-data");
+        fs::write(temp.path().join("config.json"), b"parent settings").unwrap();
+        assert!(writable_directory(&data));
+        assert_eq!(fs::read_dir(&data).unwrap().count(), 0);
+        assert!(!data.join("config.json").exists());
+        assert_eq!(
+            fs::read(temp.path().join("config.json")).unwrap(),
+            b"parent settings"
+        );
+        let blocked = temp.path().join("a-file");
+        fs::write(&blocked, []).unwrap();
+        assert!(!writable_directory(&blocked));
+    }
 }
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), ProviderError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let temp = path.with_extension("tmp");
+    // Separate files even for concurrent exports or equal stems (config.json
+    // and config.txt). create_new also refuses an existing file or symlink.
+    static TEMP_NUMBER: AtomicU64 = AtomicU64::new(0);
+    let mut opened = None;
+    for _ in 0..32 {
+        let number = TEMP_NUMBER.fetch_add(1, Ordering::Relaxed);
+        let mut name = path.file_name().unwrap_or_default().to_os_string();
+        name.push(format!(".{}.{number}.tmp", std::process::id()));
+        let temp = path.with_file_name(name);
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)
+        {
+            Ok(file) => {
+                opened = Some((temp, file));
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.into()),
+        }
+    }
+    let (temp, mut file) =
+        opened.ok_or_else(|| ProviderError::new("Cannot create temporary save file"))?;
     let result = (|| {
-        let mut file = fs::File::create(&temp)?;
         file.write_all(bytes)?;
         file.sync_all()?;
+        drop(file);
         fs::rename(&temp, path)?;
         Ok(())
     })();
@@ -131,6 +285,16 @@ fn row_text<'a>(row: &'a rusqlite::Row<'_>, index: usize) -> rusqlite::Result<&'
         rusqlite::Error::FromSqlConversionFailure(index, value.data_type(), Box::new(error))
     })
 }
+fn history_reading(row: &rusqlite::Row<'_>, key: &str) -> rusqlite::Result<Option<Reading>> {
+    let timestamp: i64 = row.get(0)?;
+    Ok(serde_json::from_str::<Reading>(row_text(row, 1)?)
+        .ok()
+        .filter(|reading| {
+            reading.key == key
+                && reading.timestamp == timestamp
+                && reading.level.is_none_or(|level| level <= 100)
+        }))
+}
 /// UTC calendar rendering avoids locale-dependent output. All status fields match
 /// upstream; the RFC3339 suffix makes the timestamp's timezone explicit.
 fn timestamp(unix: i64) -> String {
@@ -173,6 +337,7 @@ impl Store {
             CREATE INDEX IF NOT EXISTS readings_time ON readings(ts);
             CREATE TABLE IF NOT EXISTS state(key TEXT PRIMARY KEY, payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS usage_metadata(device TEXT NOT NULL, ts INTEGER NOT NULL, polling_rate INTEGER, session TEXT, PRIMARY KEY(device,ts));
+            CREATE INDEX IF NOT EXISTS usage_metadata_time ON usage_metadata(ts);
             PRAGMA user_version=2; COMMIT;").map_err(sql_error)?;
         Ok(Self {
             db,
@@ -198,6 +363,14 @@ impl Store {
         })
     }
     pub fn prune(&mut self, now: i64) -> Result<(), ProviderError> {
+        self.prune_inner(now, true)
+    }
+    /// Routine retention uses timestamp indexes. Full orphan repair is reserved
+    /// for startup, rather than rescanning 30 days of metadata each minute.
+    pub fn prune_expired(&mut self, now: i64) -> Result<(), ProviderError> {
+        self.prune_inner(now, false)
+    }
+    fn prune_inner(&mut self, now: i64, repair: bool) -> Result<(), ProviderError> {
         // Flush first so pending old observations cannot reappear after pruning.
         self.flush()?;
         let cutoff = now.saturating_sub(30 * 86400);
@@ -208,7 +381,13 @@ impl Store {
         // Ordered EXCEPT merges the existing covering key indexes instead of
         // performing one readings lookup per retained metadata row. Subtract
         // only retained readings so expired keys and arbitrary orphans both go.
-        transaction.execute("DELETE FROM usage_metadata WHERE (device,ts) IN (SELECT device,ts FROM usage_metadata EXCEPT SELECT device,ts FROM readings WHERE ts >= ?1 ORDER BY device,ts)", [cutoff]).map_err(sql_error)?;
+        if repair {
+            transaction.execute("DELETE FROM usage_metadata WHERE (device,ts) IN (SELECT device,ts FROM usage_metadata EXCEPT SELECT device,ts FROM readings WHERE ts >= ?1 ORDER BY device,ts)", [cutoff]).map_err(sql_error)?;
+        } else {
+            transaction
+                .execute("DELETE FROM usage_metadata WHERE ts < ?1", [cutoff])
+                .map_err(sql_error)?;
+        }
         transaction.commit().map_err(sql_error)?;
         self.last
             .retain(|_, observation| observation.reading.timestamp >= cutoff);
@@ -243,9 +422,20 @@ impl Store {
                 .ok()
                 .flatten()
                 .and_then(|hz| PollingRate::try_from(hz).ok());
-            let session = row_text(row, 3)
-                .ok()
-                .and_then(|value| value.parse::<u64>().ok());
+            let session = match row.get_ref(3).map_err(sql_error)? {
+                rusqlite::types::ValueRef::Null => None,
+                value => match value
+                    .as_str()
+                    .ok()
+                    .and_then(|value| value.parse::<u64>().ok())
+                {
+                    Some(session) => Some(session),
+                    None => {
+                        builder.break_continuity();
+                        continue;
+                    }
+                },
+            };
             builder.push(UsageObservation {
                 reading,
                 polling_rate,
@@ -519,7 +709,7 @@ impl HistoryStore for Store {
         if count > limit as i64 && limit < 5 {
             let mut query = self
                 .db
-                .prepare("SELECT payload FROM readings WHERE device=?1 AND ts=?2")
+                .prepare("SELECT ts,payload FROM readings WHERE device=?1 AND ts=?2")
                 .map_err(sql_error)?;
             let bounds = self
                 .db
@@ -541,20 +731,16 @@ impl HistoryStore for Store {
             };
             for ts in [Some(bounds.0), gap, Some(bounds.1)].into_iter().flatten() {
                 let reading = query
-                    .query_row(params![key, ts], |r| {
-                        Ok(serde_json::from_str(row_text(r, 0)?).ok())
-                    })
+                    .query_row(params![key, ts], |r| history_reading(r, key))
                     .map_err(sql_error)?;
                 if let Some(r) = reading {
                     out.push(r);
                 }
             }
         } else if count <= limit as i64 {
-            let mut query=self.db.prepare("SELECT payload FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3 ORDER BY ts").map_err(sql_error)?;
+            let mut query=self.db.prepare("SELECT ts,payload FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3 ORDER BY ts").map_err(sql_error)?;
             for row in query
-                .query_map(params![key, since, until], |r| {
-                    Ok(serde_json::from_str(row_text(r, 0)?).ok())
-                })
+                .query_map(params![key, since, until], |r| history_reading(r, key))
                 .map_err(sql_error)?
             {
                 if let Some(r) = row.map_err(sql_error)? {
@@ -570,10 +756,10 @@ impl HistoryStore for Store {
             let span = (i128::from(until) - i128::from(since)).max(0) + 1;
             let width = ((span + i128::from(buckets) - 1) / i128::from(buckets))
                 .clamp(1, i128::from(i64::MAX)) as i64;
-            let mut query=self.db.prepare("WITH selected AS (SELECT ts,level,min((ts-?2)/?4,(?5-2)/3-1) AS bucket FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3), extremes AS (SELECT bucket,min(level) AS lo,max(level) AS hi FROM selected GROUP BY bucket), representatives AS (SELECT min(s.ts) AS ts FROM selected s JOIN extremes e ON s.bucket=e.bucket WHERE s.level=e.lo OR s.level=e.hi OR s.level IS NULL GROUP BY s.bucket,s.level), timestamps AS (SELECT ts FROM representatives UNION SELECT min(ts) FROM selected UNION SELECT max(ts) FROM selected) SELECT payload FROM readings WHERE device=?1 AND ts IN (SELECT ts FROM timestamps) ORDER BY ts LIMIT ?5").map_err(sql_error)?;
+            let mut query=self.db.prepare("WITH selected AS (SELECT ts,level,min((ts-?2)/?4,(?5-2)/3-1) AS bucket FROM readings WHERE device=?1 AND ts BETWEEN ?2 AND ?3), extremes AS (SELECT bucket,min(level) AS lo,max(level) AS hi FROM selected GROUP BY bucket), representatives AS (SELECT min(s.ts) AS ts FROM selected s JOIN extremes e ON s.bucket=e.bucket WHERE s.level=e.lo OR s.level=e.hi OR s.level IS NULL GROUP BY s.bucket,s.level), timestamps AS (SELECT ts FROM representatives UNION SELECT min(ts) FROM selected UNION SELECT max(ts) FROM selected) SELECT ts,payload FROM readings WHERE device=?1 AND ts IN (SELECT ts FROM timestamps) ORDER BY ts LIMIT ?5").map_err(sql_error)?;
             for row in query
                 .query_map(params![key, since, until, width, limit as i64], |r| {
-                    Ok(serde_json::from_str(row_text(r, 0)?).ok())
+                    history_reading(r, key)
                 })
                 .map_err(sql_error)?
             {
@@ -721,6 +907,43 @@ mod tests {
     }
 
     #[test]
+    fn calendar_queries_reject_mismatched_payloads_at_every_sampling_budget() {
+        let (_directory, mut store) = baseline_store();
+        for ts in 0..10 {
+            let mut reading = Reading::new("test", "Test mouse", "test", ts);
+            reading.level = Some(80);
+            store.record(&reading).unwrap();
+            store.flush().unwrap();
+            // Seed each SQL timestamp explicitly; unchanged pacing is unrelated.
+            if ts == 0 {
+                reading.key = "other-device".into();
+            }
+            if ts == 1 {
+                reading.timestamp = 999;
+            }
+            if ts == 2 {
+                reading.level = Some(255);
+            }
+            store
+                .db
+                .execute(
+                    "INSERT OR REPLACE INTO readings VALUES('test',?1,80,?2)",
+                    params![ts, serde_json::to_string(&reading).unwrap()],
+                )
+                .unwrap();
+        }
+        for budget in [2, 4, 8, 32] {
+            let result = store.query("test", 0, 9, budget).unwrap();
+            assert!(!result.is_empty());
+            assert!(
+                result.iter().all(|r| r.key == "test"
+                    && (3..=9).contains(&r.timestamp)
+                    && r.level == Some(80))
+            );
+        }
+    }
+
+    #[test]
     fn corruption_is_preserved_and_atomic_writes_replace() {
         let d = tempfile::tempdir().unwrap();
         let p = d.path().join("config.json");
@@ -736,14 +959,19 @@ mod tests {
         assert_eq!(load_settings(&p).low, 20);
     }
     #[test]
+    #[cfg(windows)]
     fn failed_atomic_save_preserves_previous_configuration() {
+        use std::os::windows::fs::OpenOptionsExt;
         let d = tempfile::tempdir().unwrap();
         let p = d.path().join("config.json");
         save_settings(&p, &Settings::default()).unwrap();
         let previous = fs::read(&p).unwrap();
-        // A directory occupying the temporary filename causes a real filesystem
-        // failure before replacement, without permission assumptions on CI.
-        fs::create_dir(p.with_extension("tmp")).unwrap();
+        // A reader denying delete access forces a genuine replacement failure.
+        let _locked = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&p)
+            .unwrap();
         let changed = Settings {
             low: 10,
             ..Default::default()
@@ -751,6 +979,27 @@ mod tests {
         assert!(save_settings(&p, &changed).is_err());
         assert_eq!(fs::read(&p).unwrap(), previous);
         assert_eq!(load_settings(&p).low, 20);
+        assert_eq!(fs::read_dir(d.path()).unwrap().count(), 1);
+    }
+    #[test]
+    fn concurrent_atomic_writers_never_share_temporary_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("export.json");
+        let barrier = std::sync::Barrier::new(8);
+        std::thread::scope(|scope| {
+            for value in 0..8u8 {
+                let path = &path;
+                let barrier = &barrier;
+                scope.spawn(move || {
+                    barrier.wait();
+                    atomic_write(path, &vec![value; 16384]).unwrap();
+                });
+            }
+        });
+        let bytes = fs::read(path).unwrap();
+        assert_eq!(bytes.len(), 16384);
+        assert!(bytes.iter().all(|v| *v == bytes[0]));
+        assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 1);
     }
     #[test]
     fn configuration_roundtrip_preserves_unicode_and_device_preferences() {
@@ -1191,6 +1440,38 @@ mod tests {
         assert_eq!(keys, vec![("usage".into(), 100)]);
     }
     #[test]
+    fn routine_retention_uses_index_and_removes_only_expired_rows() {
+        let (_dir, mut store) = baseline_store();
+        for timestamp in [99, 100, 101] {
+            usage_seed(
+                &mut store,
+                timestamp,
+                Some(50 + (timestamp % 3) as u8),
+                hb_core::Connection::Online,
+                None,
+            );
+        }
+        store.prune_expired(30 * 86400 + 100).unwrap();
+        let timestamps: Vec<i64> = store
+            .db
+            .prepare("SELECT ts FROM usage_metadata ORDER BY ts")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(timestamps, [100, 101]);
+        let plan: String = store
+            .db
+            .query_row(
+                "EXPLAIN QUERY PLAN DELETE FROM usage_metadata WHERE ts < ?1",
+                [100],
+                |row| row.get(3),
+            )
+            .unwrap();
+        assert!(plan.contains("usage_metadata_time"), "{plan}");
+    }
+    #[test]
     #[ignore = "explicit synthetic 30-day prune timing; no hardware"]
     fn prune_thirty_day_sql_timing() {
         let (_dir, mut store) = baseline_store();
@@ -1223,6 +1504,7 @@ mod tests {
                 "merged",
                 "DELETE FROM usage_metadata WHERE (device,ts) IN (SELECT device,ts FROM usage_metadata EXCEPT SELECT device,ts FROM readings WHERE ts >= ?1 ORDER BY device,ts)",
             ),
+            ("indexed-expiry", "DELETE FROM usage_metadata WHERE ts < ?1"),
         ] {
             let plan: Vec<String> = store
                 .db

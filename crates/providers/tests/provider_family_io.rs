@@ -985,7 +985,7 @@ fn infinity_two_junk_frames_cannot_be_a_battery_and_unknown_pids_never_open() {
     for family in ["lamzu", "gwolves"] {
         let known = if family == "lamzu" { 0x1e } else { 0x3854 };
         let mut i = device(family, known, 0xffff, 0, 2, "unknown");
-        i.product_id = 0x3808;
+        i.product_id = 0xffff; // 0x3808 is a supported HTM Plus cable in 1.14.0.
         i.feature_length = Some(65);
         let h = FakeHid::new(vec![i], vec![]);
         assert!(poll(family, &h).is_empty());

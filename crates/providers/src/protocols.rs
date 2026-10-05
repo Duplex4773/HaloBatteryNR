@@ -42,6 +42,74 @@ pub fn wl_heartbeat(r: &[u8]) -> Option<Battery> {
     }
     None
 }
+pub fn gwolves_old(r: &[u8]) -> Option<Battery> {
+    for offset in [1, 0] {
+        if r.get(offset..offset + 3) == Some(&[0xa1, 2, 0x8f][..]) && r.len() > offset + 5 {
+            return battery(r[offset + 5], Some(r[offset + 4] != 0));
+        }
+    }
+    None
+}
+pub fn hyperx3s(r: &[u8]) -> Option<(u8, u8)> {
+    if r.len() < 7 {
+        return None;
+    }
+    let (kind, value) = match r[0] {
+        0x0c => (r[5], r[6]),
+        0x0d => (
+            match r[4] {
+                1 => 6,
+                10 => 0x48,
+                _ => return None,
+            },
+            r[5],
+        ),
+        _ => return None,
+    };
+    match kind {
+        6 if value <= 100 => Some((kind, value)),
+        0x48 => Some((kind, value)),
+        _ => None,
+    }
+}
+pub fn steelseries_elite(r: &[u8]) -> Option<(Option<Battery>, Option<u8>)> {
+    if r.len() > 15 && r[..2] == [1, 0xb0] {
+        return Some((battery(r[6], Some(r[15] == 2)), Some(r[14])));
+    }
+    if r.len() < 5 || r[0] != 7 {
+        return None;
+    }
+    match r[1] {
+        0xb7 => battery(r[2], Some(r[4] == 2)).map(|b| (Some(b), None)),
+        0xb5 => Some((None, Some(r[4]))),
+        _ => None,
+    }
+}
+pub fn centurion_frame(payload: &[u8]) -> Vec<u8> {
+    assert!(payload.len() <= 61);
+    let mut r = padded(&[0x51, (payload.len() + 1) as u8, 0], 64);
+    r[3..3 + payload.len()].copy_from_slice(payload);
+    r
+}
+pub fn centurion_payload(r: &[u8]) -> Option<&[u8]> {
+    if r.len() < 4 || r[0] != 0x51 || r[1] <= 1 || usize::from(r[1]) + 2 > r.len() {
+        return None;
+    }
+    Some(&r[3..2 + usize::from(r[1])])
+}
+pub fn centurion_battery(data: &[u8]) -> Option<Battery> {
+    battery(
+        *data.first()?,
+        Some(data.get(2).is_some_and(|n| [1, 2, 3].contains(n))),
+    )
+}
+pub fn centurion_legacy(r: &[u8]) -> Option<Battery> {
+    if r.len() >= 13 && r[..2] == [0x51, 0x0b] && r[8] == 4 {
+        battery(r[10], Some(r[12] == 2))
+    } else {
+        None
+    }
+}
 pub fn pulsar(r: &[u8]) -> Option<Battery> {
     if r.len() < 17
         || r[..2] != [8, 4]

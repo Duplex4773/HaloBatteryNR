@@ -154,6 +154,91 @@ fn provider_delay(interval: u64, quiet: bool, pending: Option<Duration>) -> Dura
             .max(Duration::from_secs(1))
     }
 }
+fn battery_provider_delay(
+    id: &str,
+    interval: u64,
+    quiet: bool,
+    pending: Option<Duration>,
+) -> Duration {
+    // JBL only drains unsolicited reports from its already-open collection.
+    // Gaming throttles active queries, not this bounded passive collection work.
+    provider_delay(interval, quiet && id != "jbl", pending)
+}
+fn release_inactive_provider_handles(
+    providers: &mut BTreeMap<&str, Box<dyn BatteryProvider>>,
+    settings: &Settings,
+    suspended: bool,
+) {
+    for (id, provider) in providers.iter_mut() {
+        if suspended || !settings.enabled(id) {
+            provider.invalidate();
+        }
+    }
+}
+#[cfg(test)]
+mod passive_lifecycle_tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+    struct Provider(&'static str, Arc<AtomicUsize>);
+    impl BatteryProvider for Provider {
+        fn id(&self) -> &'static str {
+            self.0
+        }
+        fn poll(&mut self, _: &dyn HidTransport, _: &PollContext<'_>) -> PollResult {
+            Ok(vec![])
+        }
+        fn diagnostics(&self) -> Vec<String> {
+            vec![]
+        }
+        fn invalidate(&mut self) {
+            self.1.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    #[test]
+    fn disable_and_suspend_release_passive_handles_without_polling() {
+        let jbl = Arc::new(AtomicUsize::new(0));
+        let other = Arc::new(AtomicUsize::new(0));
+        let mut providers: BTreeMap<&str, Box<dyn BatteryProvider>> = BTreeMap::from([
+            (
+                "jbl",
+                Box::new(Provider("jbl", jbl.clone())) as Box<dyn BatteryProvider>,
+            ),
+            (
+                "razer",
+                Box::new(Provider("razer", other.clone())) as Box<dyn BatteryProvider>,
+            ),
+        ]);
+        let mut settings = Settings::default();
+        release_inactive_provider_handles(&mut providers, &settings, false);
+        assert_eq!(jbl.load(Ordering::Relaxed), 0);
+        settings.disabled_providers.insert("jbl".into());
+        release_inactive_provider_handles(&mut providers, &settings, false);
+        assert_eq!(jbl.load(Ordering::Relaxed), 1);
+        assert_eq!(other.load(Ordering::Relaxed), 0);
+        release_inactive_provider_handles(&mut providers, &settings, true);
+        assert_eq!(jbl.load(Ordering::Relaxed), 2);
+        assert_eq!(other.load(Ordering::Relaxed), 1);
+    }
+    #[test]
+    fn quiet_mode_throttles_queries_but_keeps_bounded_passive_collection() {
+        assert_eq!(
+            battery_provider_delay("jbl", 60, true, Some(Duration::from_secs(1))),
+            Duration::from_secs(1)
+        );
+        assert_eq!(
+            battery_provider_delay("razer", 60, true, Some(Duration::from_secs(1))),
+            Duration::from_secs(300)
+        );
+        assert_eq!(
+            battery_provider_delay("jbl", 60, true, None),
+            Duration::from_secs(60)
+        );
+        assert_eq!(
+            battery_provider_delay("jbl", 60, false, Some(Duration::ZERO)),
+            Duration::from_secs(1)
+        );
+    }
+}
 fn schedule_completed_provider<'a>(
     due: &mut BTreeMap<&'a str, Instant>,
     id: &'a str,
@@ -333,8 +418,13 @@ impl SnapshotPublisher {
     }
 }
 fn battery_affects_snapshot(engine: &Engine, provider: &str, result: &PollResult) -> bool {
-    engine.provider_has_snapshot_data(provider)
-        || !matches!(result, Ok(readings) if readings.is_empty())
+    match result {
+        Ok(readings) => {
+            engine.provider_error(provider).is_some()
+                || engine.provider_readings(provider) != readings
+        }
+        Err(error) => engine.provider_error(provider) != Some(error.message.as_str()),
+    }
 }
 /// Availability is an event at detection time, not a correction to an old poll.
 fn availability_boundary(mut reading: Reading, state: Connection, now: i64) -> Reading {
@@ -1621,6 +1711,7 @@ fn run(
             control_cancel.store(true, Ordering::Relaxed);
             control_cancel = Arc::new(AtomicBool::new(!s.polling_controls));
             engine.update_settings(s.clone());
+            release_inactive_provider_handles(&mut providers, &engine.settings, suspended);
             let current = engine.readings();
             let removed = previous
                 .into_iter()
@@ -1662,6 +1753,7 @@ fn run(
             );
             let _ = events.send(Event::PollingInvalidated(hid.generation()));
             if suspended {
+                release_inactive_provider_handles(&mut providers, &engine.settings, true);
                 engine.suspend();
                 let boundaries = engine
                     .readings()
@@ -1867,6 +1959,7 @@ fn run(
             {
                 snapshots.changed = true;
                 suspended = true;
+                release_inactive_provider_handles(&mut providers, &engine.settings, true);
                 control_cancel.store(true, Ordering::Relaxed);
                 hid.invalidate();
                 usage_tracker.invalidate(
@@ -1984,7 +2077,7 @@ fn run(
                     quiet,
                 );
             }
-            Work::Completed(Ok(WorkerCompleted::Battery(r))) => {
+            Work::Completed(Ok(WorkerCompleted::Battery(mut r))) => {
                 inflight = inflight.saturating_sub(1);
                 let id = r.provider.id();
                 let current = battery_completion_current(
@@ -2007,9 +2100,16 @@ fn run(
                     for n in engine.apply(id, r.result, clock.monotonic().as_secs_f64(), quiet) {
                         let _ = events.send(Event::Alert(n));
                     }
+                    if let Some(level) = engine.take_low_battery_sound() {
+                        let _ = hb_windows::system::play_low_battery_sound(level);
+                    }
                 }
                 estimator_dirty |= !observations.is_empty();
-                let delay = provider_delay(
+                if !current {
+                    r.provider.invalidate();
+                }
+                let delay = battery_provider_delay(
+                    id,
                     engine.settings.interval,
                     quiet,
                     r.provider.next_poll_delay(),
@@ -2560,6 +2660,38 @@ mod tests {
         );
         assert!(matches!(events.try_recv(), Ok(Event::Snapshot(_))));
         assert!(statuses.is_empty());
+    }
+
+    #[test]
+    fn identical_cached_readings_and_repeated_errors_do_not_republish_snapshots() {
+        let mut engine = Engine::new(Settings::default(), Estimator::default());
+        let reading = Reading::new("bt:one", "Headset", "bluetooth", 100);
+        engine.apply("bluetooth", Ok(vec![reading.clone()]), 1.0, false);
+        assert!(!battery_affects_snapshot(
+            &engine,
+            "bluetooth",
+            &Ok(vec![reading.clone()])
+        ));
+        let mut fresh = reading.clone();
+        fresh.timestamp += 1;
+        assert!(battery_affects_snapshot(
+            &engine,
+            "bluetooth",
+            &Ok(vec![fresh])
+        ));
+        let error = ProviderError::new("Unavailable");
+        assert!(battery_affects_snapshot(
+            &engine,
+            "bluetooth",
+            &Err(error.clone())
+        ));
+        engine.apply("bluetooth", Err(error.clone()), 2.0, false);
+        assert!(!battery_affects_snapshot(&engine, "bluetooth", &Err(error)));
+        assert!(battery_affects_snapshot(
+            &engine,
+            "bluetooth",
+            &Ok(vec![reading])
+        ));
     }
     #[derive(Default)]
     struct PassiveHid {

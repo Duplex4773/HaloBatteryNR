@@ -11,6 +11,17 @@ pub struct DevicePreferences {
     pub requested_polling_rate: Option<crate::PollingRate>,
 }
 
+/// A device label is one bounded line in menus, notifications and native edits.
+pub fn device_name(value: &str) -> Option<String> {
+    let name: String = value
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(120)
+        .collect();
+    let name = name.trim();
+    (!name.is_empty()).then(|| name.to_owned())
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -19,6 +30,8 @@ pub struct Settings {
     /// Visual warning threshold; zero disables orange. Red low-alert color has priority.
     pub warning_level: u8,
     pub notify: bool,
+    /// Optional Windows battery sound, repeated on fresh low readings every five minutes.
+    pub low_sound: bool,
     pub full_alert: bool,
     pub bluetooth: bool,
     pub animation: bool,
@@ -44,6 +57,7 @@ impl Default for Settings {
             low: 20,
             warning_level: 30,
             notify: true,
+            low_sound: false,
             full_alert: true,
             bluetooth: true,
             animation: true,
@@ -152,9 +166,7 @@ impl Settings {
             }) {
                 d.icon = None;
             }
-            if let Some(name) = &mut d.name {
-                name.truncate(name.char_indices().nth(120).map_or(name.len(), |(i, _)| i));
-            }
+            d.name = d.name.as_deref().and_then(device_name);
         }
         if settings.release_repository.is_none() {
             settings.update_check = false;

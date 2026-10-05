@@ -5133,12 +5133,12 @@
   },
   {
     "upstream_test": "test_more_features.QuietTests.test_alerts_are_held_and_shown_after_the_game",
-    "status": "mapped",
+    "status": "intentional_difference",
     "rust_test": "crates/core/tests/ported_behaviour.rs::quiet_game_holds_once_per_device_and_kind",
     "rust_tests": [
       "crates/core/tests/ported_behaviour.rs::quiet_game_holds_once_per_device_and_kind"
     ],
-    "notes": "",
+    "notes": "Held alerts remain deduplicated, but a full-charge alert expires after observed discharge and waits while the level is unknown. Covered by delayed_full_alert_requires_a_current_known_full_reading as well as the mapped quiet-mode test.",
     "mapping_sources": [
       "coverage_mapping_core.json"
     ],
@@ -5206,12 +5206,12 @@
   },
   {
     "upstream_test": "test_more_features.QuietTests.test_one_held_alert_per_device_and_kind",
-    "status": "mapped",
+    "status": "intentional_difference",
     "rust_test": "crates/core/tests/ported_behaviour.rs::quiet_game_holds_once_per_device_and_kind",
     "rust_tests": [
       "crates/core/tests/ported_behaviour.rs::quiet_game_holds_once_per_device_and_kind"
     ],
-    "notes": "",
+    "notes": "Held alerts remain deduplicated, but a full-charge alert expires after observed discharge and waits while the level is unknown. Covered by delayed_full_alert_requires_a_current_known_full_reading as well as the mapped quiet-mode test.",
     "mapping_sources": [
       "coverage_mapping_core.json"
     ],

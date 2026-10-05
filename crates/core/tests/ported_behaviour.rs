@@ -185,9 +185,11 @@ fn quiet_game_holds_once_per_device_and_kind() {
     assert!(apply(&mut e, Some(15), Some(false), true).is_empty());
     assert!(apply(&mut e, Some(12), Some(false), true).is_empty());
     let notes = e.flush_held();
-    assert_eq!(notes.len(), 2);
+    // A full-charge alert held during a game must expire once the same device
+    // is observed discharging; only the current low warning remains relevant.
+    assert_eq!(notes.len(), 1);
     assert!(notes.iter().any(|n| n.kind == NotificationKind::Low));
-    assert!(notes.iter().any(|n| n.kind == NotificationKind::Full));
+    assert!(!notes.iter().any(|n| n.kind == NotificationKind::Full));
     assert!(e.flush_held().is_empty());
 }
 #[test]

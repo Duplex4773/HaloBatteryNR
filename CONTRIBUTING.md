@@ -64,6 +64,13 @@ python tools/merge-coverage.py --check --require-complete
 cargo test --workspace --locked
 ```
 
+The 1.14.0 catalog and parser delta can be regenerated with `tools/port_catalog.py`
+and `tools/upstream114_fixtures.py` using that exact external version. Keep the
+459-ID mapping check against the archived **1.13.0** reference. A changed test-ID
+set produces a separate candidate inventory rather than replacing the frozen
+mapping. See the [1.14.0 review](docs/upstream-1.14.0-review.md) and
+[test delta](docs/upstream-1.14.0-test-delta.md).
+
 Review generated diffs, update coverage mappings and implement transaction changes
 before claiming support. The default coverage checker validates the stored
 inventory and actual Rust test links. Optional `--upstream` additionally checks the

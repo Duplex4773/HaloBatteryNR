@@ -42,11 +42,20 @@ fn owned_payload_reference(db: &Connection, until: i64) -> BatteryInsights {
             .ok()
             .flatten()
             .and_then(|hz| PollingRate::try_from(hz).ok());
-        let session = row
-            .get::<_, Option<String>>(3)
-            .ok()
-            .flatten()
-            .and_then(|s| s.parse().ok());
+        let session = match row.get::<_, Option<String>>(3) {
+            Ok(None) => None,
+            Ok(Some(value)) => match value.parse().ok() {
+                Some(session) => Some(session),
+                None => {
+                    builder.break_continuity();
+                    continue;
+                }
+            },
+            Err(_) => {
+                builder.break_continuity();
+                continue;
+            }
+        };
         builder.push(UsageObservation {
             reading,
             polling_rate,

@@ -402,9 +402,41 @@
   [
     "gwolves",
     13284,
+    9992,
+    "G-Wolves HTX Mini",
+    "old:wired:2717",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    10007,
+    "G-Wolves HTX Mini",
+    "old:receiver:2717",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
     10009,
     "G-Wolves HTX Mini",
     "",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    13576,
+    "G-Wolves Fenrir",
+    "old:wired:3517",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    13591,
+    "G-Wolves Fenrir",
+    "old:receiver:3517",
     0
   ],
   [
@@ -418,6 +450,22 @@
   [
     "gwolves",
     13284,
+    13832,
+    "G-Wolves Fenrir Pro",
+    "new:wired:3617",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    13847,
+    "G-Wolves Fenrir Pro",
+    "new:receiver:3617",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
     13849,
     "G-Wolves Fenrir Pro",
     "",
@@ -426,9 +474,57 @@
   [
     "gwolves",
     13284,
+    14088,
+    "G-Wolves Fenrir Max",
+    "old:wired:3717",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    14103,
+    "G-Wolves Fenrir Max",
+    "old:receiver:3717",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    14344,
+    "G-Wolves HTM Plus",
+    "new:wired:3817",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    14359,
+    "G-Wolves HTM Plus",
+    "new:receiver:3817",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
     14420,
     "G-Wolves mouse",
     "",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    14600,
+    "G-Wolves VUK",
+    "old:wired:3917",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    14615,
+    "G-Wolves VUK",
+    "old:receiver:3917",
     0
   ],
   [
@@ -466,6 +562,62 @@
   [
     "gwolves",
     13284,
+    21256,
+    "G-Wolves HTS Ultra",
+    "old:wired:5317",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    21271,
+    "G-Wolves HTS Ultra",
+    "old:receiver:5317",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    21507,
+    "G-Wolves HTS Plus ACE",
+    "old:receiver:5403",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    21508,
+    "G-Wolves HTS Plus ACE",
+    "old:wired:5403",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    21511,
+    "G-Wolves HTS Plus",
+    "old:receiver:5417",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    21512,
+    "G-Wolves HTS Plus",
+    "old:wired:5417",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    21527,
+    "G-Wolves HTS Plus",
+    "old:receiver:5417",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
     21528,
     "G-Wolves HTS Plus",
     "",
@@ -482,6 +634,22 @@
   [
     "gwolves",
     13284,
+    22024,
+    "G-Wolves HTXU",
+    "new:wired:5617",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22039,
+    "G-Wolves HTXU",
+    "new:receiver:5617",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
     22040,
     "G-Wolves HTXU",
     "",
@@ -493,6 +661,222 @@
     22041,
     "G-Wolves HTXU",
     "",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22275,
+    "G-Wolves HTX ACE",
+    "old:receiver:5703",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22276,
+    "G-Wolves HTX ACE",
+    "old:wired:5703",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22279,
+    "G-Wolves HTX",
+    "old:receiver:5717",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22280,
+    "G-Wolves HTX",
+    "old:wired:5717",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22295,
+    "G-Wolves HTX",
+    "old:receiver:5717",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22531,
+    "G-Wolves HSK Pro ACE",
+    "old:receiver:5803",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22532,
+    "G-Wolves HSK Pro ACE",
+    "old:wired:5803",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22535,
+    "G-Wolves HSK Pro",
+    "old:receiver:5817",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22536,
+    "G-Wolves HSK Pro",
+    "old:wired:5817",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22551,
+    "G-Wolves HSK Pro",
+    "old:receiver:5817",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22787,
+    "G-Wolves HSK Plus ACE",
+    "old:receiver:5903",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22788,
+    "G-Wolves HSK Plus ACE",
+    "old:wired:5903",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22791,
+    "G-Wolves HSK Plus",
+    "old:receiver:5917",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22792,
+    "G-Wolves HSK Plus",
+    "old:wired:5917",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    22807,
+    "G-Wolves HSK Plus",
+    "old:receiver:5917",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    26632,
+    "G-Wolves HSK Pro 2.0",
+    "new:wired:6817",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    26647,
+    "G-Wolves HSK Pro 2.0",
+    "new:receiver:6817",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    29187,
+    "G-Wolves HSK Lite",
+    "old:receiver:7203",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    29188,
+    "G-Wolves HSK Lite",
+    "old:wired:7203",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    30468,
+    "G-Wolves HTR",
+    "old:wired:7713",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    30472,
+    "G-Wolves HTR Pro",
+    "old:wired:7717",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    30483,
+    "G-Wolves HTR",
+    "old:receiver:7713",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    30487,
+    "G-Wolves HTR Pro",
+    "old:receiver:7717",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    30980,
+    "G-Wolves HT-S2",
+    "old:wired:7913",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    30984,
+    "G-Wolves HT-S2 Pro",
+    "old:wired:7917",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    30995,
+    "G-Wolves HT-S2",
+    "old:receiver:7913",
+    0
+  ],
+  [
+    "gwolves",
+    13284,
+    30999,
+    "G-Wolves HT-S2 Pro",
+    "old:receiver:7917",
     0
   ],
   [
@@ -532,6 +916,22 @@
     1008,
     3229,
     "HyperX Cloud III Wireless",
+    "",
+    0
+  ],
+  [
+    "hyperx_cloud3s",
+    1008,
+    716,
+    "HyperX Cloud III S Wireless",
+    "",
+    0
+  ],
+  [
+    "hyperx_cloud3s",
+    1008,
+    1726,
+    "HyperX Cloud III S Wireless",
     "",
     0
   ],
@@ -877,6 +1277,14 @@
     50509,
     "Logitech receiver",
     "receiver",
+    0
+  ],
+  [
+    "logitech_centurion",
+    1133,
+    2807,
+    "Logitech G PRO X 2 LIGHTSPEED",
+    "",
     0
   ],
   [
@@ -1554,6 +1962,14 @@
   [
     "razer",
     5426,
+    600,
+    "Razer BlackWidow V3 Mini HyperSpeed",
+    "",
+    31
+  ],
+  [
+    "razer",
+    5426,
     602,
     "Razer BlackWidow V3 Pro",
     "",
@@ -1566,6 +1982,78 @@
     "Razer BlackWidow V3 Pro",
     "",
     159
+  ],
+  [
+    "razer",
+    5426,
+    625,
+    "Razer BlackWidow V3 Mini HyperSpeed",
+    "",
+    159
+  ],
+  [
+    "razer",
+    5426,
+    656,
+    "Razer DeathStalker V2 Pro",
+    "",
+    159
+  ],
+  [
+    "razer",
+    5426,
+    658,
+    "Razer DeathStalker V2 Pro",
+    "",
+    31
+  ],
+  [
+    "razer",
+    5426,
+    662,
+    "Razer DeathStalker V2 Pro TKL",
+    "",
+    159
+  ],
+  [
+    "razer",
+    5426,
+    664,
+    "Razer DeathStalker V2 Pro TKL",
+    "",
+    31
+  ],
+  [
+    "razer",
+    5426,
+    697,
+    "Razer BlackWidow V4 Mini HyperSpeed",
+    "",
+    31
+  ],
+  [
+    "razer",
+    5426,
+    698,
+    "Razer BlackWidow V4 Mini HyperSpeed",
+    "",
+    159
+  ],
+  [
+    "razer",
+    5426,
+    725,
+    "Razer BlackWidow V4 Tenkeyless HyperSpeed",
+    "",
+    159
+  ],
+  [
+    "razer",
+    5426,
+    727,
+    "Razer BlackWidow V4 Tenkeyless HyperSpeed",
+    "",
+    31
   ],
   [
     "razer",
@@ -1949,6 +2437,14 @@
     8970,
     "Arctis GameBuds",
     "parse_gamebuds",
+    0
+  ],
+  [
+    "steelseries_elite",
+    4152,
+    8772,
+    "Arctis Nova Elite",
+    "",
     0
   ],
   [

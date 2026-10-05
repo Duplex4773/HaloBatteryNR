@@ -1,6 +1,6 @@
 # Provider port validation
 
-All 25 upstream providers remain represented: 23 HID families in
+All 28 upstream providers remain represented: 26 HID families in
 `hb-providers`, plus Bluetooth and a controller provider using XInput/WGI in the Windows layer. The standalone Rust implementation inherits the original device protocols,
 provider behavior and tests, not only product IDs. The original Python providers
 and tests remain available in the external official source reference. Original
@@ -21,10 +21,12 @@ The fixture generator executes the upstream fake-device suite while recording
 pure-parser calls, then adds deterministic cases. One notification test is isolated
 from the actual desktop's fullscreen state.
 
-Four Rust tests validate **14,718 parser cases**, **2,264 PA reply-shape cases**,
-**247 catalog rows**, and request sizes/checksums. They cover controller status
+Baseline Rust tests validate **14,718 parser cases**, **2,264 PA reply-shape cases**,
+and request sizes/checksums; catalog parity now covers **309 rows** from 1.14.0.
+Separate delta fixtures add **2,752 parser cases**. They cover controller status
 bytes, Logitech voltage interpolation, valid/truncated/mutated packets, percentages,
-charging and available display labels. **141 additional Rust regressions** exercise
+charging and available display labels. **141 baseline Rust regressions**, supplemented
+by the 1.14.0 transaction and passive-collection tests, exercise
 protocol transactions, state, identity, diagnostics and deadlines using fake HID
 sessions and clocks. Transcripts assert packet bytes, report sizes, matching replies,
 fallback channels and retry behavior; parser fixtures alone do not establish poll
@@ -40,6 +42,11 @@ the coverage checker. The generated coverage
 summary is authoritative for the aggregate classification; it covers core, Windows,
 UI and storage tests as well as these providers. A retired Python UI/updater test is
 not counted as a protocol test passing on physical hardware.
+
+The baseline remains pinned to 1.13.0. The [1.14.0 delta](upstream-1.14.0-test-delta.md)
+lists 142 additional upstream IDs and relevant Rust evidence separately; no full
+601-ID parity claim is made. New hardware paths have simulated transaction tests,
+not new local hardware verification.
 
 ## Protocol and identity behavior
 

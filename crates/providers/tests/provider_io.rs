@@ -583,7 +583,7 @@ fn remaining_hid_families_use_the_reference_channel_packet_and_positive_reply() 
     ] {
         let known = hb_providers::catalog::DEVICES
             .iter()
-            .find(|d| d.provider == family)
+            .find(|d| d.provider == family && (family != "gwolves" || d.variant.is_empty()))
             .unwrap();
         let mut selected = info(known.vid, known.pid, 0);
         let steps = match family {
@@ -642,7 +642,11 @@ fn remaining_hid_families_use_the_reference_channel_packet_and_positive_reply() 
             }
             "jbl" => {
                 selected.usage_page = 0xff13;
-                vec![Step::Read(Ok(vec![0x2f, 99])), Step::Read(Ok(vec![8, 46]))]
+                vec![
+                    Step::ReadSized(64, Duration::ZERO, Ok(vec![0x2f, 99])),
+                    Step::ReadSized(64, Duration::ZERO, Ok(vec![8, 46])),
+                    Step::ReadSized(64, Duration::ZERO, Ok(vec![])),
+                ]
             }
             "am_infinity" => {
                 selected.usage_page = 0xffff;

@@ -1,5 +1,56 @@
 # Changelog
 
+## Source audit — 6 October 2026
+
+- Prevent delayed full-charge alerts after discharge and retain Bluetooth failures until recovery.
+- Invalidate cached headset features on reconnect and preserve chronological history recovery.
+- Reject inconsistent history records and broken session data when calculating Insights.
+- Use independent temporary files for concurrent saves; normalize device names to one line.
+- Avoid duplicate cached-state refreshes and replace minute-based metadata scans with indexed expiry.
+- Reduce native control erase flashes, cancel hidden scrollbar gestures, and clarify History loading and empty states.
+- Add regressions and record validation and resource measurements in the source audit.
+
+## Scrollbar fix — 6 October 2026
+
+- Prevent the page and scrollbar from painting over each other.
+- Remove competing native/themed scrollbar redraws during updates and dragging.
+- Skip unchanged range/position updates; repeat scrolling runs only during a held click.
+- Cover light/dark rendering, dragging, cancellation and dashboard lifecycle in native tests.
+
+## Consumer UI refinement — 5 October 2026
+
+- Consistent light/dark palette, rounded buttons and selectors, quiet helper text,
+  clear selected tabs and event-driven hover/pressed feedback.
+- Battery-first Devices layout, labelled History filters, clearer Insights panels
+  and grouped Settings with prominent audio alerts.
+- Themed native page scrolling, readable list selections, improved spacing,
+  text padding and overflow-aware summary scrollbars.
+- Hide unfinished update controls; add About and Open data folder under Advanced options.
+- Reuse native fonts, stock drawing objects and existing workers. No new polling,
+  background timers, image caches or rendering framework.
+- Refresh synthetic screenshots and document resource validation in the UI audit.
+
+
+## Unreleased — 5 October 2026 upstream 1.14.0 updates
+
+- Review the parent changes from `a566a046` to `0e383bb` and add 62 battery catalog
+  rows, bringing the catalog to 309 and monitoring to 28 provider families.
+- Add Cloud III S Wireless, PRO X 2 LIGHTSPEED and Nova Elite battery protocols,
+  five Razer wireless keyboard models, and G-Wolves model-specific receivers.
+  Keep parent hardware evidence separate from simulated Rust tests.
+- Keep JBL receiver collections open with bounded nonblocking collection on the
+  existing workers; remove the normal ten-second listen delay, preserve newest
+  report ordering, close on disable/suspend/exit, and return typed access failures.
+- Add default-off Windows low-battery sounds, including critical sounds at 5%,
+  per-device thresholds, five-minute repeat limits and quiet-gaming support.
+- Add marker-based portable settings in `HaloBatteryNext-data`, with a writable
+  folder check, app-data fallback, explicit-directory priority and no import.
+- Preserve the frozen 459-ID test mapping; document 142 new parent test IDs and
+  generate changed inventories separately. Add 2,752 parser delta fixtures and
+  meaningful native/simulated regressions. Polling write allowlists are unchanged.
+- Document existing Rust equivalents for Bluetooth scheduling, hide/update races
+  and rendering only the active icon colour. Workflows remain disabled.
+
 ## Unreleased — 4 October 2026 dashboard updates
 
 - Group Settings into alerts, appearance, battery checks, polling rate and

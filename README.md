@@ -6,7 +6,8 @@ its own system-tray icon. One portable executable runs without Python, .NET or a
 webview runtime.
 
 This is an independent rewrite of [HaloBattery](https://github.com/HeyOkay/HaloBattery),
-based on upstream 1.13.0 (`a566a046`). It carries forward device protocols, provider
+based on upstream 1.13.0 (`a566a046`), with reviewed updates through
+[1.14.0](https://github.com/HeyOkay/HaloBattery/releases/tag/v1.14.0) (`0e383bb`). It carries forward device protocols, provider
 behavior, tests and hardware reports through a separately implemented runtime.
 The source tree contains the Rust app and its development tools; the original
 Python application is maintained externally as a reference.
@@ -16,11 +17,13 @@ Python application is maintained externally as a reference.
 - **Devices, History, Insights and Settings:** native dashboard, keyboard navigation,
   per-monitor DPI, automatic Windows app light/dark appearance and themed tray menus.
   Grouped Settings and scrollable pages keep navigation and the Settings Save
-  footer visible. More options holds less-used settings; device labels, polling
+  footer visible. Advanced options holds less-used settings; device labels, polling
   feedback and battery-life summaries use plain language.
-- **25 battery provider families:** mice, wireless keyboards, headsets and controllers
+- **28 battery provider families:** mice, wireless keyboards, headsets and controllers
   over HID, Bluetooth, XInput and Windows.Gaming.Input. Per-device rename, hide,
   icon selection, alert thresholds and provider switches.
+  New support includes Cloud III S Wireless, PRO X 2 LIGHTSPEED, Nova Elite,
+  five additional Razer wireless keyboards and G-Wolves models with their own receivers.
 - **Thirty-day history:** Time used is the default view; sleeping and unavailable
   periods pause estimated awake time. Calendar views carry the last known level
   through missing readings. Original observations remain intact.
@@ -38,9 +41,16 @@ Python application is maintained externally as a reference.
   why polling changes are unavailable under the one-time-only configuration policy.
 - **Battery warnings:** configurable orange band at 30% by default, then red at the
   low-alert threshold. Charging animation, full-charge alerts and gaming suppression.
+  Optional Windows low-battery sounds also work during games and repeat on fresh
+  readings after five minutes; sound is off by default.
+- **Portable settings:** create `portable.txt` beside the executable to keep data
+  in its adjacent `HaloBatteryNext-data` folder. An unwritable folder falls back
+  to the usual app-data location. Existing settings are not imported.
 - **Stable monitoring:** tray placement persists through mouse sleep; closing the
   dashboard leaves monitoring active. Connection events, bounded workers, cached
   graphics and batched history keep background work small.
+  JBL reports are collected through a persistent read-only connection without
+  delaying other device polls or adding a device thread.
 
 See [supported battery devices](docs/device-support.md),
 [polling models and limits](docs/polling-controls.md) and the
@@ -48,6 +58,12 @@ See [supported battery devices](docs/device-support.md),
 **hardware verified by user testing** at all six supported rates: 125, 500, 1000,
 2000, 4000 and 8000 Hz. Parent-app battery verification is labelled separately;
 it does not establish polling verification.
+See the [1.14.0 port review](docs/upstream-1.14.0-review.md) for implemented changes,
+existing equivalents and verification limits.
+
+The [6 October source audit](docs/source-audit-20261006.md) fixes recovery,
+notification and history edge cases, reduces repeated background work, and
+improves native control repainting and History feedback.
 
 Polling controls default off and use ordinary user-mode HID access: no drivers,
 elevation, game-process access, input interception or continuous rate enforcement.
@@ -55,10 +71,9 @@ These boundaries do not claim universal anti-cheat approval.
 
 ## Screenshots
 
-Native UI with **synthetic device and history data**. Devices, Settings and
-Insights show the 4 October 2026 dashboard refinement using native test renders;
-History is from the 2 October release capture. Screenshots demonstrate the
-interface, not hardware verification.
+Native UI with **synthetic device and history data**, rendered from the
+5 October 2026 consumer UI update. Screenshots demonstrate the interface,
+not hardware verification.
 
 | Devices | History |
 | --- | --- |
@@ -70,6 +85,9 @@ interface, not hardware verification.
 
 [Light Devices](docs/screenshots/devices-light.png) ·
 [Light Settings](docs/screenshots/settings-light.png) ·
+[Light History](docs/screenshots/history-light.png) ·
+[Light Insights](docs/screenshots/insights-light.png) ·
+[Advanced settings](docs/screenshots/settings-advanced-dark.png) ·
 [Capture instructions](docs/screenshots/README.md)
 
 ## Performance compared with the original
@@ -77,7 +95,8 @@ interface, not hardware verification.
 The [3 October audit](docs/performance-audit-20261003.md) addresses access-failure
 retry loops, bounded history recovery, departed-device caches and History resizing.
 The [4 October UI audit](docs/ui-audit-20261004.md) records the dashboard changes,
-native resource checks and their limits.
+native resource checks and their limits. The [5 October consumer UI audit](docs/ui-audit-20261005.md)
+covers the current appearance, native controls and open/close resource validation.
 
 Local Windows measurements used **three-minute windows**, a 60-second battery
 refresh interval and status export enabled, with dashboards and menus closed.

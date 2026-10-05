@@ -53,6 +53,19 @@ fn save_latest_estimator(
     Ok(())
 }
 
+fn record_in_order(
+    db: &mut Store,
+    observations: Vec<UsageObservation>,
+    pending: &mut Vec<UsageObservation>,
+) -> Result<(), ProviderError> {
+    let recovered = std::mem::take(pending);
+    if let Err(error) = record_batch(db, recovered, pending) {
+        retain_usage(pending, observations);
+        return Err(error);
+    }
+    record_batch(db, observations, pending)
+}
+
 fn recover_and_flush(
     database: &mut Result<Store, ProviderError>,
     path: &std::path::Path,
@@ -96,7 +109,7 @@ pub(super) fn run(
         let result = match message {
             Ok(Storage::UsageSample(observations)) => {
                 if let Ok(db) = &mut database {
-                    record_batch(db, observations, &mut pending_usage)
+                    record_in_order(db, observations, &mut pending_usage)
                 } else {
                     retain_usage(&mut pending_usage, observations);
                     Ok(())
@@ -175,7 +188,7 @@ pub(super) fn run(
                 &mut pending_usage,
                 &mut estimator,
             )
-            .and_then(|_| database.as_mut().unwrap().prune(clock.unix()));
+            .and_then(|_| database.as_mut().unwrap().prune_expired(clock.unix()));
             if let Err(e) = result {
                 let _ = events.send(Event::Error(format!("History: {e}")));
             }
@@ -300,5 +313,23 @@ mod tests {
         retain_usage(&mut pending, [observation("synthetic:0", 6060, 49)]);
         assert_eq!(pending.len(), MAX_RECOVERY_DEVICES);
         assert_eq!(pending[0].reading.level, Some(49));
+    }
+
+    #[test]
+    fn new_samples_follow_recovery_so_older_same_second_data_cannot_overwrite_them() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut db = Store::open(&directory.path().join("history.db")).unwrap();
+        let mut pending = vec![observation("mouse", 5000, 70)];
+        record_in_order(&mut db, vec![observation("mouse", 5000, 69)], &mut pending).unwrap();
+        db.flush().unwrap();
+        assert!(pending.is_empty());
+        assert_eq!(
+            db.query("mouse", 5000, 5000, 10).unwrap()[0].level,
+            Some(69)
+        );
+        // Pacing must track the latest recovered state too.
+        record_in_order(&mut db, vec![observation("mouse", 5001, 69)], &mut pending).unwrap();
+        db.flush().unwrap();
+        assert_eq!(db.query("mouse", 5000, 5001, 10).unwrap().len(), 1);
     }
 }

@@ -5,6 +5,8 @@ upstream test suite; pure parsers are captured for exact cross-language replay.
 Fixtures exercise the Python functions themselves, including exhaustive controller
 bytes and voltage interpolation, valid seeds, truncation and seeded mutations.
 The inventory preserves mappings; parser-call evidence alone is not full poll parity.
+The mapped baseline is frozen: a changed test-ID set produces a versioned candidate
+inventory rather than replacing docs/provider-test-inventory.json.
 """
 import argparse
 import importlib
@@ -17,7 +19,17 @@ import contextlib
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-from upstream_reference import add_upstream_argument, resolve_upstream
+from upstream_reference import add_upstream_argument, reference_version, resolve_upstream
+
+
+def inventory_destination(root, version, inventory, previous):
+    """Preserve the mapped baseline whenever the reference's test-ID set changes."""
+    baseline = root / 'docs/provider-test-inventory.json'
+    current_ids = {row['upstream_test'] for row in inventory}
+    if baseline.exists() and current_ids != set(previous):
+        return root / f'docs/reference-test-inventory-{version}.json', True
+    return baseline, False
+
 parser = argparse.ArgumentParser(description=__doc__)
 add_upstream_argument(parser)
 args = parser.parse_args()
@@ -203,6 +215,7 @@ def visit(suite):
 visit(suite)
 inventory_path=ROOT/'docs/provider-test-inventory.json'
 previous={row['upstream_test']:row for row in json.loads(inventory_path.read_text(encoding='utf-8-sig'))} if inventory_path.exists() else {}
+inventory_path, candidate = inventory_destination(ROOT, reference_version(REFERENCE_ROOT), inventory, previous)
 for row in inventory:
     if row['upstream_test'] in previous:
         row.update(previous[row['upstream_test']])
@@ -211,3 +224,6 @@ for row in inventory:
         row['parser_evidence']={'rust_test':'crates/providers/tests/parser_parity.rs::python_reference_parser_fixtures','parsers':sorted(recorded_tests[row['upstream_test']])}
 inventory_path.write_text(json.dumps(inventory,indent=2)+'\n',encoding='utf-8')
 print(f'{len(cases)} parser cases; {len(wire_cases)} PA cases; {len(inventory)} upstream tests inventoried; {len(recorded_tests)} IDs have exact parser-call evidence')
+print(f'{"Candidate" if candidate else "Baseline"} inventory: {inventory_path.relative_to(ROOT)}')
+if candidate:
+    print('Frozen baseline inventory preserved; new test IDs remain not_mapped. This is not a full behaviour-parity claim.')

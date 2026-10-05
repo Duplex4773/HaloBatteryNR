@@ -52,7 +52,7 @@ try {
       $changedPreference = $true
       # Notify only this simulation, without broadcasting to other applications.
       [HaloShot]::SendMessage($monitor,26,[UIntPtr]::Zero,[IntPtr]::Zero) | Out-Null
-      $expected = if ($value -eq 0) { 0x202020 } else { 0xfafafa }
+      $expected = if ($value -eq 0) { 0x1d1916 } else { 0xfaf8f6 }
       $deadline = [DateTime]::UtcNow.AddSeconds(5)
       do { Start-Sleep -Milliseconds 200; $actual = [HaloShot]::Background($dashboard) } while ($actual -ne $expected -and [DateTime]::UtcNow -lt $deadline)
       if ($actual -ne $expected) { throw "Theme capture failed: $theme palette was not applied (registry=$((Get-ItemProperty -LiteralPath $themeKey).AppsUseLightTheme), background=$actual)." }

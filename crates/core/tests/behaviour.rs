@@ -73,6 +73,43 @@ fn held_low_notification_is_dropped_after_charge() {
     assert!(e.flush_held().is_empty());
 }
 #[test]
+fn delayed_full_alert_requires_a_current_known_full_reading() {
+    for failed_delivery in [false, true] {
+        let mut e = engine();
+        e.apply("razer", Ok(vec![reading(95, true, 0)]), 0.0, false);
+        let notes = e.apply(
+            "razer",
+            Ok(vec![reading(100, true, 1)]),
+            1.0,
+            !failed_delivery,
+        );
+        if failed_delivery {
+            e.notification_failed(notes[0].clone());
+        }
+        let mut unknown = reading(100, false, 2);
+        unknown.level = None;
+        e.apply("razer", Ok(vec![unknown]), 2.0, true);
+        assert!(e.flush_held().is_empty());
+        assert!(e.has_held_notifications());
+        e.apply("razer", Ok(vec![reading(80, false, 3)]), 3.0, true);
+        assert!(e.flush_held().is_empty());
+        assert!(!e.has_held_notifications());
+    }
+}
+#[test]
+fn display_name_is_bounded_single_line_and_blank_restores_detected_name() {
+    use hb_core::settings::device_name;
+    assert_eq!(
+        device_name("  Work\0 mouse\r\n ").as_deref(),
+        Some("Work mouse")
+    );
+    assert_eq!(device_name(" \r\n\t"), None);
+    assert_eq!(device_name(&"🐭".repeat(121)).unwrap().chars().count(), 120);
+    let settings =
+        Settings::from_value(serde_json::json!({"devices":{"test":{"name":"  \u{0} "}}})).unwrap();
+    assert!(settings.devices["test"].name.is_none());
+}
+#[test]
 fn invalid_properties_use_individual_defaults() {
     let s = Settings::from_value(serde_json::json!({"interval":0,"low":15,"bluetooth":1,"animation":false,"icon_theme":"evil"})).unwrap();
     assert_eq!(s.interval, 60);

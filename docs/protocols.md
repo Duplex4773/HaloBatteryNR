@@ -254,6 +254,81 @@ Any Xbox-compatible controller is read the same way as the GameSir G7 Pro: the b
 
 The level Windows itself knows (`DEVPKEY_Bluetooth_Battery`). Only devices connected right now are shown: the link state comes from WinRT (`BluetoothDevice.ConnectionStatus`, the same source as Windows Settings). A device that is also read over HID keeps one icon: the HID reading wins and the Bluetooth copy is dropped
 
+## Upstream 1.14.0 additions
+
+The following read-only battery paths were reviewed from
+[HaloBattery 1.14.0](https://github.com/HeyOkay/HaloBattery/tree/0e383bb560c04f9d9ac4b163b04941c6ade4cb85).
+Thank you to the upstream contributors, protocol authors and hardware reporters.
+Matching battery IDs do not authorize configuration commands.
+
+### HyperX Cloud III S Wireless
+
+`03F0:02CC` and `03F0:06BE`, through their dongles. A 64-byte output report beginning
+`0C 02 03 01 00 06` requests battery; command `48` requests charging. Replies may
+arrive on another collection. The parser distinguishes command replies from
+`0D` notifications and refuses levels above 100. The transaction reads the
+available collections with bounded deadlines and never sends a feature report.
+Protocol reference: [HyperHeadset](https://github.com/LennardKittner/HyperHeadset),
+with parent hardware reports [#106](https://github.com/HeyOkay/HaloBattery/issues/106)
+and [#156](https://github.com/HeyOkay/HaloBattery/issues/156).
+
+### Logitech G PRO X 2 LIGHTSPEED
+
+`046D:0AF7`, only the `FFA0:0001` collection. Centurion output frames use report
+`51`; FeatureSet discovery identifies the receiver bridge and headset battery
+feature. Cached feature indices are discarded after connection changes or an
+exchange error. Replies must match the feature/function and software token;
+notifications and late packets do not establish a battery reading. Firmware
+without the battery feature uses the documented fixed read-only request.
+Sources: [Solaar](https://github.com/pwr-Solaar/Solaar),
+[HeadsetControl](https://github.com/Sapd/HeadsetControl) and the parent report
+[#103](https://github.com/HeyOkay/HaloBattery/issues/103).
+
+### SteelSeries Arctis Nova Elite
+
+`1038:2244`, interface 3. The 64-byte output request starts `01 B0` and is sent only
+to a compatible vendor collection. Direct `01 B0` status carries the headset
+percentage in byte 6, power in byte 14 and charging in byte 15; `07 B7` and `07 B5`
+frames are also understood. Spare-battery levels are excluded. Output and input
+collections can differ, and the accepted output collection is cached.
+Sources: [Linux-Arctis-Manager](https://github.com/elegos/Linux-Arctis-Manager),
+[Arctis-Sound-Manager](https://github.com/loteran/Arctis-Sound-Manager) and the
+parent hardware report [#138](https://github.com/HeyOkay/HaloBattery/issues/138).
+
+### Razer wireless keyboards added in 1.14.0
+
+DeathStalker V2 Pro (`0290` receiver / `0292` cable), V2 Pro TKL (`0296` / `0298`),
+BlackWidow V3 Mini HyperSpeed (`0271` / `0258`), V4 Mini HyperSpeed (`02BA` / `02B9`)
+and V4 Tenkeyless HyperSpeed (`02D5` / `02D7`) use vendor `1532`. Read-only battery
+and charging commands use the existing 91-byte transaction, with `9F` wireless
+and `1F` wired transactions. The reviewed model table prefers interface 2 or 3
+and retains the bounded alternate-collection fallback. These are battery devices,
+distinct from the wired batteryless polling-control inventory.
+The [parent keyboard implementation](https://github.com/HeyOkay/HaloBattery/blob/0e383bb560c04f9d9ac4b163b04941c6ade4cb85/providers/razer.py)
+retains the keyboard-driver protocol provenance; the TKL has a parent report in
+[#106](https://github.com/HeyOkay/HaloBattery/issues/106).
+
+### G-Wolves model-specific receivers
+
+The model table adds 48 receiver/cable rows, including HSK Pro ACE receiver
+`33E4:5803`. Models select either the shared/new battery exchange or the vendor
+web driver's `getOldBattery` exchange. Cable requests use report `00`, receiver
+requests `01`; collection capability checks prevent sending incompatible feature
+reports. Receiver/cable readings merge only with trusted physical identity in
+the Rust port, rather than solely a matching model name.
+Source: the [parent model table and web-driver provenance](https://github.com/HeyOkay/HaloBattery/blob/0e383bb560c04f9d9ac4b163b04941c6ade4cb85/providers/gwolves.py).
+
+### JBL passive collection change
+
+The existing `0ECB:2088`, `FF13:0001` battery frames remain read-only. Sessions stay
+open between polls. Valid `08` reports update the latest level; mute `2F` is never
+a level and power `09` is handled in report order. A power-ON frame alone cannot
+refresh an old percentage. Rust uses the existing bounded workers to drain
+nonblocking reports once per second while connected, rather than a thread per
+device. Session/report limits, typed failures and retry cooldowns are tested.
+The [parent JBL source](https://github.com/HeyOkay/HaloBattery/blob/0e383bb560c04f9d9ac4b163b04941c6ade4cb85/providers/jbl.py)
+retains credits to the original JBL monitor and hardware captures.
+
 ## Others
 
 ### Logitech (more HID++ 2.0 devices and G-series headsets)

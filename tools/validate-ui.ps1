@@ -81,7 +81,7 @@ $dashboard=[HaloShot]::FindWindow($null,'Halo Battery Next')
 if($dashboard -eq [IntPtr]::Zero){throw 'Missing dashboard'}
 $appsLight=(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' -ErrorAction SilentlyContinue).AppsUseLightTheme
 if(![HaloShot]::HighContrast()){
- $expected=if($null-ne$appsLight-and$appsLight-eq0){0x202020}else{0xfafafa}
+ $expected=if($null-ne$appsLight-and$appsLight-eq0){0x1d1916}else{0xfaf8f6}
  if([HaloShot]::Background($dashboard)-ne$expected){throw 'Automatic dashboard palette does not match the Windows app preference'}
  [HaloShot]::PostMessage($dashboard,26,[UIntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Start-Sleep -Milliseconds 200
  if([HaloShot]::Background($dashboard)-ne$expected){throw 'Settings change did not retain the automatic app palette'}

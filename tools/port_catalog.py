@@ -31,6 +31,12 @@ for provider, vid, attr in [("razer",0x1532,"KNOWN"),("asus",0x0b05,"KNOWN"),("a
 for pid in importlib.import_module("providers.wlmouse").RECEIVERS:
     if not any(row[0]=="wlmouse" and row[2]==pid for row in rows): add("wlmouse",0x36a7,pid,"WLmouse receiver")
 add("gwolves",0x33e4,0x3854,"G-Wolves mouse")
+g = importlib.import_module("providers.gwolves")
+for pid, (name, receiver, exchange, wired) in getattr(g, "MODELS", {}).items():
+    add("gwolves", 0x33e4, pid, name, f"{exchange}:{'wired' if wired else 'receiver'}:{receiver:04x}")
+for provider, vid in [("hyperx_cloud3s", 0x03f0), ("logitech_centurion", 0x046d), ("steelseries_elite", 0x1038)]:
+    if (REFERENCE_ROOT / "providers" / (provider + ".py")).is_file():
+        table(provider, vid, "PIDS")
 for pid, name in importlib.import_module("providers.corsair").NXP_PIDS.items(): add("corsair",0x1b1c,pid,name,"nxp")
 for pid in [0x1e,0x1c]: add("lamzu",0x373e,pid,"LAMZU Maya X")
 add("lofree",0x388d,0x25,"Lofree Hyzen")

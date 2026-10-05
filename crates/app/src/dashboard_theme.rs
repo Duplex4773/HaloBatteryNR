@@ -1,5 +1,7 @@
 //! Dashboard-only colors and documented native-control painting. Control input,
 //! focus, selection and accessibility remain with the Windows control classes.
+//! The themed scrollbar handles pointer input too, because the native tracking
+//! loop paints directly to its DC, bypassing WM_PAINT.
 use windows::{
     Win32::{
         Foundation::*,
@@ -7,7 +9,11 @@ use windows::{
         UI::{
             Controls::*,
             HiDpi::GetDpiForWindow,
-            Input::KeyboardAndMouse::{GetFocus, IsWindowEnabled},
+            Input::KeyboardAndMouse::{
+                GetCapture, GetFocus, IsWindowEnabled, ReleaseCapture, SetCapture, TME_LEAVE,
+                TRACKMOUSEEVENT, TrackMouseEvent, VK_DOWN, VK_END, VK_HOME, VK_NEXT, VK_PRIOR,
+                VK_UP,
+            },
             Shell::*,
             WindowsAndMessaging::*,
         },
@@ -51,27 +57,27 @@ impl Palette {
         }
         if dark {
             Self {
-                background: rgb(32, 32, 32),
-                surface: rgb(45, 45, 45),
-                text: rgb(242, 242, 242),
-                disabled: rgb(160, 160, 160),
-                border: rgb(112, 112, 112),
-                accent: rgb(91, 218, 168),
-                selection: rgb(45, 92, 119),
+                background: rgb(22, 25, 29),
+                surface: rgb(31, 35, 40),
+                text: rgb(235, 239, 243),
+                disabled: rgb(165, 175, 186),
+                border: rgb(68, 76, 86),
+                accent: rgb(111, 222, 171),
+                selection: rgb(35, 67, 54),
                 selection_text: rgb(255, 255, 255),
                 dark,
                 high_contrast,
             }
         } else {
             Self {
-                background: rgb(250, 250, 250),
+                background: rgb(246, 248, 250),
                 surface: rgb(255, 255, 255),
-                text: rgb(32, 35, 38),
-                disabled: rgb(109, 109, 109),
-                border: rgb(185, 190, 195),
-                accent: rgb(25, 133, 97),
-                selection: rgb(0, 120, 215),
-                selection_text: rgb(255, 255, 255),
+                text: rgb(31, 41, 51),
+                disabled: rgb(91, 104, 117),
+                border: rgb(192, 201, 210),
+                accent: rgb(20, 119, 83),
+                selection: rgb(222, 240, 230),
+                selection_text: rgb(20, 80, 56),
                 dark,
                 high_contrast,
             }
@@ -94,6 +100,32 @@ pub(crate) fn color_brush(hdc: HDC, color: COLORREF) -> HBRUSH {
         HBRUSH(GetStockObject(DC_BRUSH).0)
     }
 }
+pub(crate) fn rounded_surface(
+    hdc: HDC,
+    rect: &RECT,
+    fill: COLORREF,
+    border: COLORREF,
+    radius: i32,
+) {
+    unsafe {
+        let saved = SaveDC(hdc);
+        SelectObject(hdc, GetStockObject(DC_BRUSH));
+        SelectObject(hdc, GetStockObject(DC_PEN));
+        SetDCBrushColor(hdc, fill);
+        SetDCPenColor(hdc, border);
+        let _ = RoundRect(
+            hdc,
+            rect.left,
+            rect.top,
+            rect.right,
+            rect.bottom,
+            radius,
+            radius,
+        );
+        let _ = RestoreDC(hdc, saved);
+    }
+}
+
 struct Brush(HBRUSH);
 impl Brush {
     fn new(color: COLORREF) -> Self {
@@ -139,14 +171,30 @@ impl DashboardTheme {
     pub fn apply_control(&self, hwnd: HWND) {
         unsafe {
             let class = class_name(hwnd);
-            if class == "Button" || class == "ComboBox" {
+            if matches!(
+                class.as_str(),
+                "Button" | "ComboBox" | "Edit" | "ListBox" | "ScrollBar"
+            ) {
                 let mut data = 0usize;
                 if GetWindowSubclass(hwnd, Some(control_proc), SUBCLASS_ID, Some(&mut data))
                     .as_bool()
                 {
-                    *(data as *mut Palette) = self.palette;
+                    if self.palette.high_contrast {
+                        cancel_scroll(hwnd, data);
+                    }
+                    (*(data as *mut ControlAppearance)).palette = self.palette;
                 } else {
-                    let data = Box::into_raw(Box::new(self.palette));
+                    let data = Box::into_raw(Box::new(ControlAppearance {
+                        palette: self.palette,
+                        hovered: false,
+                        scroll: ScrollGesture::Idle,
+                        kind: match class.as_str() {
+                            "ComboBox" => ControlKind::Combo,
+                            "Edit" | "ListBox" => ControlKind::Text,
+                            "ScrollBar" => ControlKind::Scroll,
+                            _ => ControlKind::Button,
+                        },
+                    }));
                     if !SetWindowSubclass(hwnd, Some(control_proc), SUBCLASS_ID, data as usize)
                         .as_bool()
                     {
@@ -164,8 +212,16 @@ impl DashboardTheme {
                 };
                 let _ = SetWindowTheme(hwnd, theme, theme);
             }
+            if class == "ListBox" {
+                SendMessageW(
+                    hwnd,
+                    LB_SETITEMHEIGHT,
+                    Some(WPARAM(0)),
+                    Some(LPARAM((28 * GetDpiForWindow(hwnd) / 96) as isize)),
+                );
+            }
             if class == "ComboBox" {
-                let height = (22 * GetDpiForWindow(hwnd) / 96) as isize;
+                let height = (28 * GetDpiForWindow(hwnd) / 96) as isize;
                 SendMessageW(
                     hwnd,
                     CB_SETITEMHEIGHT,
@@ -192,7 +248,14 @@ impl DashboardTheme {
             SetTextColor(
                 hdc,
                 if IsWindowEnabled(child).as_bool() {
-                    self.palette.text
+                    if !self.palette.high_contrast
+                        && !surface
+                        && matches!(GetDlgCtrlID(child), 45..=47 | 77 | 78 | 95..=97 | 99 | 213 | 216 | 219)
+                    {
+                        self.palette.disabled
+                    } else {
+                        self.palette.text
+                    }
                 } else {
                     self.palette.disabled
                 },
@@ -219,7 +282,7 @@ impl DashboardTheme {
         }
         unsafe {
             let item = &*(lparam.0 as *const DRAWITEMSTRUCT);
-            if item.CtlType != ODT_COMBOBOX {
+            if item.CtlType != ODT_COMBOBOX && item.CtlType != ODT_LISTBOX {
                 return None;
             }
             let saved = SaveDC(item.hDC);
@@ -241,7 +304,11 @@ impl DashboardTheme {
             if item.itemID != u32::MAX {
                 let len = SendMessageW(
                     item.hwndItem,
-                    CB_GETLBTEXTLEN,
+                    if item.CtlType == ODT_LISTBOX {
+                        LB_GETTEXTLEN
+                    } else {
+                        CB_GETLBTEXTLEN
+                    },
                     Some(WPARAM(item.itemID as usize)),
                     None,
                 )
@@ -250,7 +317,11 @@ impl DashboardTheme {
                     let mut text = vec![0u16; len as usize + 1];
                     SendMessageW(
                         item.hwndItem,
-                        CB_GETLBTEXT,
+                        if item.CtlType == ODT_LISTBOX {
+                            LB_GETTEXT
+                        } else {
+                            CB_GETLBTEXT
+                        },
                         Some(WPARAM(item.itemID as usize)),
                         Some(LPARAM(text.as_mut_ptr() as isize)),
                     );
@@ -275,6 +346,203 @@ impl DashboardTheme {
         Some(LRESULT(1))
     }
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ControlKind {
+    Button,
+    Combo,
+    Text,
+    Scroll,
+}
+#[derive(Clone, Copy)]
+struct ControlAppearance {
+    palette: Palette,
+    hovered: bool,
+    kind: ControlKind,
+    scroll: ScrollGesture,
+}
+
+#[derive(Clone, Copy)]
+enum ScrollGesture {
+    Idle,
+    Drag { offset: i32 },
+    Repeat { command: u32, y: i32 },
+}
+
+const SCROLL_REPEAT: usize = SUBCLASS_ID + 1;
+
+unsafe fn cancel_scroll(hwnd: HWND, data: usize) {
+    unsafe {
+        if (*(data as *const ControlAppearance)).kind != ControlKind::Scroll {
+            return;
+        }
+        (*(data as *mut ControlAppearance)).scroll = ScrollGesture::Idle;
+        let _ = KillTimer(Some(hwnd), SCROLL_REPEAT);
+        if GetCapture() == hwnd {
+            let _ = ReleaseCapture();
+        }
+    }
+}
+
+unsafe fn scroll_geometry(hwnd: HWND) -> Option<(SCROLLBARINFO, SCROLLINFO)> {
+    unsafe {
+        let mut bar = SCROLLBARINFO {
+            cbSize: size_of::<SCROLLBARINFO>() as u32,
+            ..Default::default()
+        };
+        let mut info = SCROLLINFO {
+            cbSize: size_of::<SCROLLINFO>() as u32,
+            fMask: SIF_RANGE | SIF_PAGE | SIF_POS,
+            ..Default::default()
+        };
+        GetClientRect(hwnd, &mut bar.rcScrollBar).ok()?;
+        GetScrollInfo(hwnd, SB_CTL, &mut info).ok()?;
+        // Native thumb geometry is calculated during native painting. Since
+        // that painting is suppressed, derive it from the authoritative range.
+        let height = bar.rcScrollBar.bottom;
+        let arrow = bar.rcScrollBar.right.min(height / 2).max(0);
+        let track = (height - 2 * arrow).max(0);
+        let range = (i64::from(info.nMax) - i64::from(info.nMin) + 1).max(1);
+        let minimum_thumb = (18 * GetDpiForWindow(hwnd).max(96) / 96) as i32;
+        let thumb = ((i64::from(track) * i64::from(info.nPage) / range) as i32)
+            .max(minimum_thumb)
+            .min(track);
+        let max = (info.nMax - info.nPage.saturating_sub(1) as i32).max(info.nMin);
+        let offset = if max > info.nMin {
+            (i64::from(track - thumb) * i64::from(info.nPos - info.nMin)
+                / i64::from(max - info.nMin)) as i32
+        } else {
+            0
+        };
+        bar.dxyLineButton = arrow;
+        bar.xyThumbTop = arrow + offset;
+        bar.xyThumbBottom = bar.xyThumbTop + thumb;
+        Some((bar, info))
+    }
+}
+
+unsafe fn notify_scroll(hwnd: HWND, command: u32, position: i32) {
+    unsafe {
+        if let Ok(parent) = GetParent(hwnd) {
+            // Dashboard pages are bounded to far less than the message's 16-bit
+            // position limit. Both native/high-contrast and themed input use it.
+            SendMessageW(
+                parent,
+                WM_VSCROLL,
+                Some(WPARAM(
+                    command as usize | ((position as u16 as usize) << 16),
+                )),
+                Some(LPARAM(hwnd.0 as isize)),
+            );
+        }
+    }
+}
+
+unsafe fn scroll_input(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: usize) -> bool {
+    unsafe {
+        let gesture = (*(data as *const ControlAppearance)).scroll;
+        let y = (lp.0 >> 16) as i16 as i32;
+        match msg {
+            WM_LBUTTONDOWN | WM_LBUTTONDBLCLK => {
+                if !IsWindowEnabled(hwnd).as_bool() {
+                    return true;
+                }
+                let Some((bar, _)) = scroll_geometry(hwnd) else {
+                    return true;
+                };
+                let height = bar.rcScrollBar.bottom - bar.rcScrollBar.top;
+                let command = if y < bar.dxyLineButton {
+                    SB_LINEUP
+                } else if y >= height - bar.dxyLineButton {
+                    SB_LINEDOWN
+                } else if y < bar.xyThumbTop {
+                    SB_PAGEUP
+                } else if y >= bar.xyThumbBottom {
+                    SB_PAGEDOWN
+                } else {
+                    (*(data as *mut ControlAppearance)).scroll = ScrollGesture::Drag {
+                        offset: y - bar.xyThumbTop,
+                    };
+                    SetCapture(hwnd);
+                    return true;
+                };
+                (*(data as *mut ControlAppearance)).scroll = ScrollGesture::Repeat {
+                    command: command.0 as u32,
+                    y,
+                };
+                SetCapture(hwnd);
+                // No idle timer: repeat exists only while the mouse is held.
+                SetTimer(Some(hwnd), SCROLL_REPEAT, 400, None);
+                notify_scroll(hwnd, command.0 as u32, 0);
+                true
+            }
+            WM_MOUSEMOVE => {
+                if let ScrollGesture::Drag { offset } = gesture {
+                    if let Some((bar, info)) = scroll_geometry(hwnd) {
+                        let travel = bar.rcScrollBar.bottom
+                            - bar.rcScrollBar.top
+                            - 2 * bar.dxyLineButton
+                            - (bar.xyThumbBottom - bar.xyThumbTop);
+                        let max = (info.nMax - info.nPage.saturating_sub(1) as i32).max(info.nMin);
+                        if travel > 0 {
+                            let pixel = (y - offset - bar.dxyLineButton).clamp(0, travel);
+                            let position = info.nMin
+                                + ((i64::from(pixel) * i64::from(max - info.nMin)
+                                    + i64::from(travel / 2))
+                                    / i64::from(travel)) as i32;
+                            if position != info.nPos {
+                                notify_scroll(hwnd, SB_THUMBTRACK.0 as u32, position);
+                            }
+                        }
+                    }
+                } else if let ScrollGesture::Repeat { command, .. } = gesture {
+                    (*(data as *mut ControlAppearance)).scroll =
+                        ScrollGesture::Repeat { command, y };
+                }
+                true
+            }
+            WM_TIMER if wp.0 == SCROLL_REPEAT => {
+                if let ScrollGesture::Repeat { command, y } = gesture {
+                    SetTimer(Some(hwnd), SCROLL_REPEAT, 60, None);
+                    if let Some((bar, _)) = scroll_geometry(hwnd) {
+                        let height = bar.rcScrollBar.bottom - bar.rcScrollBar.top;
+                        let inside = match command as i32 {
+                            c if c == SB_LINEUP.0 => y >= 0 && y < bar.dxyLineButton,
+                            c if c == SB_LINEDOWN.0 => {
+                                y >= height - bar.dxyLineButton && y < height
+                            }
+                            c if c == SB_PAGEUP.0 => y >= bar.dxyLineButton && y < bar.xyThumbTop,
+                            _ => y >= bar.xyThumbBottom && y < height - bar.dxyLineButton,
+                        };
+                        if inside {
+                            notify_scroll(hwnd, command, 0);
+                        }
+                    }
+                }
+                true
+            }
+            WM_LBUTTONUP | WM_CAPTURECHANGED | WM_CANCELMODE | WM_KILLFOCUS => {
+                cancel_scroll(hwnd, data);
+                true
+            }
+            WM_SETFOCUS => true,
+            WM_KEYDOWN => {
+                let command = match wp.0 as u16 {
+                    k if k == VK_UP.0 => SB_LINEUP,
+                    k if k == VK_DOWN.0 => SB_LINEDOWN,
+                    k if k == VK_PRIOR.0 => SB_PAGEUP,
+                    k if k == VK_NEXT.0 => SB_PAGEDOWN,
+                    k if k == VK_HOME.0 => SB_TOP,
+                    k if k == VK_END.0 => SB_BOTTOM,
+                    _ => return false,
+                };
+                notify_scroll(hwnd, command.0 as u32, 0);
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
 const SUBCLASS_ID: usize = 0x48425448;
 unsafe fn class_name(hwnd: HWND) -> String {
     unsafe {
@@ -297,43 +565,199 @@ unsafe extern "system" fn control_proc(
 unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: usize) -> LRESULT {
     unsafe {
         if msg == WM_NCDESTROY {
+            cancel_scroll(hwnd, data);
             let _ = RemoveWindowSubclass(hwnd, Some(control_proc), SUBCLASS_ID);
-            drop(Box::from_raw(data as *mut Palette));
+            drop(Box::from_raw(data as *mut ControlAppearance));
             return DefSubclassProc(hwnd, msg, wp, lp);
         }
-        let palette = *(data as *const Palette);
-        if matches!(msg, WM_PAINT | WM_PRINTCLIENT | WM_PRINT) && palette.dark {
-            let printing = matches!(msg, WM_PRINTCLIENT | WM_PRINT);
-            let class = class_name(hwnd);
-            let combo = class == "ComboBox";
-            if combo {
-                let _ = DefSubclassProc(hwnd, msg, wp, lp);
+        let appearance = *(data as *const ControlAppearance);
+        let palette = appearance.palette;
+        if !palette.high_contrast && appearance.kind != ControlKind::Text && msg == WM_ERASEBKGND {
+            // Buttons, selectors and the scrollbar paint their complete client
+            // area. A separate native erasure exposes a light frame in dark mode.
+            return LRESULT(1);
+        }
+        if !palette.high_contrast && appearance.kind == ControlKind::Scroll {
+            if matches!(msg, WM_SHOWWINDOW | WM_ENABLE) && wp.0 == 0 {
+                cancel_scroll(hwnd, data);
             }
+            if msg == SBM_GETSCROLLBARINFO && lp.0 != 0 {
+                if let Some((mut bar, _)) = scroll_geometry(hwnd) {
+                    let _ = GetWindowRect(hwnd, &mut bar.rcScrollBar);
+                    *(lp.0 as *mut SCROLLBARINFO) = bar;
+                    return LRESULT(1);
+                }
+                return LRESULT(0);
+            }
+            if scroll_input(hwnd, msg, wp, lp, data) {
+                return LRESULT(0);
+            }
+            // Never let a range update draw the native scrollbar underneath
+            // the custom surface, even if a caller requests immediate redraw.
+            let update = match msg {
+                SBM_SETSCROLLINFO => Some((msg, WPARAM(0), lp, wp.0 != 0)),
+                SBM_SETPOS => Some((msg, wp, LPARAM(0), lp.0 != 0)),
+                SBM_SETRANGEREDRAW => Some((SBM_SETRANGE, wp, lp, true)),
+                _ => None,
+            };
+            if let Some((message, wp, lp, redraw)) = update {
+                let result = DefSubclassProc(hwnd, message, wp, lp);
+                if redraw {
+                    let _ = InvalidateRect(Some(hwnd), None, false);
+                }
+                return result;
+            }
+        }
+        if !palette.high_contrast
+            && matches!(appearance.kind, ControlKind::Button | ControlKind::Combo)
+            && matches!(msg, WM_MOUSEMOVE | WM_MOUSELEAVE)
+        {
+            let hovered = msg == WM_MOUSEMOVE;
+            if hovered != appearance.hovered {
+                (*(data as *mut ControlAppearance)).hovered = hovered;
+                if hovered {
+                    let mut tracking = TRACKMOUSEEVENT {
+                        cbSize: size_of::<TRACKMOUSEEVENT>() as u32,
+                        dwFlags: TME_LEAVE,
+                        hwndTrack: hwnd,
+                        ..Default::default()
+                    };
+                    let _ = TrackMouseEvent(&mut tracking);
+                }
+                let _ = InvalidateRect(Some(hwnd), None, false);
+            }
+        }
+        if !palette.high_contrast && appearance.kind == ControlKind::Text {
+            let result = DefSubclassProc(hwnd, msg, wp, lp);
+            if msg == WM_NCPAINT {
+                let dc = GetWindowDC(Some(hwnd));
+                let saved = SaveDC(dc);
+                let mut bounds = RECT::default();
+                if GetWindowRect(hwnd, &mut bounds).is_ok() {
+                    let rect = RECT {
+                        left: 0,
+                        top: 0,
+                        right: bounds.right - bounds.left,
+                        bottom: bounds.bottom - bounds.top,
+                    };
+                    FrameRect(dc, &rect, color_brush(dc, palette.border));
+                }
+                let _ = RestoreDC(dc, saved);
+                ReleaseDC(Some(hwnd), dc);
+            }
+            return result;
+        }
+        if matches!(msg, WM_PAINT | WM_PRINTCLIENT | WM_PRINT) && !palette.high_contrast {
+            let printing = matches!(msg, WM_PRINTCLIENT | WM_PRINT);
+            let combo = appearance.kind == ControlKind::Combo;
             let mut ps = PAINTSTRUCT::default();
             let hdc = if printing {
                 HDC(wp.0 as *mut _)
-            } else if combo {
-                GetDC(Some(hwnd))
             } else {
                 BeginPaint(hwnd, &mut ps)
             };
             let saved = SaveDC(hdc);
             let mut rect = RECT::default();
             let _ = GetClientRect(hwnd, &mut rect);
-            if combo {
-                FrameRect(hdc, &rect, color_brush(hdc, palette.border));
-                rect.left = rect.right - (22 * GetDpiForWindow(hwnd) / 96) as i32;
-                rect.top += 1;
-                rect.bottom -= 1;
-                rect.right -= 1;
-                FillRect(hdc, &rect, color_brush(hdc, palette.surface));
-                let mut arrow: Vec<u16> = "▾".encode_utf16().collect();
-                SetTextColor(hdc, palette.text);
+            if appearance.kind == ControlKind::Scroll {
+                FillRect(hdc, &rect, color_brush(hdc, palette.background));
+                if let Some((bar, _)) = scroll_geometry(hwnd) {
+                    let inset = (rect.right / 3).max(2);
+                    let thumb = RECT {
+                        left: inset,
+                        right: rect.right - inset,
+                        top: bar.xyThumbTop,
+                        bottom: bar.xyThumbBottom,
+                    };
+                    if thumb.bottom > thumb.top {
+                        rounded_surface(hdc, &thumb, palette.disabled, palette.disabled, inset * 2);
+                    }
+                    // Arrow hit regions remain native; draw subtle matching affordances.
+                    SetTextColor(hdc, palette.disabled);
+                    SetBkMode(hdc, TRANSPARENT);
+                    for (glyph, top) in [('˄', 0), ('˅', rect.bottom - bar.dxyLineButton)] {
+                        let mut arrow_rect = RECT {
+                            left: 0,
+                            right: rect.right,
+                            top,
+                            bottom: top + bar.dxyLineButton,
+                        };
+                        DrawTextW(
+                            hdc,
+                            &mut [glyph as u16],
+                            &mut arrow_rect,
+                            DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+                        );
+                    }
+                }
+            } else if combo {
+                let enabled = IsWindowEnabled(hwnd).as_bool();
+                let dpi = GetDpiForWindow(hwnd).max(96) as i32;
+                FillRect(hdc, &rect, color_brush(hdc, palette.background));
+                rounded_surface(
+                    hdc,
+                    &rect,
+                    palette.surface,
+                    if appearance.hovered && enabled {
+                        palette.accent
+                    } else {
+                        palette.border
+                    },
+                    8 * dpi / 96,
+                );
+                let font = SendMessageW(hwnd, WM_GETFONT, None, None);
+                if font.0 != 0 {
+                    SelectObject(hdc, HGDIOBJ(font.0 as _));
+                }
+                let selected = SendMessageW(hwnd, CB_GETCURSEL, None, None).0;
+                if selected >= 0 {
+                    let len =
+                        SendMessageW(hwnd, CB_GETLBTEXTLEN, Some(WPARAM(selected as usize)), None)
+                            .0;
+                    if len >= 0 {
+                        let mut text = vec![0u16; len as usize + 1];
+                        SendMessageW(
+                            hwnd,
+                            CB_GETLBTEXT,
+                            Some(WPARAM(selected as usize)),
+                            Some(LPARAM(text.as_mut_ptr() as isize)),
+                        );
+                        text.truncate(len as usize);
+                        let mut label = rect;
+                        label.left += 9 * dpi / 96;
+                        label.right -= 28 * dpi / 96;
+                        SetTextColor(
+                            hdc,
+                            if enabled {
+                                palette.text
+                            } else {
+                                palette.disabled
+                            },
+                        );
+                        SetBkMode(hdc, TRANSPARENT);
+                        DrawTextW(
+                            hdc,
+                            &mut text,
+                            &mut label,
+                            DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX,
+                        );
+                    }
+                }
+                let mut arrow_rect = rect;
+                arrow_rect.left = rect.right - 28 * dpi / 96;
+                SetTextColor(
+                    hdc,
+                    if enabled {
+                        palette.text
+                    } else {
+                        palette.disabled
+                    },
+                );
                 SetBkMode(hdc, TRANSPARENT);
                 DrawTextW(
                     hdc,
-                    &mut arrow,
-                    &mut rect,
+                    &mut ['▾' as u16],
+                    &mut arrow_rect,
                     DT_CENTER | DT_SINGLELINE | DT_VCENTER,
                 );
             } else {
@@ -342,35 +766,66 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
                 let state = SendMessageW(hwnd, BM_GETSTATE, None, None).0 as u32;
                 let selected = style & BS_PUSHLIKE as u32 != 0
                     && SendMessageW(hwnd, BM_GETCHECK, None, None).0 == BST_CHECKED.0 as isize;
-                FillRect(
-                    hdc,
-                    &rect,
-                    color_brush(
-                        hdc,
-                        if check {
-                            palette.background
-                        } else if selected {
-                            palette.selection
-                        } else {
-                            palette.surface
-                        },
-                    ),
-                );
+                let enabled = IsWindowEnabled(hwnd).as_bool();
+                let primary = matches!(GetDlgCtrlID(hwnd), 15 | 40 | 210) && !check;
+                let active = enabled && (appearance.hovered || state & BST_PUSHED != 0);
+                let background = if check {
+                    palette.background
+                } else if (primary && enabled) || selected || active {
+                    palette.selection
+                } else {
+                    palette.surface
+                };
+                let background = if active && !check {
+                    let amount: u32 = if state & BST_PUSHED != 0 { 20 } else { 10 };
+                    let channel = |shift: u32| -> u32 {
+                        let a = (background.0 >> shift) & 255;
+                        let b = (palette.accent.0 >> shift) & 255;
+                        (a * (100 - amount) + b * amount) / 100
+                    };
+                    rgb(channel(0), channel(8), channel(16))
+                } else {
+                    background
+                };
+                FillRect(hdc, &rect, color_brush(hdc, palette.background));
                 let mut text_rect = rect;
+                let dpi = GetDpiForWindow(hwnd).max(96) as i32;
                 if check {
-                    let size = (16 * GetDpiForWindow(hwnd) / 96) as i32;
+                    let size = 18 * dpi / 96;
                     let mark = RECT {
                         left: 1,
                         top: (rect.bottom - size) / 2,
                         right: 1 + size,
                         bottom: (rect.bottom + size) / 2,
                     };
-                    FillRect(hdc, &mark, color_brush(hdc, palette.surface));
-                    FrameRect(hdc, &mark, color_brush(hdc, palette.border));
-                    if SendMessageW(hwnd, BM_GETCHECK, None, None).0 == BST_CHECKED.0 as isize {
+                    let checked =
+                        SendMessageW(hwnd, BM_GETCHECK, None, None).0 == BST_CHECKED.0 as isize;
+                    rounded_surface(
+                        hdc,
+                        &mark,
+                        if checked {
+                            palette.selection
+                        } else {
+                            palette.surface
+                        },
+                        if checked || active {
+                            palette.accent
+                        } else {
+                            palette.border
+                        },
+                        4 * dpi / 96,
+                    );
+                    if checked {
                         let mut mark_rect = mark;
-                        let mut tick: Vec<u16> = "✓".encode_utf16().collect();
-                        SetTextColor(hdc, palette.accent);
+                        let mut tick = ['✓' as u16];
+                        SetTextColor(
+                            hdc,
+                            if enabled {
+                                palette.accent
+                            } else {
+                                palette.disabled
+                            },
+                        );
                         SetBkMode(hdc, TRANSPARENT);
                         DrawTextW(
                             hdc,
@@ -379,22 +834,28 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
                             DT_CENTER | DT_VCENTER | DT_SINGLELINE,
                         );
                     }
-                    text_rect.left = mark.right + 7;
+                    text_rect.left = mark.right + 9 * dpi / 96;
                 } else {
-                    FrameRect(
+                    rounded_surface(
                         hdc,
                         &rect,
-                        color_brush(
-                            hdc,
-                            if selected {
-                                palette.accent
-                            } else if state & BST_PUSHED != 0 {
-                                palette.background
-                            } else {
-                                palette.border
-                            },
-                        ),
+                        background,
+                        if selected || (primary && enabled) || active {
+                            palette.accent
+                        } else {
+                            palette.border
+                        },
+                        10 * dpi / 96,
                     );
+                    if selected {
+                        let rail = RECT {
+                            left: rect.left + 14 * dpi / 96,
+                            right: rect.right - 14 * dpi / 96,
+                            top: rect.bottom - 3 * dpi / 96,
+                            bottom: rect.bottom - dpi / 96,
+                        };
+                        FillRect(hdc, &rail, color_brush(hdc, palette.accent));
+                    }
                 }
                 let font = SendMessageW(hwnd, WM_GETFONT, None, None);
                 if font.0 != 0 {
@@ -406,7 +867,7 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
                 SetTextColor(
                     hdc,
                     if IsWindowEnabled(hwnd).as_bool() {
-                        if selected {
+                        if selected || primary || active {
                             palette.selection_text
                         } else {
                             palette.text
@@ -436,15 +897,13 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
             let _ = RestoreDC(hdc, saved);
             if printing {
                 // The caller owns the print DC.
-            } else if combo {
-                ReleaseDC(Some(hwnd), hdc);
             } else {
                 let _ = EndPaint(hwnd, &ps);
             }
             return LRESULT(0);
         }
         let result = DefSubclassProc(hwnd, msg, wp, lp);
-        if palette.dark
+        if !palette.high_contrast
             && matches!(
                 msg,
                 BM_SETCHECK
@@ -458,9 +917,12 @@ unsafe fn control_message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM, data: us
                     | CB_RESETCONTENT
                     | CB_ADDSTRING
                     | CB_DELETESTRING
+                    | SBM_SETSCROLLINFO
+                    | SBM_SETPOS
+                    | SBM_SETRANGE
             )
         {
-            let _ = InvalidateRect(Some(hwnd), None, true);
+            let _ = InvalidateRect(Some(hwnd), None, false);
         }
         result
     }
@@ -694,12 +1156,150 @@ mod tests {
                         GetWindowSubclass(hwnd, Some(control_proc), SUBCLASS_ID, Some(&mut data))
                             .as_bool()
                     );
-                    assert_eq!(*(data as *const Palette), theme.palette);
+                    assert_eq!((*(data as *const ControlAppearance)).palette, theme.palette);
                 }
                 DestroyWindow(hwnd).unwrap();
             }
         }
     }
+    #[test]
+    fn hover_repaints_only_at_boundaries_and_never_changes_checkbox_value() {
+        let _guard = crate::ui::NATIVE_TEST_LOCK.lock().unwrap();
+        unsafe {
+            let hwnd = CreateWindowExW(
+                WINDOW_EX_STYLE::default(),
+                w!("BUTTON"),
+                w!("Alerts"),
+                WS_POPUP | WS_VISIBLE | WINDOW_STYLE(BS_AUTOCHECKBOX as u32),
+                0,
+                0,
+                240,
+                40,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            DashboardTheme::new(true, false).apply_control(hwnd);
+            let mut data = 0;
+            assert!(
+                GetWindowSubclass(hwnd, Some(control_proc), SUBCLASS_ID, Some(&mut data)).as_bool()
+            );
+            let _ = ValidateRect(Some(hwnd), None);
+            SendMessageW(hwnd, WM_MOUSEMOVE, None, None);
+            assert!((*(data as *const ControlAppearance)).hovered);
+            assert!(GetUpdateRect(hwnd, None, false).as_bool());
+            let _ = ValidateRect(Some(hwnd), None);
+            for _ in 0..100 {
+                SendMessageW(hwnd, WM_MOUSEMOVE, None, None);
+            }
+            assert!(!GetUpdateRect(hwnd, None, false).as_bool());
+            SendMessageW(hwnd, WM_MOUSELEAVE, None, None);
+            assert!(!(*(data as *const ControlAppearance)).hovered);
+            assert!(GetUpdateRect(hwnd, None, false).as_bool());
+            assert_eq!(SendMessageW(hwnd, BM_GETCHECK, None, None).0, 0);
+            DestroyWindow(hwnd).unwrap();
+        }
+    }
+
+    #[test]
+    fn scrollbar_updates_defer_paint_and_cancel_tracking_without_idle_redraws() {
+        let _guard = crate::ui::NATIVE_TEST_LOCK.lock().unwrap();
+        unsafe {
+            let hwnd = CreateWindowExW(
+                WINDOW_EX_STYLE::default(),
+                w!("SCROLLBAR"),
+                w!(""),
+                WS_POPUP | WS_VISIBLE | WINDOW_STYLE(SBS_VERT as u32),
+                0,
+                0,
+                18,
+                300,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            for dark in [false, true] {
+                let theme = DashboardTheme::new(dark, false);
+                theme.apply_control(hwnd);
+                let info = SCROLLINFO {
+                    cbSize: size_of::<SCROLLINFO>() as u32,
+                    fMask: SIF_RANGE | SIF_PAGE | SIF_POS,
+                    nMin: 0,
+                    nMax: 999,
+                    nPage: 100,
+                    nPos: 250,
+                    ..Default::default()
+                };
+                SetScrollInfo(hwnd, SB_CTL, &info, false);
+                let _ = InvalidateRect(Some(hwnd), None, false);
+                let _ = UpdateWindow(hwnd);
+                let dc = GetDC(Some(hwnd));
+                // Track edge must stay themed even when Windows is asked for
+                // synchronous range redraw or background erasure.
+                assert_eq!(GetPixel(dc, 0, 150), theme.palette.background);
+                let _ = ValidateRect(Some(hwnd), None);
+                SetScrollPos(hwnd, SB_CTL, 300, true);
+                assert_eq!(GetPixel(dc, 0, 150), theme.palette.background);
+                assert!(GetUpdateRect(hwnd, None, false).as_bool());
+                assert_eq!(
+                    SendMessageW(hwnd, WM_ERASEBKGND, Some(WPARAM(dc.0 as usize)), None).0,
+                    1
+                );
+                assert_eq!(GetPixel(dc, 0, 150), theme.palette.background);
+                let _ = UpdateWindow(hwnd);
+                let (_, current) = scroll_geometry(hwnd).unwrap();
+                assert_eq!(current.nPos, 300);
+                let _ = ValidateRect(Some(hwnd), None);
+                for _ in 0..100 {
+                    SendMessageW(hwnd, WM_MOUSEMOVE, None, Some(LPARAM(100 << 16)));
+                }
+                assert!(!GetUpdateRect(hwnd, None, false).as_bool());
+                let mut data = 0;
+                assert!(
+                    GetWindowSubclass(hwnd, Some(control_proc), SUBCLASS_ID, Some(&mut data))
+                        .as_bool()
+                );
+                SendMessageW(hwnd, WM_LBUTTONDOWN, None, Some(LPARAM(2 << 16)));
+                assert!(matches!(
+                    (*(data as *const ControlAppearance)).scroll,
+                    ScrollGesture::Repeat { .. }
+                ));
+                SendMessageW(hwnd, WM_CANCELMODE, None, None);
+                assert!(matches!(
+                    (*(data as *const ControlAppearance)).scroll,
+                    ScrollGesture::Idle
+                ));
+                assert_ne!(GetCapture(), hwnd);
+                let _ = ValidateRect(Some(hwnd), None);
+                SendMessageW(hwnd, WM_TIMER, Some(WPARAM(SCROLL_REPEAT)), None);
+                assert!(!GetUpdateRect(hwnd, None, false).as_bool());
+                let (bar, _) = scroll_geometry(hwnd).unwrap();
+                SendMessageW(
+                    hwnd,
+                    WM_LBUTTONDOWN,
+                    None,
+                    Some(LPARAM(((bar.xyThumbTop + 2) << 16) as isize)),
+                );
+                assert!(matches!(
+                    (*(data as *const ControlAppearance)).scroll,
+                    ScrollGesture::Drag { .. }
+                ));
+                DashboardTheme::new(false, true).apply_control(hwnd);
+                assert!(matches!(
+                    (*(data as *const ControlAppearance)).scroll,
+                    ScrollGesture::Idle
+                ));
+                assert_ne!(GetCapture(), hwnd);
+                ReleaseDC(Some(hwnd), dc);
+            }
+            DestroyWindow(hwnd).unwrap();
+        }
+    }
+
     #[test]
     fn palettes_and_resources_follow_preferences() {
         let _guard = crate::ui::NATIVE_TEST_LOCK.lock().unwrap();
@@ -716,6 +1316,53 @@ mod tests {
             for (dark, hc) in [(false, false), (true, false), (true, true)] {
                 let theme = DashboardTheme::new(dark, hc);
                 assert!(!theme.background_brush().0.is_null());
+            }
+        }
+    }
+
+    #[test]
+    fn themed_controls_do_not_erase_a_light_surface_before_custom_paint() {
+        let _guard = crate::ui::NATIVE_TEST_LOCK.lock().unwrap();
+        unsafe {
+            for class in [w!("BUTTON"), w!("COMBOBOX")] {
+                let hwnd = CreateWindowExW(
+                    WINDOW_EX_STYLE::default(),
+                    class,
+                    w!("Test"),
+                    WS_POPUP,
+                    0,
+                    0,
+                    100,
+                    30,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .unwrap();
+                let theme = DashboardTheme::new(true, false);
+                theme.apply_control(hwnd);
+                let screen = GetDC(None);
+                let dc = CreateCompatibleDC(Some(screen));
+                let bitmap = CreateCompatibleBitmap(screen, 100, 30);
+                let old = SelectObject(dc, bitmap.into());
+                let rect = RECT {
+                    left: 0,
+                    top: 0,
+                    right: 100,
+                    bottom: 30,
+                };
+                FillRect(dc, &rect, color_brush(dc, theme.palette.background));
+                assert_eq!(
+                    SendMessageW(hwnd, WM_ERASEBKGND, Some(WPARAM(dc.0 as usize)), None).0,
+                    1
+                );
+                assert_eq!(GetPixel(dc, 50, 15), theme.palette.background);
+                SelectObject(dc, old);
+                let _ = DeleteObject(bitmap.into());
+                let _ = DeleteDC(dc);
+                ReleaseDC(None, screen);
+                DestroyWindow(hwnd).unwrap();
             }
         }
     }

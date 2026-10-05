@@ -5,6 +5,7 @@ mod logitech_adapter;
 pub mod logitech_controls;
 mod mchose_adapter;
 pub mod mchose_controls;
+mod passive_jbl;
 pub mod protocols;
 pub mod provider;
 pub mod razer_controls;

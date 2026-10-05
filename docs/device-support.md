@@ -68,3 +68,19 @@ continue to apply; see [protocol details](protocols.md).
 
 Thanks to HeyOkay and the original contributors and hardware testers for these
 reports and the battery protocols that make the port possible.
+
+## Added from upstream 1.14.0
+
+These rows inherit the exact parent-app report scope. All Rust tests for these
+additions are simulated; no new local hardware verification is claimed.
+
+| Device | Connection | Evidence |
+| --- | --- | --- |
+| [HyperX Cloud III S Wireless](protocols.md#hyperx-cloud-iii-s-wireless) (`03F0:02CC`, `03F0:06BE`) | 2.4 GHz dongle | User-verified in parent app, both dongles |
+| [Logitech G PRO X 2 LIGHTSPEED](protocols.md#logitech-g-pro-x-2-lightspeed) (`046D:0AF7`) | 2.4 GHz receiver | User-verified in parent app |
+| [SteelSeries Arctis Nova Elite](protocols.md#steelseries-arctis-nova-elite) (`1038:2244`) | Wireless base station | User-verified in parent app |
+| [Razer DeathStalker V2 Pro TKL](protocols.md#razer-wireless-keyboards-added-in-1140) | HyperSpeed receiver or cable | User-verified in parent app |
+| [Razer DeathStalker V2 Pro, BlackWidow V3 Mini, V4 Mini and V4 Tenkeyless HyperSpeed](protocols.md#razer-wireless-keyboards-added-in-1140) | HyperSpeed receiver or cable | Hardware unverified |
+| [G-Wolves models with their own receiver](protocols.md#g-wolves-model-specific-receivers) | Matching receiver or cable | Hardware unverified |
+
+Battery monitoring additions do not expand polling-rate write permissions.

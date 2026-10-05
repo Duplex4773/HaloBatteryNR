@@ -169,6 +169,7 @@ pub struct BluetoothProvider {
     link_status: BTreeMap<String, Option<bool>>,
     levels: BTreeMap<String, u8>,
     readings: Vec<Reading>,
+    snapshot_error: Option<ProviderError>,
     changed: Arc<AtomicBool>,
     retries: Vec<Duration>,
     next_full: Duration,
@@ -176,6 +177,21 @@ pub struct BluetoothProvider {
     diagnostics: Vec<String>,
 }
 impl BluetoothProvider {
+    fn complete_snapshot(&mut self, result: PollResult, now: Duration) {
+        match result {
+            Ok(readings) => {
+                self.readings = readings;
+                self.snapshot_error = None;
+                self.next_full = now + Duration::from_secs(60);
+            }
+            Err(error) => {
+                // Preserve failure evidence between bounded retries. Returning
+                // the old online cache would falsely clear the engine's error.
+                self.snapshot_error = Some(error);
+                self.next_full = now + Duration::from_secs(15);
+            }
+        }
+    }
     fn retain_inventory(&mut self, nodes: &BTreeMap<String, Node>) {
         // Call only after a complete successful PnP inventory. Disconnected
         // paired devices still have nodes, so their last level survives sleep.
@@ -409,9 +425,11 @@ impl BatteryProvider for BluetoothProvider {
             }
         }
         if self.refresh_due(now) {
-            self.next_full = now + Duration::from_secs(60);
-            let fresh = self.snapshot(c)?;
-            self.readings = fresh;
+            let fresh = self.snapshot(c);
+            self.complete_snapshot(fresh, c.clock.monotonic());
+        }
+        if let Some(error) = &self.snapshot_error {
+            return Err(error.clone());
         }
         Ok(self.readings.clone())
     }
@@ -702,6 +720,32 @@ mod scheduling_tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].timestamp, 99);
         assert_eq!(p.next_poll_delay(), Some(Duration::from_secs(2)));
+    }
+    #[test]
+    fn failed_bluetooth_snapshot_stays_failed_until_successful_refresh() {
+        let mut provider = BluetoothProvider::default();
+        let original = vec![Reading::new("test", "Test headset", "bluetooth", 0)];
+        provider.complete_snapshot(Ok(original.clone()), Duration::ZERO);
+        provider.complete_snapshot(
+            Err(ProviderError::new("PnP unavailable")),
+            Duration::from_secs(60),
+        );
+        let cancelled = AtomicBool::new(false);
+        let clock = FakeClock(Duration::from_secs(62));
+        let context = PollContext {
+            clock: &clock,
+            cancelled: &cancelled,
+            deadline: Duration::from_secs(100),
+            playstation_full_mode: false,
+        };
+        assert_eq!(
+            provider.poll(&NoHid, &context).unwrap_err().message,
+            "PnP unavailable"
+        );
+        assert_eq!(provider.next_full, Duration::from_secs(75));
+        provider.complete_snapshot(Ok(original.clone()), Duration::from_secs(75));
+        assert_eq!(provider.poll(&NoHid, &context).unwrap(), original);
+        assert!(provider.snapshot_error.is_none());
     }
 }
 

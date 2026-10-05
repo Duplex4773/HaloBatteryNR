@@ -45,6 +45,8 @@ pub struct Engine {
     alerts: BTreeMap<String, AlertState>,
     held: BTreeMap<(String, NotificationKind), Notification>,
     errors: BTreeMap<String, String>,
+    sound_at: BTreeMap<String, f64>,
+    pending_sound: Option<u8>,
     suspended: bool,
 }
 impl Engine {
@@ -58,11 +60,14 @@ impl Engine {
             alerts: BTreeMap::new(),
             held: BTreeMap::new(),
             errors: BTreeMap::new(),
+            sound_at: BTreeMap::new(),
+            pending_sound: None,
             suspended: false,
         }
     }
     pub fn suspend(&mut self) {
         self.suspended = true;
+        self.pending_sound = None;
         self.estimator.pause_all();
         for r in self.by_provider.values_mut().flatten() {
             r.connection = Connection::Sleeping;
@@ -117,6 +122,9 @@ impl Engine {
             .is_some_and(|readings| !readings.is_empty())
             || self.errors.contains_key(provider)
     }
+    pub fn provider_error(&self, provider: &str) -> Option<&str> {
+        self.errors.get(provider).map(String::as_str)
+    }
     /// Provider-local cache for recording availability transitions independently
     /// of the combined UI inventory.
     pub fn provider_readings(&self, provider: &str) -> &[Reading] {
@@ -126,6 +134,18 @@ impl Engine {
         !self.held.is_empty()
     }
     pub fn update_settings(&mut self, settings: Settings) {
+        self.pending_sound = None;
+        for r in self.by_provider.values().flatten() {
+            if self.settings.low_for(&r.key) != settings.low_for(&r.key) {
+                for identity in related_sound_identities(r, &self.by_provider) {
+                    self.sound_at.remove(&identity);
+                }
+            }
+        }
+        if !settings.low_sound {
+            self.sound_at.clear();
+            self.pending_sound = None;
+        }
         self.settings = settings;
         self.by_provider.retain(|provider, readings| {
             let enabled = self.settings.enabled(provider);
@@ -161,6 +181,20 @@ impl Engine {
         self.misses.retain(|key, _| known.contains(key.as_str()));
         self.held
             .retain(|(key, _), _| connected.contains(key.as_str()));
+        if !self.sound_at.is_empty() {
+            let sound_keys: BTreeSet<_> = self
+                .by_provider
+                .values()
+                .flatten()
+                .filter(|r| !self.settings.devices.get(&r.key).is_some_and(|d| d.hidden))
+                .flat_map(|r| sound_identities(r).into_iter().flatten())
+                .collect();
+            self.sound_at.retain(|key, _| sound_keys.contains(key));
+        }
+    }
+    /// One coalesced sound per completed poll, separate from toast quiet mode.
+    pub fn take_low_battery_sound(&mut self) -> Option<u8> {
+        self.pending_sound.take()
     }
     pub fn apply(
         &mut self,
@@ -235,15 +269,51 @@ impl Engine {
                 self.estimator.pause(&r.key);
                 continue;
             }
-            if seen.contains(&r.key)
+            let fresh_here = seen.contains(&r.key)
                 && self
                     .by_provider
                     .get(provider)
-                    .is_some_and(|own| own.iter().any(|o| o.key == r.key && o.source == r.source))
-            {
+                    .is_some_and(|own| own.iter().any(|o| o.key == r.key && o.source == r.source));
+            if fresh_here {
                 self.estimator.record(&r, monotonic);
             }
             let low = self.settings.low_for(&r.key);
+            // Only this provider's fresh, selected reading can trigger a sound.
+            // Cached readings of other providers must not restart a low alarm.
+            if self.settings.low_sound && fresh_here && r.online() {
+                let identities = sound_identities(&r);
+                if let Some(level) = r.level {
+                    let last = identities
+                        .iter()
+                        .flatten()
+                        .filter_map(|id| self.sound_at.get(id))
+                        .copied()
+                        .max_by(f64::total_cmp);
+                    if low == 0 || level > low || r.charging == Some(true) {
+                        for identity in related_sound_identities(&r, &self.by_provider) {
+                            self.sound_at.remove(&identity);
+                        }
+                    } else if monotonic.is_finite()
+                        && last.is_none_or(|last| monotonic >= last + 300.0)
+                    {
+                        for identity in identities.into_iter().flatten() {
+                            self.sound_at.insert(identity, monotonic);
+                        }
+                        self.pending_sound =
+                            Some(self.pending_sound.map_or(level, |old| old.min(level)));
+                    } else if monotonic.is_finite() && last.is_some_and(|last| monotonic < last) {
+                        // A reset clock starts a new cooldown without replaying immediately.
+                        for identity in identities.into_iter().flatten() {
+                            self.sound_at.insert(identity, monotonic);
+                        }
+                    } else if let Some(last) = last {
+                        // Carry a cooldown across a newly observed connection alias.
+                        for identity in identities.into_iter().flatten() {
+                            self.sound_at.insert(identity, last);
+                        }
+                    }
+                }
+            }
             let name = self
                 .settings
                 .devices
@@ -320,9 +390,12 @@ impl Engine {
             {
                 continue;
             }
+            if n.kind == NotificationKind::Full && r.level.is_some_and(|level| level < 100) {
+                continue;
+            }
             // An unavailable reading cannot confirm recovery or disconnect. Keep the
             // pending alert until fresh data permits delivery or invalidates it.
-            if !r.online() || (n.kind == NotificationKind::Low && r.level.is_none()) {
+            if !r.online() || r.level.is_none() {
                 self.held.insert((n.key.clone(), n.kind), n);
                 continue;
             }
@@ -486,6 +559,38 @@ impl Engine {
                 .collect(),
         }
     }
+}
+
+fn sound_identities(r: &Reading) -> [Option<String>; 3] {
+    [
+        Some(format!("key:{}", r.key)),
+        r.serial
+            .as_deref()
+            .and_then(trusted_identity)
+            .map(|serial| format!("serial:{}", serial.to_ascii_lowercase())),
+        r.container
+            .as_deref()
+            .and_then(trusted_identity)
+            .map(|container| format!("container:{}", container.to_ascii_lowercase())),
+    ]
+}
+
+fn related_sound_identities(
+    r: &Reading,
+    providers: &BTreeMap<String, Vec<Reading>>,
+) -> Vec<String> {
+    let identities = sound_identities(r);
+    providers
+        .values()
+        .flatten()
+        .filter(|other| {
+            sound_identities(other)
+                .iter()
+                .flatten()
+                .any(|id| identities.iter().flatten().any(|own| own == id))
+        })
+        .flat_map(|other| sound_identities(other).into_iter().flatten())
+        .collect()
 }
 
 fn trusted_identity(value: &str) -> Option<&str> {

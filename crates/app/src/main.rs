@@ -11,6 +11,15 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
     time::Duration,
 };
+fn application_data_directory(args: &[String]) -> hb_storage::DataDirectory {
+    let explicit = args
+        .iter()
+        .position(|arg| arg == "--data-dir")
+        .and_then(|index| args.get(index + 1))
+        .map(PathBuf::from);
+    let executable = std::env::current_exe().ok();
+    hb_storage::resolve_data_directory(executable.as_deref(), explicit)
+}
 fn main() {
     if let Err(e) = entry() {
         if std::env::args().any(|a| a == "--probe" || a == "--polling-probe") {
@@ -18,12 +27,7 @@ fn main() {
             std::process::exit(1);
         }
         let args: Vec<_> = std::env::args().collect();
-        let directory = args
-            .iter()
-            .position(|arg| arg == "--data-dir")
-            .and_then(|index| args.get(index + 1))
-            .map(PathBuf::from)
-            .unwrap_or_else(hb_storage::data_dir);
+        let directory = application_data_directory(&args).path;
         let saved = std::fs::create_dir_all(&directory).is_ok()
             && hb_storage::atomic_write(
                 &directory.join("startup-issue.txt"),
@@ -59,9 +63,12 @@ fn entry() -> Result<(), ProviderError> {
             "--simulate-keyboards requires --simulate",
         ));
     }
-    let dir = option("--data-dir")
-        .map(PathBuf::from)
-        .unwrap_or_else(hb_storage::data_dir);
+    let directory = application_data_directory(&args);
+    let dir = directory.path;
+    if directory.portable_requested && !directory.portable {
+        let _ = hb_storage::atomic_write(&dir.join("portable-issue.txt"),
+            b"Portable settings were requested, but the app folder could not be written. Settings and history use the usual HaloBatteryNext data folder instead.");
+    }
     if args.iter().any(|a| a == "--polling-probe") {
         // Diagnostic access is exclusive with the running app. Writes always
         // require an explicit rate and exact stable key; no default mouse SET.
@@ -177,6 +184,9 @@ fn entry() -> Result<(), ProviderError> {
         let clock = SystemClock::default();
         let cancel = AtomicBool::new(false);
         let mut providers = hb_providers::providers();
+        if let Some(jbl) = providers.iter_mut().find(|provider| provider.id() == "jbl") {
+            *jbl = Box::new(hb_providers::provider::HidProvider::new("jbl").with_probe_listen());
+        }
         providers.push(Box::new(hb_windows::BluetoothProvider::default()));
         providers.push(Box::new(hb_windows::ControllerProvider));
         if let Some(selected) = option("--provider")

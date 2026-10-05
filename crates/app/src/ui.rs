@@ -1,7 +1,7 @@
 //! A single UI thread owns all HWND, HICON and Direct2D resources.
 use crate::{
     chart::Chart,
-    dashboard_theme::{DashboardTheme, Palette, color_brush},
+    dashboard_theme::{DashboardTheme, Palette, color_brush, rounded_surface},
     icons::{self, Icon},
     runtime::{Command, Event, Runtime},
 };
@@ -22,8 +22,9 @@ use windows::{
         System::LibraryLoader::GetModuleHandleW,
         UI::{
             Controls::{
-                DRAWITEMSTRUCT, MEASUREITEMSTRUCT, ODS_CHECKED, ODS_DISABLED, ODS_GRAYED,
-                ODS_NOACCEL, ODS_SELECTED, ODT_MENU, SetScrollInfo,
+                DRAWITEMSTRUCT, EM_GETLINECOUNT, EM_SETMARGINS, MEASUREITEMSTRUCT, ODS_CHECKED,
+                ODS_DISABLED, ODS_GRAYED, ODS_NOACCEL, ODS_SELECTED, ODT_MENU, SetScrollInfo,
+                ShowScrollBar,
             },
             HiDpi::*,
             Input::KeyboardAndMouse::{EnableWindow, GetFocus, SetFocus},
@@ -46,7 +47,13 @@ const ICON_CHOICES: &[&str] = &[
     "PlayStation 4",
     "PlayStation 5",
 ];
-const THEME_CHOICES: &[&str] = &["Automatic", "White", "Black", "Windows style", "Top bar"];
+const THEME_CHOICES: &[&str] = &[
+    "Automatic",
+    "White icons",
+    "Black icons",
+    "Windows style",
+    "Top bar",
+];
 fn providers() -> Vec<&'static str> {
     hb_providers::provider::FAMILIES
         .iter()
@@ -136,11 +143,11 @@ const CHECKS: &[(&str, &str)] = &[
     ("animation", "Animate charging icons"),
     ("badges", "Show a charging symbol"),
     ("fluent_menu", "Show devices in the tray menu"),
-    ("time_left", "Show estimated time left"),
+    ("time_left", "Show estimated battery time left"),
     ("percent_in_icon", "Show battery percentage in icons"),
     (
         "quiet_fullscreen",
-        "Pause alerts during games and presentations",
+        "Pause popups during games and presentations",
     ),
     ("status_file", "Save battery information for other apps"),
     (
@@ -148,7 +155,30 @@ const CHECKS: &[(&str, &str)] = &[
         "Allow extra PlayStation Bluetooth checks",
     ),
     ("update_check", "Check for updates (currently unavailable)"),
+    (
+        "low_sound",
+        "Play a sound when battery is low (every 5 minutes)",
+    ),
 ];
+fn setting_check_id(index: usize) -> u16 {
+    // 112 and 113 belong to the separate polling permission controls.
+    100 + index as u16 + if index >= 12 { 2 } else { 0 }
+}
+#[cfg(test)]
+#[test]
+fn low_sound_checkbox_keeps_polling_permission_controls_separate() {
+    let index = CHECKS
+        .iter()
+        .position(|(key, _)| *key == "low_sound")
+        .unwrap();
+    assert_eq!(setting_check_id(index), 114);
+    let ids: std::collections::BTreeSet<_> = (0..CHECKS.len()).map(setting_check_id).collect();
+    assert_eq!(ids.len(), CHECKS.len());
+    assert!(!ids.contains(&112));
+    assert!(!ids.contains(&113));
+    let settings = serde_json::to_value(Settings::default()).unwrap();
+    assert_eq!(settings[CHECKS[index].0], false);
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TrayUpdate {
     Changed,
@@ -1323,6 +1353,14 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 }
                 LRESULT(0)
             }
+            WM_VSCROLL => {
+                let host = s.page_host;
+                drop(guard);
+                if let Some(host) = host {
+                    return send(host, msg, wp, lp);
+                }
+                LRESULT(0)
+            }
             WM_COMMAND => {
                 s.command((wp.0 & 0xffff) as u16, ((wp.0 >> 16) & 0xffff) as u16);
                 LRESULT(0)
@@ -1497,7 +1535,7 @@ struct DashboardRedraw {
     paused: bool,
 }
 fn is_fixed_control(id: u16) -> bool {
-    matches!(id, 1..=6 | 78 | 95 | 97 | 210)
+    matches!(id, 1..=7 | 78 | 95 | 97 | 210)
 }
 // One ordinary child window clips scrolling controls below the navigation.
 // It exists only with a dashboard; it owns no images, fonts or timers.
@@ -1555,7 +1593,7 @@ unsafe extern "system" fn page_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
                     fMask: SIF_ALL,
                     ..Default::default()
                 };
-                let _ = GetScrollInfo(hwnd, SB_VERT, &mut info);
+                let _ = GetScrollInfo(state.controls[&7], SB_CTL, &mut info);
                 let page = (info.nPage as i32 - 32).max(32);
                 let position = match wp.0 as u16 {
                     n if n == SB_LINEUP.0 as u16 => state.page_scroll - 32,
@@ -1565,7 +1603,9 @@ unsafe extern "system" fn page_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
                     n if n == SB_TOP.0 as u16 => 0,
                     n if n == SB_BOTTOM.0 as u16 => i32::MAX,
                     n if n == SB_THUMBTRACK.0 as u16 || n == SB_THUMBPOSITION.0 as u16 => {
-                        info.nTrackPos
+                        // The page range fits the standard 16-bit WM_VSCROLL
+                        // position for both native and themed scrollbar input.
+                        ((wp.0 >> 16) & 0xffff) as i32
                     }
                     _ => state.page_scroll,
                 };
@@ -1636,7 +1676,7 @@ impl State {
                 WS_EX_CONTROLPARENT,
                 w!("HaloBatteryNext.Page"),
                 w!(""),
-                WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_VSCROLL,
+                WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
                 0,
                 0,
                 0,
@@ -1648,11 +1688,21 @@ impl State {
             )
             .ok();
         }
+        self.control(
+            7,
+            w!("SCROLLBAR"),
+            "",
+            WINDOW_STYLE(SBS_VERT as u32) | WS_CLIPSIBLINGS,
+            800,
+            PAGE_TOP,
+            14,
+            100,
+        );
         self.page_height = match self.page {
             3 if self.more_options => 1206,
-            3 => 640,
-            6 => 724,
-            _ => 640,
+            3 => 666,
+            6 => 678,
+            _ => 708,
         } - PAGE_TOP;
         self.layout_page();
     }
@@ -1674,7 +1724,7 @@ impl State {
         }
     }
     fn update_more_options(&mut self) {
-        for id in [109, 110, 111, 207, 208, 209, 213, 219]
+        for id in [109, 110, 207, 208, 213, 217, 218, 219]
             .into_iter()
             .chain((0..providers().len()).map(|index| 300 + index as u16))
         {
@@ -1684,13 +1734,20 @@ impl State {
                 }
             }
         }
-        self.page_height = if self.more_options { 1206 } else { 640 } - PAGE_TOP;
+        for id in [111, 209] {
+            if let Some(control) = self.controls.get(&id) {
+                unsafe {
+                    let _ = ShowWindow(*control, SW_HIDE);
+                }
+            }
+        }
+        self.page_height = if self.more_options { 1206 } else { 666 } - PAGE_TOP;
         self.set_control_text(
             212,
             if self.more_options {
-                "Fewer options"
+                "Hide advanced options"
             } else {
-                "More options"
+                "Advanced options"
             },
         );
         self.layout_page();
@@ -1712,11 +1769,18 @@ impl State {
                     None,
                     0,
                     PAGE_TOP * dpi / 96,
-                    rect.right,
+                    ((rect.right * 96 / dpi - 16) * dpi / 96).max(1),
                     (height - PAGE_TOP - PAGE_FOOTER).max(1) * dpi / 96,
                     SWP_NOZORDER | SWP_NOACTIVATE,
                 );
             }
+            self.position_control(
+                7,
+                rect.right * 96 / dpi - 16,
+                PAGE_TOP,
+                14,
+                (height - PAGE_TOP - PAGE_FOOTER).max(1),
+            );
             self.scroll_page(self.page_scroll);
         }
         match self.page {
@@ -1758,7 +1822,24 @@ impl State {
                 nPos: position,
                 ..Default::default()
             };
-            SetScrollInfo(host, SB_VERT, &info, true);
+            if let Some(scrollbar) = self.controls.get(&7) {
+                let mut previous = SCROLLINFO { ..info };
+                let changed = GetScrollInfo(*scrollbar, SB_CTL, &mut previous).is_err()
+                    || previous.nMin != info.nMin
+                    || previous.nMax != info.nMax
+                    || previous.nPage != info.nPage
+                    || previous.nPos != info.nPos;
+                if changed {
+                    // A native redraw here briefly exposes the Windows scrollbar
+                    // underneath our themed paint. Schedule only the latter.
+                    SetScrollInfo(*scrollbar, SB_CTL, &info, false);
+                    let _ = InvalidateRect(Some(*scrollbar), None, false);
+                }
+                let visible = GetWindowLongW(*scrollbar, GWL_STYLE) as u32 & WS_VISIBLE.0 != 0;
+                if visible != (max > 0) {
+                    let _ = ShowWindow(*scrollbar, if max > 0 { SW_SHOW } else { SW_HIDE });
+                }
+            }
             if delta != 0 {
                 // Move even controls outside the viewport. ScrollWindowEx with
                 // SW_SCROLLCHILDREN cannot reliably update partially clipped
@@ -1961,6 +2042,15 @@ impl State {
             if let Some(theme) = &self.theme {
                 theme.apply_control(h);
             }
+            if class.as_wide() == w!("EDIT").as_wide() {
+                let margin = (8 * scale / 96) as isize;
+                send(
+                    h,
+                    EM_SETMARGINS,
+                    WPARAM((EC_LEFTMARGIN | EC_RIGHTMARGIN) as usize),
+                    LPARAM(margin | (margin << 16)),
+                );
+            }
             self.controls.insert(id, h);
             h
         }
@@ -1978,7 +2068,7 @@ impl State {
         );
     }
     fn button(&mut self, id: u16, text: &str, x: i32, y: i32, width: i32) {
-        self.control(id, w!("BUTTON"), text, WS_TABSTOP, x, y, width, 30);
+        self.control(id, w!("BUTTON"), text, WS_TABSTOP, x, y, width, 34);
     }
     fn edit(&mut self, id: u16, text: &str, x: i32, y: i32, width: i32) {
         self.control(
@@ -2018,9 +2108,20 @@ impl State {
             x,
             y,
             width,
-            220,
+            280,
         );
         unsafe {
+            if items.is_empty() {
+                let text = wide(if id == 10 && matches!(self.page, 2 | 6) {
+                    "No battery-powered devices"
+                } else if id == 10 {
+                    "No devices connected"
+                } else {
+                    "No options available"
+                });
+                send(h, CB_ADDSTRING, WPARAM(0), LPARAM(text.as_ptr() as isize));
+                let _ = EnableWindow(h, false);
+            }
             for t in items {
                 let text = wide(t);
                 send(h, CB_ADDSTRING, WPARAM(0), LPARAM(text.as_ptr() as isize));
@@ -2069,7 +2170,7 @@ impl State {
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
                 840 * dpi / 96,
-                740 * dpi / 96,
+                780 * dpi / 96,
                 None,
                 None,
                 None,
@@ -2156,9 +2257,9 @@ impl State {
             if self.font_dpi != dpi || self.font.is_invalid() {
                 let _ = DeleteObject(self.font.into());
                 let _ = DeleteObject(self.heading_font.into());
-                let make_font = |weight| {
+                let make_font = |height: i32, weight| {
                     CreateFontW(
-                        -16 * dpi as i32 / 96,
+                        -height * dpi as i32 / 96,
                         0,
                         0,
                         0,
@@ -2174,8 +2275,8 @@ impl State {
                         w!("Segoe UI"),
                     )
                 };
-                self.font = make_font(400);
-                self.heading_font = make_font(600);
+                self.font = make_font(15, 400);
+                self.heading_font = make_font(20, 600);
                 self.font_dpi = dpi;
             }
         }
@@ -2224,7 +2325,7 @@ impl State {
         self.selected = self.selected.min(names.len().saturating_sub(1));
         match self.page {
             1 => {
-                self.heading(90, "Choose a device", 20, 64, 740);
+                self.heading(90, "Your devices", 20, 66, 740);
                 let rows = self.device_rows();
                 let index = self
                     .selected_device
@@ -2249,11 +2350,13 @@ impl State {
                 self.combo(10, &device_names, index, 20, 96, 760);
                 if let Some((device, battery)) = self.current_device() {
                     if let Some(d) = battery {
-                        self.label(91, &device_detail(&d), 20, 138, 740);
-                        self.label(92, "&Name", 20, 172, 120);
-                        self.edit(11, &d.name, 150, 168, 360);
-                        self.check(12, "&Hide tray icon", d.hidden, 20, 204, 350);
-                        self.label(93, "Low battery alert (%)", 20, 242, 230);
+                        self.heading(88, &battery_summary(&d), 20, 140, 740);
+                        self.label(91, &device_detail(&d), 20, 170, 740);
+                        self.heading(89, "Device preferences", 20, 212, 740);
+                        self.label(92, "Display &name", 20, 255, 120);
+                        self.edit(11, &d.name, 150, 251, 360);
+                        self.check(12, "&Hide tray icon", d.hidden, 540, 251, 240);
+                        self.label(93, "Low battery alert (%)", 400, 298, 190);
                         let low = self
                             .settings
                             .devices
@@ -2261,15 +2364,15 @@ impl State {
                             .and_then(|p| p.low)
                             .map(|v| v.to_string())
                             .unwrap_or_default();
-                        self.edit(13, &low, 260, 238, 80);
+                        self.edit(13, &low, 610, 294, 80);
                         self.label(
                             96,
-                            "Leave blank to use the general setting. Use 0 to turn alerts off.",
+                            "Alert level: leave blank to use Settings, or enter 0 to turn alerts off.",
                             20,
-                            271,
+                            336,
                             740,
                         );
-                        self.label(94, "Tray &icon", 20, 310, 120);
+                        self.label(94, "Tray &icon", 20, 298, 120);
                         let kinds: Vec<_> = [
                             "automatic",
                             "mouse",
@@ -2294,15 +2397,17 @@ impl State {
                             .iter()
                             .map(|s| (*s).to_owned())
                             .collect::<Vec<_>>();
-                        self.combo(14, &labels, chosen, 150, 306, 240);
-                        self.button(15, "&Save device", 20, 348, 160);
-                        self.button(16, "Reset to defaults", 190, 348, 160);
+                        self.combo(14, &labels, chosen, 150, 294, 215);
+                        self.button(15, "&Save changes", 20, 374, 160);
+                        self.button(16, "Reset to defaults", 192, 374, 172);
                     } else {
-                        self.label(91, "Wired keyboard · No battery", 20, 138, 740);
-                        self.label(92, "&Name", 20, 184, 120);
-                        self.edit(11, &self.configuration_name(&device), 150, 180, 360);
-                        self.button(15, "&Save device", 20, 360, 160);
-                        self.button(16, "Reset name", 190, 360, 160);
+                        self.heading(88, "Wired keyboard", 20, 140, 740);
+                        self.label(91, "No battery · Polling controls only", 20, 170, 740);
+                        self.heading(89, "Device preferences", 20, 212, 740);
+                        self.label(92, "Display &name", 20, 255, 120);
+                        self.edit(11, &self.configuration_name(&device), 150, 251, 360);
+                        self.button(15, "&Save changes", 20, 374, 160);
+                        self.button(16, "Reset name", 192, 374, 172);
                     }
                 } else {
                     self.label(
@@ -2312,6 +2417,7 @@ impl State {
                         150,
                         740,
                     );
+                    self.page_height = 220 - PAGE_TOP;
                 }
                 self.polling_controls();
                 let message = user_message(&self.error).to_owned();
@@ -2325,16 +2431,20 @@ impl State {
                     535,
                     46,
                 );
-                self.button(5, "Save support &report", 20, 725, 205);
+                self.button(5, "Export support report", 20, 725, 205);
             }
             2 => {
-                self.combo(10, &names, self.selected, 20, 65, 380);
+                self.heading(90, "Battery history", 20, 68, 740);
+                self.label(92, "Device", 20, 106, 360);
+                self.label(93, "Time scale", 420, 106, 160);
+                self.label(94, "Period", 600, 106, 160);
+                self.combo(10, &names, self.selected, 20, 132, 380);
                 self.combo(
                     21,
                     &["Time used".into(), "Calendar time".into()],
                     usize::from(self.history.axis == HistoryAxis::Calendar),
                     420,
-                    65,
+                    132,
                     160,
                 );
                 self.combo(
@@ -2342,10 +2452,10 @@ impl State {
                     &self.history.labels(),
                     self.history.index(),
                     600,
-                    65,
+                    132,
                     180,
                 );
-                self.label(96, self.history.description(), 20, 105, 750);
+                self.label(96, self.history.description(), 20, 176, 750);
                 self.label(
                     97,
                     "History is saved for 30 days. Mouse and keyboard activity is not tracked.",
@@ -2358,26 +2468,27 @@ impl State {
             3 => {
                 let value = serde_json::to_value(&self.settings).unwrap_or_default();
                 self.heading(90, "Alerts and battery", 20, 70, 740);
-                self.heading(91, "Appearance", 20, 238, 740);
-                self.heading(92, "Battery checks", 20, 402, 740);
-                self.heading(93, "Polling rate", 20, 480, 740);
+                self.heading(91, "Appearance", 20, 252, 740);
+                self.heading(92, "Battery checks", 20, 412, 740);
+                self.heading(93, "Polling rate", 20, 492, 740);
                 for (i, x, y, width) in [
                     (0, 20, 104, 360),
                     (1, 400, 104, 380),
                     (6, 20, 138, 360),
                     (8, 400, 138, 380),
-                    (3, 20, 272, 360),
-                    (4, 400, 272, 380),
-                    (7, 20, 306, 370),
-                    (5, 400, 306, 380),
-                    (2, 400, 432, 380),
+                    (12, 20, 170, 760),
+                    (3, 20, 288, 360),
+                    (4, 400, 288, 380),
+                    (7, 20, 322, 370),
+                    (5, 400, 322, 380),
+                    (2, 400, 448, 380),
                     (9, 20, 938, 760),
                     (10, 20, 972, 760),
                     (11, 20, 1048, 760),
                 ] {
                     let (key, label) = CHECKS[i];
                     self.check(
-                        100 + i as u16,
+                        setting_check_id(i),
                         label,
                         value[key].as_bool().unwrap_or(false),
                         x,
@@ -2386,11 +2497,11 @@ impl State {
                     );
                 }
                 self.enable_control(111, false);
-                self.label(202, "Low battery alert (%)", 20, 186, 180);
-                self.edit(203, &self.settings.low.to_string(), 210, 182, 80);
-                self.label(214, "Orange icon below (%)", 400, 186, 220);
-                self.edit(215, &self.settings.warning_level.to_string(), 650, 182, 80);
-                self.label(204, "Tray icon colour", 20, 350, 150);
+                self.label(202, "Alert when below (%)", 20, 208, 180);
+                self.edit(203, &self.settings.low.to_string(), 210, 204, 80);
+                self.label(214, "Turn icon orange below (%)", 400, 208, 235);
+                self.edit(215, &self.settings.warning_level.to_string(), 650, 204, 80);
+                self.label(204, "Tray icon colour", 20, 362, 150);
                 let themes = THEME_CHOICES
                     .iter()
                     .map(|s| (*s).to_owned())
@@ -2399,23 +2510,23 @@ impl State {
                     .iter()
                     .position(|s| *s == self.settings.icon_theme)
                     .unwrap_or(0);
-                self.combo(205, &themes, chosen, 170, 346, 215);
+                self.combo(205, &themes, chosen, 170, 358, 215);
                 self.check(
                     206,
                     "Start at sign-in",
                     hb_windows::system::is_startup(),
                     400,
-                    346,
+                    358,
                     380,
                 );
-                self.label(200, "Check battery every (seconds)", 20, 436, 240);
-                self.edit(201, &self.settings.interval.to_string(), 270, 432, 100);
+                self.label(200, "Battery check interval (seconds)", 20, 452, 240);
+                self.edit(201, &self.settings.interval.to_string(), 270, 448, 100);
                 self.check(
                     112,
                     "Allow polling-rate changes",
                     self.settings.polling_controls,
                     20,
-                    514,
+                    528,
                     360,
                 );
                 self.check(
@@ -2423,33 +2534,33 @@ impl State {
                     "Restore saved rates when the app starts",
                     self.settings.restore_polling_on_startup,
                     400,
-                    514,
+                    528,
                     380,
                 );
                 self.control(216, w!("STATIC"),
-                    "Higher rates can use more battery. Each change is made once; unconfirmed changes are not retried.",
-                    WINDOW_STYLE::default(), 20, 550, 760, 46);
-                self.heading(207, "Device brands", 20, 654, 740);
+                    "Enable this to choose a device's response rate on Devices or from its tray menu.",
+                    WINDOW_STYLE::default(), 20, 566, 760, 46);
+                self.heading(207, "Device brands to monitor", 20, 674, 740);
                 for (i, p) in providers().iter().enumerate() {
                     self.check(
                         300 + i as u16,
                         provider_label(p),
                         self.settings.enabled(p),
                         20 + (i as i32 % 4) * 190,
-                        686 + (i as i32 / 4) * 28,
+                        708 + (i as i32 / 4) * 28,
                         180,
                     );
                 }
                 self.button(
                     212,
                     if self.more_options {
-                        "Fewer options"
+                        "Hide advanced options"
                     } else {
-                        "More options"
+                        "Advanced options"
                     },
                     20,
-                    606,
-                    160,
+                    622,
+                    200,
                 );
                 self.control(
                     213,
@@ -2461,7 +2572,15 @@ impl State {
                     760,
                     40,
                 );
-                self.label(208, "Update source (GitHub account/project)", 20, 1090, 740);
+                self.heading(208, "About Halo Battery Next", 20, 1070, 740);
+                self.label(
+                    218,
+                    concat!("Version ", env!("CARGO_PKG_VERSION"), " · Windows 11"),
+                    20,
+                    1105,
+                    440,
+                );
+                self.button(217, "Open data folder", 570, 1100, 210);
                 self.edit(
                     209,
                     self.settings
@@ -2475,13 +2594,13 @@ impl State {
                 );
                 self.label(
                     219,
-                    "Leave blank to keep updates off. Updates are unavailable in this version.",
+                    "Closing this window keeps battery monitoring running. Use the tray menu to exit.",
                     20,
                     1156,
                     760,
                 );
                 self.button(210, "&Save settings", 20, 682, 160);
-                self.button(5, "Save support &report", 194, 682, 205);
+                self.button(5, "Export support report", 194, 682, 205);
                 let message = user_message(&self.error).to_owned();
                 self.control(
                     95,
@@ -2555,7 +2674,10 @@ impl State {
             WS_TABSTOP
                 | WS_BORDER
                 | WS_VSCROLL
-                | WINDOW_STYLE((LBS_NOTIFY | LBS_NOINTEGRALHEIGHT) as u32),
+                | WINDOW_STYLE(
+                    (LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | LBS_OWNERDRAWFIXED | LBS_HASSTRINGS)
+                        as u32,
+                ),
             20,
             y,
             225,
@@ -2569,17 +2691,17 @@ impl State {
             .get(self.selected)
             .map(|d| d.reading.key.clone());
         self.insights.select(key);
-        self.combo(10, names, self.selected, 20, 65, 760);
-        self.heading(72, "Battery insights", 20, 105, 760);
-        self.heading(73, "Battery life by polling rate", 20, 140, 760);
-        self.insights_list(70, 174, 180);
-        self.insights_edit(74, 174, 180);
-        self.heading(75, "Use between charges · newest first", 20, 374, 760);
-        self.insights_list(71, 406, 184);
-        self.insights_edit(76, 406, 184);
+        self.heading(72, "Battery insights", 20, 68, 760);
+        self.combo(10, names, self.selected, 20, 104, 760);
+        self.heading(73, "Battery life by polling rate", 20, 152, 760);
+        self.insights_list(70, 190, 164);
+        self.insights_edit(74, 190, 164);
+        self.heading(75, "Recent battery sessions", 20, 382, 760);
+        self.insights_list(71, 420, 176);
+        self.insights_edit(76, 420, 176);
         self.control(77, w!("STATIC"),
-            "Time used is estimated from the device's connection. Mouse and keyboard activity is not tracked.\r\n\r\nEstimates use up to 30 days of battery history. Sleep and charging are excluded. Refresh the rate after changing it in another app. Dates use your computer's local time.",
-            WINDOW_STYLE::default(), 20, 608, 760, 96);
+            "Estimates use up to 30 days of battery history. Sleep and charging are excluded.\r\nTime used is approximate. Mouse and keyboard activity is never tracked.\r\nRefresh the rate after changing it in another app.",
+            WINDOW_STYLE::default(), 20, 608, 760, 64);
         self.control(
             78,
             w!("STATIC"),
@@ -2704,6 +2826,25 @@ impl State {
             .map(charge_cycle_text).unwrap_or_else(|| "No charging sessions recorded yet. Keep using the device on battery to build a history.".into());
         self.set_control_text(74, &rate);
         self.set_control_text(76, &cycle);
+        // Read-only summaries only need a scrollbar when their text actually overflows.
+        for id in [74, 76] {
+            if let Some(h) = self.controls.get(&id) {
+                unsafe {
+                    let _ = ShowScrollBar(*h, SB_VERT, false);
+                    let dc = GetDC(Some(*h));
+                    let saved = SaveDC(dc);
+                    SelectObject(dc, self.font.into());
+                    let mut metrics = TEXTMETRICW::default();
+                    let _ = GetTextMetricsW(dc, &mut metrics);
+                    let mut rect = RECT::default();
+                    let _ = GetClientRect(*h, &mut rect);
+                    let lines = send(*h, EM_GETLINECOUNT, WPARAM(0), LPARAM(0)).0 as i32;
+                    let _ = ShowScrollBar(*h, SB_VERT, lines * metrics.tmHeight > rect.bottom);
+                    let _ = RestoreDC(dc, saved);
+                    ReleaseDC(Some(*h), dc);
+                }
+            }
+        }
     }
     fn save(&mut self) {
         self.runtime.send(Command::Settings(self.settings.clone()));
@@ -2741,7 +2882,7 @@ impl State {
                     .map(|(key, reading)| (key, serde_json::json!({"rate":reading.rate,
                         "supported":reading.supported,"timestamp":reading.timestamp,"evidence":reading.evidence})))
                     .collect();
-                let value = serde_json::json!({"snapshot":self.snapshot,"providers":self.diagnostics,"settings":self.settings,"application_error":self.error,
+                let value = serde_json::json!({"data_folder":self.dir,"snapshot":self.snapshot,"providers":self.diagnostics,"settings":self.settings,"application_error":self.error,
                     "polling_messages":self.polling.status,"tray_polling_messages":self.tray_polling.status,
                     "polling_readings":readings,"insights_debug":format!("{:?}",self.insights.data)});
                 self.error = match hb_storage::atomic_write(
@@ -2799,7 +2940,7 @@ impl State {
                 {
                     let name = self.text(11);
                     self.settings.devices.entry(device.key).or_default().name =
-                        (!name.trim().is_empty()).then_some(name);
+                        hb_core::settings::device_name(&name);
                     self.save();
                     self.error = "Device settings saved".into();
                     self.set_control_text(95, user_message(&self.error));
@@ -2838,7 +2979,7 @@ impl State {
                     self.settings.devices.insert(
                         key.clone(),
                         DevicePreferences {
-                            name: (!name.trim().is_empty()).then_some(name),
+                            name: hb_core::settings::device_name(&name),
                             hidden,
                             icon,
                             low,
@@ -2869,7 +3010,7 @@ impl State {
             210 => {
                 let mut value = serde_json::to_value(&self.settings).unwrap();
                 for (i, (key, _)) in CHECKS.iter().enumerate() {
-                    value[*key] = self.checked(100 + i as u16).into()
+                    value[*key] = self.checked(setting_check_id(i)).into()
                 }
                 let interval = self
                     .text(201)
@@ -2921,6 +3062,19 @@ impl State {
                     self.tray_polling.invalidate(self.tray_polling.generation);
                 }
                 self.build()
+            }
+            217 => {
+                let folder = wide(&self.dir.to_string_lossy());
+                unsafe {
+                    ShellExecuteW(
+                        self.dashboard,
+                        w!("open"),
+                        PCWSTR(folder.as_ptr()),
+                        None,
+                        None,
+                        SW_SHOWNORMAL,
+                    );
+                }
             }
             212 => {
                 self.more_options = !self.more_options;
@@ -3058,16 +3212,19 @@ impl State {
                 }
             }
         }
-        self.heading(98, "Polling rate", 20, 396, 750);
+        if self.current_device().is_none() {
+            return;
+        }
+        self.heading(98, "Polling rate", 20, 434, 750);
         self.control(
             99,
             w!("STATIC"),
-            "How often the device sends updates. Close games and presentations before changing it.",
+            "How often your device sends updates. Higher rates can use more battery.\r\nClose games before changing the rate.",
             WINDOW_STYLE::default(),
             20,
-            427,
+            468,
             750,
-            30,
+            38,
         );
         if !self.settings.polling_controls {
             self.control(
@@ -3086,7 +3243,7 @@ impl State {
                     }),
                 WINDOW_STYLE::default(),
                 20,
-                464,
+                510,
                 750,
                 80,
             );
@@ -3099,7 +3256,7 @@ impl State {
                 "Choose a connected device to check its polling rate.",
                 WINDOW_STYLE::default(),
                 20,
-                464,
+                510,
                 750,
                 48,
             );
@@ -3124,7 +3281,7 @@ impl State {
                 current.map_or_else(|| "not checked yet".into(), |r| format!("{} Hz", r.hz()))
             ),
             20,
-            464,
+            510,
             750,
         );
         let evidence = observation.as_ref().map_or_else(
@@ -3146,7 +3303,7 @@ impl State {
             &evidence,
             WINDOW_STYLE::default(),
             20,
-            496,
+            542,
             750,
             40,
         );
@@ -3158,11 +3315,11 @@ impl State {
         self.label(
             46,
             &format!(
-                "Saved choice: {} · This may differ from the device's current rate.",
+                "Saved choice: {} · Applied again at startup if enabled in Settings.",
                 requested.map_or_else(|| "none".into(), |r| format!("{} Hz", r.hz()))
             ),
             20,
-            544,
+            584,
             750,
         );
         let supported = observation
@@ -3176,10 +3333,10 @@ impl State {
             .iter()
             .map(|r| format!("{} Hz", r.hz()))
             .collect::<Vec<_>>();
-        self.combo(43, &options, chosen, 20, 574, 230);
-        self.button(40, "&Apply rate", 270, 574, 120);
-        self.button(41, "Refresh rate", 402, 574, 140);
-        self.button(42, "Restore previous rate", 554, 574, 226);
+        self.combo(43, &options, chosen, 20, 616, 230);
+        self.button(40, "&Apply rate", 270, 616, 120);
+        self.button(41, "Refresh rate", 402, 616, 140);
+        self.button(42, "Restore previous rate", 554, 616, 226);
         let pending = self.polling.pending.is_some() || !available;
         let verified = observation
             .as_ref()
@@ -3205,7 +3362,7 @@ impl State {
             polling_message(&status),
             WINDOW_STYLE::default(),
             20,
-            612,
+            660,
             750,
             28,
         );
@@ -3410,8 +3567,10 @@ impl State {
             ..Default::default()
         };
         let Some(d) = self.snapshot.devices.get(self.selected) else {
+            self.set_control_text(97, "Connect a battery-powered device to see its history.");
             return;
         };
+        self.set_control_text(97, "Loading battery history…");
         let until = SystemClock::default().unix();
         let mut r = RECT::default();
         unsafe {
@@ -3553,6 +3712,7 @@ impl State {
                 && let Some((_, Some(d))) = self.current_device()
             {
                 self.set_control_text(91, &device_detail(&d));
+                self.set_control_text(88, &battery_summary(&d));
             }
             self.sync_trays(TrayUpdate::Changed);
             if identity_changed && self.page != 3 {
@@ -3943,6 +4103,13 @@ impl Tray {
 #[cfg(test)]
 pub(crate) static NATIVE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+fn battery_summary(d: &DeviceView) -> String {
+    match d.reading.level {
+        Some(level) if d.reading.online() => format!("{level}% battery"),
+        Some(level) => format!("{level}% battery · Last known"),
+        None => "Battery level unavailable".into(),
+    }
+}
 fn device_detail(d: &DeviceView) -> String {
     let age = SystemClock::default()
         .unix()
@@ -3999,12 +4166,15 @@ fn provider_label(id: &str) -> &str {
         "mchose" => "MCHOSE",
         "hyperx_alpha2" => "HyperX Alpha 2",
         "hyperx_cloud3" => "HyperX Cloud III",
+        "hyperx_cloud3s" => "HyperX Cloud III S",
         "hyperx" => "HyperX Cloud II",
         "keychron" => "Keychron",
         "pulsar" => "Pulsar / ATK / VXE",
         "jbl" => "JBL Quantum",
         "logitech" => "Logitech",
+        "logitech_centurion" => "Logitech PRO X 2",
         "steelseries" => "SteelSeries",
+        "steelseries_elite" => "SteelSeries Nova Elite",
         "playstation" => "PlayStation",
         "eightbitdo" => "8BitDo",
         "barracuda" => "Barracuda Pro",
@@ -4167,12 +4337,12 @@ mod behaviour_tests {
     #[test]
     fn every_provider_has_a_unique_readable_settings_label() {
         let ids = providers();
-        assert_eq!(ids.len(), 25);
+        assert_eq!(ids.len(), 28);
         let labels = ids
             .iter()
             .map(|id| provider_label(id))
             .collect::<std::collections::BTreeSet<_>>();
-        assert_eq!(labels.len(), 25);
+        assert_eq!(labels.len(), ids.len());
         assert_eq!(provider_label("razer"), "Razer");
         assert_eq!(provider_label("playstation"), "PlayStation");
         assert!(ids.iter().all(|id| !provider_label(id).contains('_')));
@@ -4341,7 +4511,7 @@ impl PopupAppearance {
                 font,
                 background: CreateSolidBrush(palette.surface),
                 width: 0,
-                row_height: 30 * dpi / 96,
+                row_height: 34 * dpi / 96,
                 padding,
             };
             if appearance.font.is_invalid() || appearance.background.is_invalid() {
@@ -4548,15 +4718,23 @@ impl PopupAppearance {
             FillRect(
                 item.hDC,
                 &item.rcItem,
-                color_brush(
-                    item.hDC,
-                    if selected && !disabled {
-                        self.palette.selection
-                    } else {
-                        self.palette.surface
-                    },
-                ),
+                color_brush(item.hDC, self.palette.surface),
             );
+            if selected && !disabled {
+                let mut highlight = item.rcItem;
+                let inset = (self.row_height / 12).max(1) as i32;
+                highlight.left += inset;
+                highlight.right -= inset;
+                highlight.top += inset;
+                highlight.bottom -= inset;
+                rounded_surface(
+                    item.hDC,
+                    &highlight,
+                    self.palette.selection,
+                    self.palette.selection,
+                    inset * 3,
+                );
+            }
             let mut rect = item.rcItem;
             rect.left += self.padding;
             rect.right -= self.padding;
@@ -5215,7 +5393,7 @@ mod popup_theme_tests {
                         ),
                         Some(LRESULT(1))
                     );
-                    assert_eq!(GetPixel(hdc, 2, 2), expected);
+                    assert_eq!(GetPixel(hdc, 8, appearance.row_height as i32 / 2), expected);
                 }
                 SelectObject(hdc, old);
                 let _ = DeleteObject(bitmap.into());
@@ -6067,6 +6245,86 @@ mod insights_tests {
 mod dashboard_lifecycle_tests {
     use super::*;
 
+    // Opt-in resource measurement of the optimized native test fixture. Never touches real hardware.
+    fn sample_closed_dashboard(context: &UiContext, phase: &str) {
+        if std::env::var_os("HALO_MEASURE_UI_RESOURCES").is_none() {
+            return;
+        }
+        use windows::Win32::System::{
+            ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX},
+            Threading::{GetCurrentProcess, GetProcessTimes},
+        };
+        unsafe {
+            let process = GetCurrentProcess();
+            let cpu = || {
+                let (mut created, mut exited, mut kernel, mut user) = (
+                    FILETIME::default(),
+                    FILETIME::default(),
+                    FILETIME::default(),
+                    FILETIME::default(),
+                );
+                GetProcessTimes(process, &mut created, &mut exited, &mut kernel, &mut user)
+                    .unwrap();
+                let ticks =
+                    |t: FILETIME| (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime);
+                ticks(kernel) + ticks(user)
+            };
+            let monitor = context.monitor.get();
+            context
+                .state
+                .borrow()
+                .runtime
+                .attach_window(monitor.0 as usize);
+            context.state.borrow_mut().drain();
+            let start = Instant::now();
+            let start_cpu = cpu();
+            let (mut total, mut count, mut peak, mut last) = (0u64, 0u64, 0usize, 0usize);
+            eprintln!("Starting three-minute UI resource sample: {phase}");
+            while start.elapsed() < Duration::from_secs(180) {
+                MsgWaitForMultipleObjectsEx(None, 1000, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+                // The fixture also owns native framework windows. Drain the whole
+                // thread queue so an unrelated paint cannot leave the wait signalled.
+                let mut message = MSG::default();
+                while PeekMessageW(&mut message, None, 0, 0, PM_REMOVE).as_bool() {
+                    let _ = TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
+                let mut memory = PROCESS_MEMORY_COUNTERS_EX {
+                    cb: size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32,
+                    ..Default::default()
+                };
+                assert!(
+                    K32GetProcessMemoryInfo(
+                        process,
+                        (&mut memory as *mut PROCESS_MEMORY_COUNTERS_EX).cast(),
+                        memory.cb
+                    )
+                    .as_bool()
+                );
+                last = memory.PrivateUsage;
+                total += last as u64;
+                count += 1;
+                peak = peak.max(last);
+                assert!(context.state.borrow().dashboard.is_none());
+            }
+            let elapsed = start.elapsed().as_secs_f64();
+            let report = serde_json::json!({"phase": phase, "seconds": elapsed,
+                "cpu_percent_one_core": (cpu() - start_cpu) as f64 / 10_000_000. / elapsed * 100.,
+                "private_mean_mib": total as f64 / count as f64 / 1048576.,
+                "private_peak_mib": peak as f64 / 1048576., "private_end_mib": last as f64 / 1048576.,
+                "workload": "Optimized native test fixture, simulated mouse, dashboard closed, no charging animation"});
+            let output = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../validation-local/ui-modern-resources");
+            std::fs::create_dir_all(&output).unwrap();
+            std::fs::write(
+                output.join(format!("{phase}.json")),
+                serde_json::to_vec_pretty(&report).unwrap(),
+            )
+            .unwrap();
+            eprintln!("{report}");
+        }
+    }
+
     unsafe fn dispatch_monitor(monitor: HWND) {
         let mut message = MSG::default();
         unsafe {
@@ -6424,13 +6682,20 @@ mod dashboard_lifecycle_tests {
                 state.command(2, 0);
                 assert_eq!(
                     send(state.controls[&10], CB_GETCOUNT, WPARAM(0), LPARAM(0)).0,
-                    0
+                    1
                 );
+                assert!(
+                    !windows::Win32::UI::Input::KeyboardAndMouse::IsWindowEnabled(
+                        state.controls[&10]
+                    )
+                    .as_bool()
+                );
+                assert_eq!(state.text(10), "No battery-powered devices");
                 assert!(state.visible_polling_device().is_none());
                 state.command(6, 0);
                 assert_eq!(
                     send(state.controls[&10], CB_GETCOUNT, WPARAM(0), LPARAM(0)).0,
-                    0
+                    1
                 );
                 assert!(state.visible_polling_device().is_none());
                 state.command(1, 0);
@@ -6550,15 +6815,23 @@ mod dashboard_lifecycle_tests {
             // Exercise each page against actual native brushes/controls without
             // changing the user's Windows appearance or stored settings.
             for dark in [false, true] {
-                for page in [1, 2, 3, 6] {
+                for (page, advanced) in [(1, false), (2, false), (3, false), (6, false), (3, true)]
+                {
                     let expected;
                     {
                         let mut state = context.state.borrow_mut();
                         state.page = page;
+                        state.more_options = advanced;
+                        if page == 2 {
+                            state.history.usage_index = 0;
+                        }
                         state.page_scroll = 0;
                         state.apply_theme(DashboardTheme::new(dark, false));
                         expected = state.theme.as_ref().unwrap().palette.background;
                         state.build();
+                        if advanced {
+                            state.scroll_page(i32::MAX);
+                        }
                         if page == 1 {
                             // A combo's selected-item callback and a static's
                             // color callback reenter the parent while State is
@@ -6599,7 +6872,7 @@ mod dashboard_lifecycle_tests {
                                         |x| {
                                             let color = GetPixel(dc, x, y);
                                             let channel = color.0 & 255;
-                                            if dark { channel > 180 } else { channel < 100 }
+                                            channel.abs_diff(palette.background.0 & 255) > 90
                                         }
                                     )),
                                     "missing reentrant control text {id}, dark={dark}"
@@ -6670,6 +6943,47 @@ mod dashboard_lifecycle_tests {
                             LPARAM((PRF_CLIENT | PRF_CHILDREN | PRF_ERASEBKGND) as isize),
                         );
                         let _ = SetViewportOrgEx(dc, previous_origin.x, previous_origin.y, None);
+                        if page == 2 {
+                            let points = (0..=16)
+                                .map(|index| {
+                                    let mut reading = Reading::new(
+                                        "synthetic-mouse",
+                                        "Test mouse",
+                                        "simulation",
+                                        index * 450,
+                                    );
+                                    reading.level = Some(66 - index as u8);
+                                    reading.connection = Connection::Online;
+                                    reading
+                                })
+                                .collect();
+                            let mut series = HistorySeries::calendar(points, 0, 7200);
+                            series.axis = HistoryAxis::Usage;
+                            let chart = Chart::new(reopened, width as u32, height as u32).unwrap();
+                            chart
+                                .paint_with_palette(
+                                    width as u32,
+                                    height as u32,
+                                    &series,
+                                    &Palette::new(dark, false),
+                                )
+                                .unwrap();
+                            let scale = GetDpiForWindow(reopened).max(96) as i32;
+                            let top = 212 * scale / 96;
+                            let bottom = height - 60 * scale / 96;
+                            BitBlt(
+                                dc,
+                                0,
+                                top,
+                                width,
+                                bottom - top,
+                                Some(source),
+                                0,
+                                top,
+                                SRCCOPY,
+                            )
+                            .unwrap();
+                        }
                         SelectObject(dc, old);
                         let mut info = BITMAPINFO::default();
                         info.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
@@ -6707,7 +7021,8 @@ mod dashboard_lifecycle_tests {
                         std::fs::create_dir_all(&output).unwrap();
                         std::fs::write(
                             output.join(format!(
-                                "page-{page}-{}.bmp",
+                                "page-{page}{}-{}.bmp",
+                                if advanced { "-advanced" } else { "" },
                                 if dark { "dark" } else { "light" }
                             )),
                             file,
@@ -6724,6 +7039,7 @@ mod dashboard_lifecycle_tests {
             {
                 let mut state = context.state.borrow_mut();
                 state.page = 3;
+                state.more_options = false;
                 state.build();
                 let interval = state.controls[&201];
                 SetWindowTextW(interval, w!("1234")).unwrap();
@@ -6741,7 +7057,8 @@ mod dashboard_lifecycle_tests {
                 assert_eq!(state.controls[&212], more);
                 assert_eq!(state.controls[&201], interval);
                 assert_eq!(state.text(201), "1234");
-                assert!(IsWindowVisible(state.controls[&209]).as_bool());
+                assert!(IsWindowVisible(state.controls[&217]).as_bool());
+                assert!(!IsWindowVisible(state.controls[&209]).as_bool());
                 state.command(212, 0);
                 assert!(!IsWindowVisible(state.controls[&209]).as_bool());
                 assert_eq!(state.text(201), "1234");
@@ -6774,7 +7091,7 @@ mod dashboard_lifecycle_tests {
                     fMask: SIF_ALL,
                     ..Default::default()
                 };
-                GetScrollInfo(host, SB_VERT, &mut scroll).unwrap();
+                GetScrollInfo(state.controls[&7], SB_CTL, &mut scroll).unwrap();
                 assert_eq!(state.page_scroll, scroll.nPos);
                 let mut current_footer = RECT::default();
                 GetWindowRect(save, &mut current_footer).unwrap();
@@ -6783,6 +7100,19 @@ mod dashboard_lifecycle_tests {
                 let mut pane = RECT::default();
                 GetWindowRect(state.controls[&212], &mut content).unwrap();
                 GetWindowRect(host, &mut pane).unwrap();
+                let mut bar_rect = RECT::default();
+                GetWindowRect(state.controls[&7], &mut bar_rect).unwrap();
+                assert!(
+                    pane.right <= bar_rect.left,
+                    "page must not paint over scrollbar"
+                );
+                let _ = ValidateRect(Some(state.controls[&7]), None);
+                let unchanged_position = state.page_scroll;
+                state.scroll_page(unchanged_position);
+                assert!(
+                    !GetUpdateRect(state.controls[&7], None, false).as_bool(),
+                    "unchanged position/range must not repaint the scrollbar"
+                );
                 assert!(content.top >= pane.top && content.bottom <= pane.bottom);
                 state.scroll_page(0);
                 let _ = SetFocus(Some(state.controls[&212]));
@@ -6833,6 +7163,54 @@ mod dashboard_lifecycle_tests {
                     "Storage: native database diagnostic"
                 );
             }
+            send(reopened, WM_VSCROLL, WPARAM(SB_TOP.0 as usize), LPARAM(0));
+            assert_eq!(context.state.borrow().page_scroll, 0);
+            send(
+                reopened,
+                WM_VSCROLL,
+                WPARAM(SB_BOTTOM.0 as usize),
+                LPARAM(0),
+            );
+            assert!(context.state.borrow().page_scroll > 0);
+            let scrollbar = context.state.borrow().controls[&7];
+            // Exercise the actual themed control input, without injecting
+            // system mouse/keyboard events or involving connected hardware.
+            send(reopened, WM_VSCROLL, WPARAM(SB_TOP.0 as usize), LPARAM(0));
+            let mut bounds = RECT::default();
+            GetClientRect(scrollbar, &mut bounds).unwrap();
+            let point = |y: i32| LPARAM(((y as u32) << 16 | 7) as isize);
+            send(
+                scrollbar,
+                WM_LBUTTONDOWN,
+                WPARAM(0),
+                point(bounds.bottom - 2),
+            );
+            assert!(context.state.borrow().page_scroll > 0);
+            send(scrollbar, WM_LBUTTONUP, WPARAM(0), point(bounds.bottom - 2));
+            send(reopened, WM_VSCROLL, WPARAM(SB_TOP.0 as usize), LPARAM(0));
+            let mut bar = SCROLLBARINFO {
+                cbSize: size_of::<SCROLLBARINFO>() as u32,
+                ..Default::default()
+            };
+            GetScrollBarInfo(scrollbar, OBJID_CLIENT, &mut bar).unwrap();
+            send(
+                scrollbar,
+                WM_LBUTTONDOWN,
+                WPARAM(0),
+                point(bar.xyThumbTop + 2),
+            );
+            send(scrollbar, WM_MOUSEMOVE, WPARAM(0), point(bounds.bottom - 2));
+            send(scrollbar, WM_LBUTTONUP, WPARAM(0), point(bounds.bottom - 2));
+            let state = context.state.borrow();
+            assert!(state.page_scroll > 0);
+            let mut info = SCROLLINFO {
+                cbSize: size_of::<SCROLLINFO>() as u32,
+                fMask: SIF_ALL,
+                ..Default::default()
+            };
+            GetScrollInfo(scrollbar, SB_CTL, &mut info).unwrap();
+            assert_eq!(state.page_scroll, info.nMax - info.nPage as i32 + 1);
+            drop(state);
             // The titlebar X enters DefWindowProc(SC_CLOSE), which synchronously
             // reenters WM_CLOSE. Default processing must release State first.
             send(
@@ -6848,6 +7226,7 @@ mod dashboard_lifecycle_tests {
                     GR_GDIOBJECTS, GR_USEROBJECTS, GetCurrentProcess, GetGuiResources,
                 };
                 let process = GetCurrentProcess();
+                sample_closed_dashboard(&context, "before-40-cycles");
                 let mut baseline = None;
                 for cycle in 0..40 {
                     let mut state = context.state.borrow_mut();
@@ -6883,6 +7262,9 @@ mod dashboard_lifecycle_tests {
                         }
                     }
                 }
+            }
+            if !restore {
+                sample_closed_dashboard(&context, "after-40-cycles");
             }
             context.state.borrow_mut().runtime.stop();
             DestroyWindow(monitor).unwrap();
