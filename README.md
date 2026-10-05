@@ -64,6 +64,9 @@ existing equivalents and verification limits.
 The [6 October source audit](docs/source-audit-20261006.md) fixes recovery,
 notification and history edge cases, reduces repeated background work, and
 improves native control repainting and History feedback.
+The [Insights and allocation follow-up](docs/insights-performance-audit-20261006.md)
+reduces routine snapshot and history-save allocations, and corrects Insights
+consumption accounting and evidence descriptions.
 
 Polling controls default off and use ordinary user-mode HID access: no drivers,
 elevation, game-process access, input interception or continuous rate enforcement.

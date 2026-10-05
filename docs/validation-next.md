@@ -4,6 +4,22 @@ Windows 11 x64, Rust 1.98.0 with the MSVC toolchain. Hardware smoke checks use t
 connected Razer DeathAdder V4 Pro. Inherited parent battery reports and Rust
 hardware checks are labelled separately in [device support](device-support.md).
 
+## Insights and allocation follow-up, 6 October 2026
+
+The executable is **3,053,056 bytes (2.91 MiB)**, SHA256
+`19862B19E25F3C59B90E6D2871A4B7341AF2CDCB474F059DEAF77A84EBE56A50`.
+Formatting, strict Clippy, **588 passing tests** (two optional timings skipped),
+release build, API restrictions, privacy and coverage gates pass. A 512-row flush
+uses 2 temporary Rust allocations instead of 2,048; large recovered buffers release
+their spare capacity. A read-only copy of local history passed integrity checks.
+
+The optimized native fixture averaged **7.18 → 7.78 MiB** and **0.148% → 0.165%**
+of one core in three-minute windows around forty dashboard cycles, with GDI/USER
+handles unchanged at **108 / 52**. This is a lifecycle check with synthetic data,
+not a before/after code benchmark. Both Insights themes were captured and inspected.
+See the [follow-up audit](insights-performance-audit-20261006.md) for details and
+remaining opportunities. Package: `0.1.0-insights-audit-20261006`.
+
 ## Source audit, 6 October 2026
 
 The executable is **3,046,400 bytes (2.91 MiB)**, SHA256

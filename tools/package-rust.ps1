@@ -29,7 +29,7 @@ Copy-Item -LiteralPath (Join-Path $repo 'docs/protocols.md') -Destination $docum
 foreach ($name in @('application.md', 'releasing.md', 'device-support.md', 'provider-parity.md', 'coverage-summary.md', 'validation-next.md', 'resource-audit.md', 'performance-audit-20261002.md', 'performance-audit-20261003.md', 'ui-audit-20261004.md', 'windows-integration.md', 'polling-controls.md', 'polling-razer-evidence.md', 'polling-keyboard-evidence.md', 'polling-logitech-evidence.md', 'polling-mchose-evidence.md', 'anti-cheat.md', 'history.md', 'insights.md')) {
   Copy-Item -LiteralPath (Join-Path $repo "docs/$name") -Destination $documentation
 }
-foreach ($name in @('upstream-1.14.0-review.md', 'upstream-1.14.0-test-delta.md', 'ui-audit-20261005.md', 'source-audit-20261006.md')) {
+foreach ($name in @('upstream-1.14.0-review.md', 'upstream-1.14.0-test-delta.md', 'ui-audit-20261005.md', 'source-audit-20261006.md', 'insights-performance-audit-20261006.md')) {
   Copy-Item -LiteralPath (Join-Path $repo "docs/$name") -Destination $documentation
 }
 $screenshots = Join-Path $repo 'docs/screenshots'

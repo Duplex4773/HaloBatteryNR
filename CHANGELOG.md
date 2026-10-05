@@ -1,5 +1,14 @@
 # Changelog
 
+## Insights and allocation follow-up — 6 October 2026
+
+- Avoid rebuilding unchanged device snapshots on freshness ticks when status export is off; retain updates, theme checks and rejected-state recovery.
+- Reuse history serialization buffers and release oversized successful-recovery batches.
+- Prevent small percentage rebounds across pauses or rate/session changes from recounting battery consumption.
+- Reject malformed polling metadata when calculating Insights; coalesce pending Refresh clicks and report queue failures.
+- Show the time of the last saved reading and distinguish projection evidence from total usage. Correct unsupported-device and sub-hour messages.
+- Refresh Insights screenshots and document local validation without changing stored history.
+
 ## Source audit — 6 October 2026
 
 - Prevent delayed full-charge alerts after discharge and retain Bluetooth failures until recovery.

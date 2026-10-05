@@ -4,6 +4,10 @@ Open **Insights** (Alt+I) and select a device. **Refresh** reads its local retai
 history; it does not query or configure hardware. The page does no background
 queries while closed. Records remain limited to 30 days and summaries stream
 raw observations on the existing storage worker with bounded memory.
+Repeated Refresh clicks share an already-pending request instead of queuing
+duplicate history scans. The footer shows the last saved reading's date and time;
+remaining-use estimates refer to that reading, rather than a continuously updated
+countdown. A failed refresh clears the old result and offers a retry.
 
 ## Battery life by polling rate
 
@@ -25,12 +29,15 @@ Only adjacent, exact, online readings with known noncharging state count.
 Sleeping, stale, unknown, coarse and charging readings pause contribution.
 Intervals over ten minutes, connection/session boundaries, transport changes
 and rate transitions contribute neither time nor battery loss. Small percentage
-rebounds do not create fake drain; only new lows within a continuous segment
-increase the loss total. A rise of at least three points can indicate an
+rebounds do not create fake drain, including across sleep, transport, rate and
+session boundaries. A counted drop must be below both the current uninterrupted
+segment's low and the physical cycle's low. Drops during unobserved gaps remain
+excluded. A rise of at least three points can indicate an
 unobserved charge and is labeled inferred.
 
-Each rate shows counted awake time, percentage points consumed, sample/drop
-counts and evidence confidence. Projection evidence is listed separately: only
+The page distinguishes total counted use from the shorter duration supporting an
+estimate. Technical sample/drop counts and confidence remain available in support
+reports. Only
 complete intervals between observed new-low drops within a continuous period
 qualify. The first drop anchors that period. An initial or unfinished flat
 percentage does not contribute to the projection; many short periods with a
@@ -65,12 +72,15 @@ so it can differ from the simple start-minus-end percentage. Existing history
 can provide partial charge summaries without manufacturing polling-rate data.
 Summaries do not measure battery capacity, health or wear.
 
-The footer shows retained and usable discharge readings, total counted use,
-confirmed-rate use, the last stored timestamp, excluded intervals and unreadable
-rows. Exclusion is usually expected (charging, pauses or session changes), not
+The footer shows total counted use and the last stored timestamp, and flags unreadable
+rows. Detailed retained/usable reading counts and excluded intervals are included
+in support reports. Exclusion is usually expected (charging, pauses or session changes), not
 database corruption. Empty states distinguish no readings, no usable discharge
 and no confirmed-rate evidence. Existing history is not assigned a rate or
 rewritten to fill missing measurements.
+Devices without a supported polling route receive an appropriate explanation;
+they are not directed to unavailable rate controls. Invalid rate/session metadata
+breaks continuity rather than being treated as ordinary legacy history.
 
 ## Recent-use prediction
 

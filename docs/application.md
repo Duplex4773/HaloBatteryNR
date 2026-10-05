@@ -170,7 +170,9 @@ PlayStation Bluetooth full mode is opt-in. 8BitDo mode switching is disabled. Un
 The **Insights** page compares observed battery drain by last-confirmed polling
 rate and shows use between charges with estimated time used, battery consumed and
 average use per hour, newest first. Its summaries lead with estimated use from a full battery,
-estimated time left and the amount of recorded use. Plain-language learning
+time left at the last saved reading and the amount of evidence used. The page
+distinguishes total recorded use from complete battery-drop intervals supporting
+the estimate, and shows the history's last-reading timestamp. Plain-language learning
 messages explain missing or early estimates; sessions distinguish
 detected charging, possible charging and a missing charge start, and may cover
 only part of a charge. Technical evidence stays in the support report.

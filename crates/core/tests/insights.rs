@@ -211,6 +211,50 @@ fn one_or_two_point_oscillation_does_not_manufacture_charge_or_drain() {
 }
 
 #[test]
+fn rebounds_across_pauses_and_rate_boundaries_cannot_recount_consumption() {
+    for boundary in 0..4 {
+        let mut points = vec![point(0, 80), point(60, 79)];
+        for i in 1..=12 {
+            let mut wake = point(i * 300, 80);
+            match boundary {
+                0 => {
+                    let mut sleeping = point(i * 300 - 60, 79);
+                    sleeping.reading.connection = Connection::Sleeping;
+                    points.push(sleeping);
+                }
+                1 => wake.session = Some(i as u64 + 1),
+                2 => {
+                    wake.polling_rate =
+                        Some(PollingRate::try_from(if i % 2 == 0 { 1000 } else { 500 }).unwrap())
+                }
+                _ => wake.reading.via = format!("transport-{}", i % 2),
+            }
+            let mut drop = wake.clone();
+            drop.reading.timestamp += 60;
+            drop.reading.level = Some(79);
+            points.extend([wake, drop]);
+        }
+        let mut new_low = points.last().unwrap().clone();
+        new_low.reading.timestamp += 60;
+        new_low.reading.level = Some(78);
+        points.push(new_low);
+        let data = summarize(points);
+        assert_eq!(data.cycles.len(), 1, "boundary {boundary}");
+        assert_eq!(data.cycles[0].consumed_percent, 2, "boundary {boundary}");
+        assert_eq!(
+            data.rates.iter().map(|r| r.consumed_percent).sum::<u64>(),
+            2,
+            "boundary {boundary}"
+        );
+        assert!(
+            data.rates
+                .iter()
+                .all(|r| r.projected_full_charge_hours.is_none())
+        );
+    }
+}
+
+#[test]
 fn unobserved_charge_across_sleep_is_inferred_without_counting_gap_drain() {
     for awake_level in [100, 69] {
         let mut sleeping = point(600, 70);
@@ -473,8 +517,9 @@ fn many_short_single_drop_segments_do_not_manufacture_a_projection() {
     }));
     let rate = &summary.rates[0];
     assert_eq!(rate.awake_seconds, 50 * 1500);
-    assert_eq!(rate.consumed_percent, 50);
-    assert_eq!(rate.drop_count, 50);
+    // Repeated one-point rebounds across sessions are not fresh consumption.
+    assert_eq!(rate.consumed_percent, 1);
+    assert_eq!(rate.drop_count, 1);
     assert_eq!(rate.projection_seconds, 0);
     assert_eq!(rate.projection_consumed_percent, 0);
     assert_eq!(rate.projection_drop_count, 0);

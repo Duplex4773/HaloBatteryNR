@@ -642,6 +642,18 @@ struct InsightsUi {
     status: String,
 }
 impl InsightsUi {
+    fn begin(&mut self, key: &str) -> Option<u64> {
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|(_, pending)| pending == key)
+        {
+            return None;
+        }
+        self.sequence = self.sequence.wrapping_add(1).max(1);
+        self.pending = Some((self.sequence, key.into()));
+        Some(self.sequence)
+    }
     fn abandon(&mut self) {
         self.pending = None;
     }
@@ -673,7 +685,8 @@ impl InsightsUi {
                 self.data = Some(data);
             }
             Err(_) => {
-                self.status = "Couldn't load battery insights. Select Refresh to try again.".into()
+                self.data = None;
+                self.status = "Couldn't load battery insights. Select Refresh to try again.".into();
             }
         }
         true
@@ -683,7 +696,10 @@ const INSIGHTS_EMPTY: &str = "To compare rates, allow polling-rate changes in Se
 fn insight_coverage_text(data: &BatteryInsights) -> String {
     let c = &data.coverage;
     format!(
-        "Updated · {} of estimated use in the last 30 days. {}",
+        "History through {} · {} of estimated use in the last 30 days. {}",
+        c.last_reading_timestamp
+            .map(polling_timestamp)
+            .unwrap_or_else(|| "no saved readings".into()),
         insight_hours(c.awake_seconds),
         if c.unreadable_row_count > 0 {
             "Some saved readings could not be used."
@@ -692,7 +708,10 @@ fn insight_coverage_text(data: &BatteryInsights) -> String {
         }
     )
 }
-fn insight_empty_text(data: Option<&BatteryInsights>) -> String {
+fn insight_empty_text(data: Option<&BatteryInsights>, supports_polling: bool) -> String {
+    if !supports_polling {
+        return "Polling-rate comparisons are not available for this device. Its recorded battery use appears under Recent battery sessions.".into();
+    }
     let Some(data) = data else {
         return INSIGHTS_EMPTY.into();
     };
@@ -742,7 +761,7 @@ fn rate_insight_text(rate: &RateInsight) -> String {
         }
     };
     format!(
-        "Estimated use from a full battery: {}\r\nEstimated time left: {}\r\n\r\n{} · {} Hz\r\nBased on {} of recorded use.\r\n{guidance}",
+        "Estimated use from a full battery: {}\r\nTime left at the last saved reading: {}\r\n\r\n{} · {} Hz\r\nEstimate uses {} between battery drops.\r\nTotal recorded use at this rate: {}.\r\n{guidance}",
         insight_estimate(rate.projected_full_charge_hours),
         rate.remaining_hours
             .filter(|hours| hours.is_finite() && *hours >= 0.0)
@@ -750,8 +769,17 @@ fn rate_insight_text(rate: &RateInsight) -> String {
             .unwrap_or_else(|| "Not available right now".into()),
         confidence,
         rate.hz,
+        insight_hours(rate.projection_seconds),
         insight_hours(rate.awake_seconds),
     )
+}
+fn rate_insight_row(rate: &RateInsight) -> String {
+    let estimate = rate
+        .projected_full_charge_hours
+        .filter(|hours| hours.is_finite() && *hours >= 0.0)
+        .map(|hours| insight_estimate(Some(hours)))
+        .unwrap_or_else(|| "Still learning".into());
+    format!("{} Hz · {estimate}", rate.hz)
 }
 fn charge_cycle_row(cycle: &ChargeCycle) -> String {
     let timestamp = timestamp_local(cycle.start_timestamp)
@@ -2730,16 +2758,20 @@ impl State {
             self.render_insights();
             return;
         };
-        self.insights.sequence = self.insights.sequence.wrapping_add(1).max(1);
-        let request = self.insights.sequence;
-        self.insights.pending = Some((request, key.clone()));
+        let Some(request) = self.insights.begin(&key) else {
+            return;
+        };
         self.insights.status = "Loading battery history…".into();
         self.set_control_text(78, &self.insights.status);
-        self.runtime.send(Command::Insights {
-            key,
-            until: SystemClock::default().unix(),
-            request,
-        });
+        if self
+            .runtime
+            .request_insights(key, SystemClock::default().unix(), request)
+            .is_err()
+        {
+            self.insights.abandon();
+            self.insights.status = "Battery history is busy. Select Refresh to try again.".into();
+            self.set_control_text(78, &self.insights.status);
+        }
     }
     fn render_insights(&self) {
         if self.dashboard.is_none() || self.page != 6 {
@@ -2756,17 +2788,7 @@ impl State {
             for (id, rows) in [
                 (
                     70,
-                    data.rates
-                        .iter()
-                        .map(|rate| {
-                            let estimate = rate
-                                .projected_full_charge_hours
-                                .filter(|hours| hours.is_finite() && *hours >= 0.0)
-                                .map(|hours| format!("about {hours:.0} h"))
-                                .unwrap_or_else(|| "Still learning".into());
-                            format!("{} Hz · {estimate}", rate.hz)
-                        })
-                        .collect::<Vec<_>>(),
+                    data.rates.iter().map(rate_insight_row).collect::<Vec<_>>(),
                 ),
                 (
                     71,
@@ -2821,9 +2843,16 @@ impl State {
             .as_ref()
             .and_then(|data| data.rates.get(selected(70)))
             .map(rate_insight_text)
-            .unwrap_or_else(|| insight_empty_text(self.insights.data.as_ref()));
+            .unwrap_or_else(|| {
+                let supported = self.snapshot.devices.get(self.selected).is_some_and(|d| {
+                    hb_providers::controls::polling_menu_candidate(
+                        &ConfigurationDevice::from_reading(&d.reading),
+                    )
+                });
+                insight_empty_text(self.insights.data.as_ref(), supported)
+            });
         let cycle = self.insights.data.as_ref().and_then(|data| data.cycles.iter().rev().nth(selected(71)))
-            .map(charge_cycle_text).unwrap_or_else(|| "No charging sessions recorded yet. Keep using the device on battery to build a history.".into());
+            .map(charge_cycle_text).unwrap_or_else(|| "No battery-use sessions recorded yet. Keep using the device on battery to build a history.".into());
         self.set_control_text(74, &rate);
         self.set_control_text(76, &cycle);
         // Read-only summaries only need a scrollbar when their text actually overflows.
@@ -3588,12 +3617,23 @@ impl State {
     }
     fn drain(&mut self) {
         let mut latest = None;
+        let mut heartbeat = None;
         let mut polling_outcomes = Vec::new();
         let mut polling_invalidated = false;
         let mut polling_selection_changed = false;
         while let Ok(e) = self.runtime.events.try_recv() {
             match e {
-                Event::Snapshot(s) => latest = Some(s),
+                Event::Snapshot(s) => {
+                    latest = Some(s);
+                    heartbeat = None;
+                }
+                Event::Heartbeat(timestamp) => {
+                    if let Some(snapshot) = latest.as_mut() {
+                        snapshot.timestamp = timestamp;
+                    } else {
+                        heartbeat = Some(timestamp);
+                    }
+                }
                 Event::ConfigurationInventory {
                     generation,
                     devices,
@@ -3638,6 +3678,11 @@ impl State {
                 Event::History(id, result) => self.history_outcome(id, result),
                 _ => {}
             }
+        }
+        if let Some(timestamp) = heartbeat {
+            self.snapshot.timestamp = timestamp;
+            self.refresh_device_details();
+            self.sync_trays(TrayUpdate::Changed);
         }
         if let Some(s) = latest {
             let changed_labels: Vec<_> = s
@@ -3707,13 +3752,7 @@ impl State {
                 self.insights.select(selected_key.cloned());
                 polling_selection_changed = true;
             }
-            if self.page == 1
-                && self.controls.contains_key(&91)
-                && let Some((_, Some(d))) = self.current_device()
-            {
-                self.set_control_text(91, &device_detail(&d));
-                self.set_control_text(88, &battery_summary(&d));
-            }
+            self.refresh_device_details();
             self.sync_trays(TrayUpdate::Changed);
             if identity_changed && self.page != 3 {
                 self.build()
@@ -3760,6 +3799,15 @@ impl State {
         if polling_invalidated || polling_selection_changed {
             self.polling_controls();
             self.read_polling();
+        }
+    }
+    fn refresh_device_details(&self) {
+        if self.page == 1
+            && self.controls.contains_key(&91)
+            && let Some((_, Some(d))) = self.current_device()
+        {
+            self.set_control_text(91, &device_detail(&d));
+            self.set_control_text(88, &battery_summary(&d));
         }
     }
     fn sync_trays(&mut self, update: TrayUpdate) {
@@ -6155,9 +6203,9 @@ mod insights_tests {
         for expected in [
             "1000 Hz",
             "Early estimate",
-            "2.0 hours of recorded use",
+            "Total recorded use at this rate: 2.0 hours",
             "Estimated use from a full battery: about 10 hours",
-            "Estimated time left: Not available right now",
+            "Time left at the last saved reading: Not available right now",
             "More use on battery will make this estimate more reliable.",
         ] {
             assert!(text.contains(expected), "Missing {expected}: {text}");
@@ -6177,15 +6225,15 @@ mod insights_tests {
     #[test]
     fn insight_coverage_explains_empty_rate_evidence_and_corruption() {
         let mut data = BatteryInsights::default();
-        assert!(insight_empty_text(Some(&data)).contains("No battery history yet"));
+        assert!(insight_empty_text(Some(&data), true).contains("No battery history yet"));
         data.coverage.observation_count = 12;
-        assert!(insight_empty_text(Some(&data)).contains("More time on battery is needed"));
+        assert!(insight_empty_text(Some(&data), true).contains("More time on battery is needed"));
         data.coverage.discharge_sample_count = 5;
         data.coverage.awake_seconds = 3600;
         data.coverage.excluded_interval_count = 6;
         data.coverage.unreadable_row_count = 1;
         data.coverage.last_reading_timestamp = Some(0);
-        assert!(insight_empty_text(Some(&data)).contains("Check the device's current rate"));
+        assert!(insight_empty_text(Some(&data), true).contains("Check the device's current rate"));
         let text = insight_coverage_text(&data);
         for expected in [
             "1.0 hours of estimated use in the last 30 days",
@@ -6224,6 +6272,55 @@ mod insights_tests {
         );
         cycle.evidence = CycleEvidence::ObservedCharge;
         assert!(charge_cycle_text(&cycle).contains("may cover only part of a charge"));
+    }
+    #[test]
+    fn insights_coalesce_pending_refreshes_and_clear_failed_results() {
+        let mut ui = InsightsUi::default();
+        ui.select(Some("device".into()));
+        let first = ui.begin("device").unwrap();
+        for _ in 0..20 {
+            assert_eq!(ui.begin("device"), None);
+        }
+        assert!(ui.accept(first, Some("device"), Ok(BatteryInsights::default())));
+        let second = ui.begin("device").unwrap();
+        assert_ne!(first, second);
+        assert!(ui.accept(
+            second,
+            Some("device"),
+            Err(ProviderError::new("Test error"))
+        ));
+        assert!(ui.data.is_none());
+        assert!(ui.status.contains("Couldn't load"));
+        ui.begin("device").unwrap();
+        ui.select(Some("other".into()));
+        assert!(ui.begin("other").is_some());
+    }
+    #[test]
+    fn insights_explain_projection_evidence_and_unsupported_devices() {
+        let mut rate = RateInsight {
+            hz: 1000,
+            awake_seconds: 12 * 3600,
+            projection_seconds: 2 * 3600,
+            projected_full_charge_hours: Some(0.4),
+            ..RateInsight::default()
+        };
+        let text = rate_insight_text(&rate);
+        assert!(text.contains("Estimate uses 2.0 hours between battery drops"));
+        assert!(text.contains("Total recorded use at this rate: 12.0 hours"));
+        assert!(rate_insight_row(&rate).contains("less than 1 hour"));
+        rate.projected_full_charge_hours = Some(f64::NAN);
+        assert!(rate_insight_row(&rate).contains("Still learning"));
+        let text = insight_empty_text(None, false);
+        assert!(text.contains("not available for this device"));
+        assert!(!text.contains("allow polling") && !text.contains("Refresh rate"));
+        let data = BatteryInsights {
+            coverage: InsightCoverage {
+                last_reading_timestamp: Some(1_700_000_000),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(insight_coverage_text(&data).contains(&polling_timestamp(1_700_000_000)));
     }
     #[test]
     fn closed_or_switched_selection_ignores_insight_replies() {

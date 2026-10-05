@@ -235,14 +235,20 @@ impl InsightsBuilder {
             }
             // Pauses exclude drain accounting, but cumulative rises still provide
             // evidence of an unobserved charge within the physical cycle.
-            self.cycle_low = Some(self.cycle_low.unwrap_or(level).min(level));
+            let cycle_low = self.cycle_low.unwrap_or(level);
+            self.cycle_low = Some(cycle_low.min(level));
             if continuous && !increase {
                 accepted = true;
                 let previous = previous.expect("accepted interval has previous");
                 let seconds = delta.expect("accepted positive duration") as u64;
                 self.coverage.awake_seconds = self.coverage.awake_seconds.saturating_add(seconds);
                 // Repeated small rebounds cannot manufacture additional drain.
-                let low = self.segment_low.unwrap_or(previous.reading.level.unwrap());
+                // A pause/rate change must not let a one-point rebound count
+                // the same battery percentage twice within a physical cycle.
+                let low = self
+                    .segment_low
+                    .unwrap_or(previous.reading.level.unwrap())
+                    .min(cycle_low);
                 let drop = u64::from(low.saturating_sub(level));
                 self.segment_low = Some(low.min(level));
                 let cycle = self.cycles.back_mut().expect("discharge cycle");

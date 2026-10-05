@@ -156,6 +156,44 @@ fn borrowed_history_queries_preserve_escaped_strings_and_corrupt_row_boundaries(
 }
 
 #[test]
+fn batched_history_flush_preserves_rows_with_bounded_serialization_allocations() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("history.db");
+    let mut store = Store::open(&path).unwrap();
+    for i in 0..512 {
+        store
+            .record_usage(&UsageObservation {
+                reading: reading(i * 60, (100 - i % 100) as u8),
+                polling_rate: Some(PollingRate::try_from(1000).unwrap()),
+                session: Some(u64::MAX),
+            })
+            .unwrap();
+    }
+    let (_, allocations) = measure(|| store.flush().unwrap());
+    println!("512-row flush: {allocations:?}");
+    assert!(
+        allocations.calls <= 16 && allocations.bytes <= 4096,
+        "Batch serialization must reuse its buffers: {allocations:?}"
+    );
+    let db = Connection::open(path).unwrap();
+    let count: i64 = db
+        .query_row("SELECT count(*) FROM readings", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 512);
+    let restored = store.query("invented", 0, 511 * 60, 1024).unwrap();
+    assert_eq!(restored.len(), 512);
+    assert_eq!(restored[511], reading(511 * 60, 89));
+    let session: String = db
+        .query_row(
+            "SELECT session FROM usage_metadata WHERE ts=30660",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(session, u64::MAX.to_string());
+}
+
+#[test]
 fn borrowed_status_serialization_preserves_schema_without_a_value_tree() {
     let directory = tempfile::tempdir().unwrap();
     let mut engine = Engine::new(Settings::default(), Estimator::default());

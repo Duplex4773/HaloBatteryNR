@@ -289,6 +289,31 @@ fn malformed_session_metadata_cannot_become_a_continuous_unknown_session() {
 }
 
 #[test]
+fn malformed_polling_metadata_breaks_continuity_instead_of_becoming_legacy_usage() {
+    for value in ["-1", "3000", "'broken'", "1000.5", "X'FF'"] {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("history.db");
+        let mut store = Store::open(&path).unwrap();
+        for ts in [0, 60, 120] {
+            store
+                .record_usage(&observation(ts, 90 - (ts / 60) as u8, Some(1000), Some(1)))
+                .unwrap();
+        }
+        store.flush().unwrap();
+        let db = Connection::open(path).unwrap();
+        db.execute(
+            &format!("UPDATE usage_metadata SET polling_rate={value} WHERE ts IN (0,60)"),
+            [],
+        )
+        .unwrap();
+        let data = store.query_insights("synthetic-a", 120).unwrap();
+        assert_eq!(data.coverage.unreadable_row_count, 2, "{value}");
+        assert_eq!(data.coverage.awake_seconds, 0, "{value}");
+        assert!(data.rates.is_empty());
+    }
+}
+
+#[test]
 fn old_rate_evidence_is_historical_not_current_remaining_use() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("history.db");

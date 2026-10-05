@@ -4,6 +4,9 @@ The 5 October 2026 consumer UI update is shown using **invented device, battery
 and polling data**. Native test windows render both light and dark client areas,
 without desktop content or title bars. These images establish no hardware verification.
 
+The Insights images were refreshed on 6 October with separate estimate/total-use
+durations and the last saved reading's timestamp. Both themes were inspected.
+
 Devices emphasizes battery status and preferences; History shows a two-hour
 synthetic discharge; Settings includes audio alerts and its expanded options;
 Insights separates battery-life estimates from recent sessions.

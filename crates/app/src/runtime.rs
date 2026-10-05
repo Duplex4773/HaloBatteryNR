@@ -60,6 +60,7 @@ pub enum Event {
     Polling(Box<ControlOutcome>),
     PollingInvalidated(u64),
     Snapshot(Snapshot),
+    Heartbeat(i64),
     Alert(Notification),
     History(u64, Result<HistorySeries, ProviderError>),
     Insights(u64, Result<BatteryInsights, ProviderError>),
@@ -380,12 +381,14 @@ fn publish_diagnostics(
 struct SnapshotPublisher {
     changed: bool,
     next: Instant,
+    unpublished: bool,
 }
 impl SnapshotPublisher {
     fn new(now: Instant) -> Self {
         Self {
             changed: true,
             next: now,
+            unpublished: true,
         }
     }
     fn delay(&self, now: Instant) -> Duration {
@@ -406,12 +409,19 @@ impl SnapshotPublisher {
         if !self.changed && now < self.next {
             return;
         }
-        let snapshot = engine.snapshot(timestamp);
-        if engine.settings.status_file {
-            let _ = events.try_send(Event::Snapshot(snapshot.clone()));
-            let _ = storage.send(Storage::Status(snapshot, true));
+        if self.changed || self.unpublished || engine.settings.status_file {
+            let snapshot = engine.snapshot(timestamp);
+            self.unpublished = if engine.settings.status_file {
+                let rejected = events.try_send(Event::Snapshot(snapshot.clone())).is_err();
+                let _ = storage.send(Storage::Status(snapshot, true));
+                rejected
+            } else {
+                events.try_send(Event::Snapshot(snapshot)).is_err()
+            };
         } else {
-            let _ = events.try_send(Event::Snapshot(snapshot));
+            // Freshness labels and theme recovery keep the same cadence without
+            // rebuilding readings, estimates, strings and inventory every tick.
+            let _ = events.try_send(Event::Heartbeat(timestamp));
         }
         self.changed = false;
         self.next = now + Duration::from_secs(5);
@@ -599,6 +609,22 @@ impl Runtime {
         if self.commands.try_send(command).is_err() {
             let _ = self.sink.try_send(Event::Error("Command queue is busy; retry the action. Device configuration remains revoked until settings or resume is acknowledged.".into()));
         }
+    }
+    pub fn request_insights(
+        &self,
+        key: String,
+        until: i64,
+        request: u64,
+    ) -> Result<(), ProviderError> {
+        self.commands
+            .try_send(Command::Insights {
+                key,
+                until,
+                request,
+            })
+            .map_err(|_| {
+                ProviderError::new("Battery history is busy. Select Refresh to try again.")
+            })
     }
     pub fn submit_control(&self, request: ControlRequest) -> Result<(), ProviderError> {
         let epoch = self.permission.epoch.load(Ordering::Acquire);
@@ -2550,6 +2576,65 @@ mod tests {
         assert!(disconnected.observation.is_none());
     }
     #[test]
+    fn unchanged_snapshots_use_lightweight_ticks_and_retry_rejected_state_at_normal_cadence() {
+        let (tx, events) = bounded(1);
+        let sink = Events {
+            tx,
+            window: Arc::new(AtomicUsize::new(0)),
+        };
+        let (storage, statuses) = bounded(1);
+        let mut engine = Engine::new(Settings::default(), Estimator::default());
+        let mut reading = Reading::new("device", "Device", "test", 100);
+        reading.level = Some(80);
+        engine.apply("test", Ok(vec![reading]), 1.0, false);
+        let start = Instant::now();
+        let mut publisher = SnapshotPublisher::new(start);
+        sink.try_send(Event::Heartbeat(99)).unwrap();
+        publisher.publish(&engine, 100, start, &sink, &storage);
+        assert!(publisher.unpublished);
+        assert_eq!(publisher.delay(start), Duration::from_secs(5));
+        assert!(matches!(events.try_recv(), Ok(Event::Heartbeat(99))));
+        publisher.publish(
+            &engine,
+            101,
+            start + Duration::from_secs(1),
+            &sink,
+            &storage,
+        );
+        assert!(events.is_empty());
+        publisher.publish(
+            &engine,
+            105,
+            start + Duration::from_secs(5),
+            &sink,
+            &storage,
+        );
+        let Event::Snapshot(snapshot) = events.try_recv().unwrap() else {
+            panic!("state was lost");
+        };
+        assert_eq!(snapshot.devices[0].reading.level, Some(80));
+        assert!(!publisher.unpublished);
+        // Wall-clock correction still updates the UI; only monotonic time schedules work.
+        publisher.publish(
+            &engine,
+            90,
+            start + Duration::from_secs(10),
+            &sink,
+            &storage,
+        );
+        assert!(matches!(events.try_recv(), Ok(Event::Heartbeat(90))));
+        assert!(statuses.is_empty());
+        publisher.changed = true;
+        publisher.publish(
+            &engine,
+            91,
+            start + Duration::from_secs(11),
+            &sink,
+            &storage,
+        );
+        assert!(matches!(events.try_recv(), Ok(Event::Snapshot(_))));
+    }
+    #[test]
     fn snapshots_skip_empty_provider_bursts_but_keep_updates_and_freshness_heartbeat() {
         let (tx, events) = bounded(8);
         let sink = Events {
@@ -3648,6 +3733,15 @@ mod tests {
                 .submit_control(control_request(ControlAction::Read, 0))
                 .is_err()
         );
+        assert!(runtime.request_insights("device".into(), 100, 1).is_err());
+        let _ = _rx.recv().unwrap();
+        runtime.request_insights("device".into(), 100, 2).unwrap();
+        assert!(matches!(
+            _rx.recv().unwrap(),
+            Command::Insights { request: 2, .. }
+        ));
+        drop(_rx);
+        assert!(runtime.request_insights("device".into(), 100, 3).is_err());
     }
     #[test]
     fn full_queue_cannot_lose_configuration_revocation_or_revive_old_jobs() {
