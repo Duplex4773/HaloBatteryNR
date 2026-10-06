@@ -3815,7 +3815,7 @@ impl State {
             Instant::now(),
             &self.settings.icon_theme,
             update != TrayUpdate::Changed,
-            || tray_dark(&self.settings),
+            || tray_dark(&self.settings, update != TrayUpdate::Changed),
         );
         let settings = &self.settings;
         let devices = tray_devices(&self.snapshot, settings);
@@ -4093,10 +4093,10 @@ fn icon_signature(d: &DeviceView, settings: &Settings, dark: bool) -> IconSignat
     }
 }
 
-fn tray_dark(settings: &Settings) -> bool {
+fn tray_dark(settings: &Settings, force: bool) -> bool {
     let fallback = hb_windows::system::dark_theme();
     if !["auto", "topbar"].contains(&settings.icon_theme.as_str())
-        || !hb_windows::system::mydockfinder_running()
+        || !hb_windows::system::mydockfinder_running(force)
     {
         return fallback;
     }
@@ -6344,7 +6344,12 @@ mod dashboard_lifecycle_tests {
 
     // Opt-in resource measurement of the optimized native test fixture. Never touches real hardware.
     fn sample_closed_dashboard(context: &UiContext, phase: &str) {
-        if std::env::var_os("HALO_MEASURE_UI_RESOURCES").is_none() {
+        let Some(requested) = std::env::var_os("HALO_MEASURE_UI_RESOURCES") else {
+            return;
+        };
+        // "1" measures both lifecycle phases; a phase name selects one
+        // three-minute window for a matched before/after code comparison.
+        if requested != "1" && requested != phase {
             return;
         }
         use windows::Win32::System::{

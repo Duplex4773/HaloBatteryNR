@@ -67,6 +67,8 @@ improves native control repainting and History feedback.
 The [Insights and allocation follow-up](docs/insights-performance-audit-20261006.md)
 reduces routine snapshot and history-save allocations, and corrects Insights
 consumption accounting and evidence descriptions.
+The [background CPU follow-up](docs/cpu-audit-20261006.md) reduces repeated HID
+discovery scans and tray appearance checks without slowing battery refreshes.
 
 Polling controls default off and use ordinary user-mode HID access: no drivers,
 elevation, game-process access, input interception or continuous rate enforcement.

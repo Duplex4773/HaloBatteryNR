@@ -67,6 +67,41 @@ struct Cached {
 }
 const CACHE_TTL: Duration = Duration::from_secs(30);
 const SHORT_RETRY: Duration = Duration::from_secs(30);
+// Share the native interface census across a burst of vendor polls. This is
+// deliberately much shorter than metadata caching: a new vendor poll or short
+// collection retry must still recover when Windows misses a connection event.
+const CENSUS_TTL: Duration = Duration::from_secs(1);
+#[derive(Default)]
+struct CensusCache {
+    sample: Option<(Duration, u64, BTreeMap<u16, usize>)>,
+    queried: BTreeSet<u16>,
+}
+impl CensusCache {
+    fn count(
+        &mut self,
+        vendor: u16,
+        generation: u64,
+        now: Duration,
+        refresh: impl FnOnce() -> Result<BTreeMap<u16, usize>, ProviderError>,
+    ) -> Result<usize, ProviderError> {
+        if let Some((at, epoch, counts)) = &self.sample
+            && *epoch == generation
+            && now >= *at
+            && now - *at < CENSUS_TTL
+            && self.queried.insert(vendor)
+        {
+            return Ok(counts.get(&vendor).copied().unwrap_or(0));
+        }
+        // Do not reuse a stale/partial result if the native scan fails.
+        self.sample = None;
+        self.queried.clear();
+        let counts = refresh()?;
+        let count = counts.get(&vendor).copied().unwrap_or(0);
+        self.sample = Some((now, generation, counts));
+        self.queried.insert(vendor);
+        Ok(count)
+    }
+}
 #[derive(Default)]
 struct EnumerationCache(BTreeMap<u16, Cached>);
 impl EnumerationCache {
@@ -118,6 +153,7 @@ impl EnumerationCache {
 pub struct WindowsHid {
     api: Mutex<HidApi>,
     cache: Mutex<EnumerationCache>,
+    census: Mutex<CensusCache>,
     generation: AtomicU64,
     epoch: Instant,
 }
@@ -129,6 +165,7 @@ impl WindowsHid {
                 HidApi::new().map_err(error)?
             }),
             cache: Mutex::new(EnumerationCache::default()),
+            census: Mutex::new(CensusCache::default()),
             generation: AtomicU64::new(0),
             epoch: Instant::now(),
         })
@@ -199,7 +236,7 @@ fn path_vendor_wide(path: &[u16]) -> Option<u16> {
 }
 /// Count paths without opening devices. HIDAPI may temporarily omit a collection
 /// whose zero-access metadata probe fails; this census makes that omission retryable.
-fn present_paths(vendor: u16) -> Result<BTreeSet<String>, ProviderError> {
+fn present_counts() -> Result<BTreeMap<u16, usize>, ProviderError> {
     let guid = unsafe { HidD_GetHidGuid() };
     let set = DeviceSet(
         unsafe {
@@ -212,7 +249,7 @@ fn present_paths(vendor: u16) -> Result<BTreeSet<String>, ProviderError> {
         }
         .map_err(|e| ProviderError::new(e.to_string()))?,
     );
-    let mut paths = BTreeSet::new();
+    let mut paths: BTreeMap<u16, BTreeSet<String>> = BTreeMap::new();
     // The census only needs one variable-length native detail buffer at a time.
     let mut storage = Vec::<u64>::new();
     for index in 0..65536 {
@@ -261,13 +298,17 @@ fn present_paths(vendor: u16) -> Result<BTreeSet<String>, ProviderError> {
         };
         let end = wide.iter().position(|v| *v == 0).unwrap_or(wide.len());
         let wide = &wide[..end];
-        if path_vendor_wide(wide) == Some(vendor) {
+        if let Some(vendor) = path_vendor_wide(wide) {
             let mut path = String::from_utf16_lossy(wide);
             path.make_ascii_lowercase();
-            paths.insert(path);
+            paths.entry(vendor).or_default().insert(path);
         }
     }
-    Ok(paths)
+    // Only retain counts between polls, not paths or hardware identifiers.
+    Ok(paths
+        .into_iter()
+        .map(|(vendor, paths)| (vendor, paths.len()))
+        .collect())
 }
 fn error(e: hidapi::HidError) -> ProviderError {
     ProviderError::new(e.to_string())
@@ -322,7 +363,11 @@ impl HidTransport for WindowsHid {
         let generation = self.generation.load(Ordering::Relaxed);
         let mut cache = self.cache.lock().unwrap_or_else(|p| p.into_inner());
         cache.enumerate(vendor, generation, self.epoch.elapsed(), || {
-            let present = present_paths(vendor)?;
+            let present = self
+                .census
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .count(vendor, generation, self.epoch.elapsed(), present_counts)?;
             // add_devices targets a vendor; never enumerate unrelated vendor collections.
             let mut api = self.api.lock().unwrap_or_else(|p| p.into_inner());
             api.reset_devices().map_err(error)?;
@@ -345,7 +390,7 @@ impl HidTransport for WindowsHid {
                     info
                 })
                 .collect::<Vec<_>>();
-            Ok((devices, present.len()))
+            Ok((devices, present))
         })
     }
     fn open(&self, info: &HidInfo) -> Result<Box<dyn HidSession>, ProviderError> {
@@ -416,6 +461,81 @@ impl HidSession for Session {
 #[cfg(test)]
 mod cache_tests {
     use super::*;
+    #[test]
+    fn census_shares_vendor_bursts_but_refreshes_on_expiry_and_connection_changes() {
+        let mut cache = CensusCache::default();
+        let mut scans = 0;
+        for generation in [0, 1] {
+            for (millis, vendor) in [(0, 0x1532), (999, 0x046d), (1000, 0x9999), (1000, 0x1532)] {
+                let count = cache
+                    .count(vendor, generation, Duration::from_millis(millis), || {
+                        scans += 1;
+                        Ok(BTreeMap::from([(0x1532, 3), (0x046d, 2)]))
+                    })
+                    .unwrap();
+                assert_eq!(
+                    count,
+                    match vendor {
+                        0x1532 => 3,
+                        0x046d => 2,
+                        _ => 0,
+                    }
+                );
+            }
+        }
+        assert_eq!(scans, 4);
+    }
+    #[test]
+    fn repeated_vendor_recovery_always_rechecks_native_census() {
+        let mut cache = CensusCache::default();
+        for count in [2, 3, 4] {
+            assert_eq!(
+                cache
+                    .count(0x1532, 0, Duration::ZERO, || Ok(BTreeMap::from([(
+                        0x1532, count
+                    )])))
+                    .unwrap(),
+                count
+            );
+        }
+    }
+    #[test]
+    fn census_failure_never_becomes_empty_success_or_stale_recovery() {
+        let mut cache = CensusCache::default();
+        cache
+            .count(0x1532, 0, Duration::ZERO, || {
+                Ok(BTreeMap::from([(0x1532, 3)]))
+            })
+            .unwrap();
+        assert!(
+            cache
+                .count(0x1532, 1, Duration::ZERO, || Err(ProviderError::new(
+                    "unavailable"
+                )))
+                .is_err()
+        );
+        assert!(cache.sample.is_none());
+        assert_eq!(
+            cache
+                .count(0x1532, 1, Duration::ZERO, || Ok(BTreeMap::from([(
+                    0x1532, 4
+                )])))
+                .unwrap(),
+            4
+        );
+        // A regressed injected clock cannot keep an entry cached indefinitely.
+        cache
+            .count(0x1532, 1, Duration::from_secs(2), || Ok(BTreeMap::new()))
+            .unwrap();
+        assert_eq!(
+            cache
+                .count(0x1532, 1, Duration::from_secs(1), || Ok(BTreeMap::from([
+                    (0x1532, 2)
+                ])))
+                .unwrap(),
+            2
+        );
+    }
     fn infos(n: usize) -> Vec<HidInfo> {
         (0..n)
             .map(|i| HidInfo {

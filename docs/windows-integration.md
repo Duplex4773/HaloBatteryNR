@@ -22,7 +22,7 @@ Windows provides no dependable WGI-to-XInput slot identity in these APIs. The po
 
 ## Shell integration and validation
 
-Startup registration, application identity, and the single-instance mutex use the distinct HaloBatteryNext identity. Windows theme and fullscreen gaming checks are native. MyDockFinder process detection uses an owned Toolhelp snapshot and a ten-second cache. It recognizes the original executable names and names containing `mydock`.
+Startup registration, application identity, and the single-instance mutex use the distinct HaloBatteryNext identity. Windows theme and fullscreen gaming checks are native. MyDockFinder process detection uses an owned Toolhelp snapshot, a ten-second cache while present and a thirty-second cache while absent. Explicit theme/settings refreshes and Explorer recovery bypass it. Borrowed UTF-16 comparisons recognize the original executable names and names containing `mydock` without per-process string allocations.
 
 The mutex reports already-running separately from actual acquisition failures.
 A normal second launch posts an Open request to the existing monitor; a duplicate

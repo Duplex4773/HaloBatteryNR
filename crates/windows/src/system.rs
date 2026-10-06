@@ -420,24 +420,36 @@ pub fn identify() {
     let _ = set_process_identity();
 }
 
-/// Native process enumeration, cached for ten seconds like the original tray.
+#[derive(Default)]
+struct DockCache(Option<(std::time::Instant, bool)>);
+impl DockCache {
+    fn read(&mut self, now: std::time::Instant, force: bool, query: impl FnOnce() -> bool) -> bool {
+        if !force
+            && let Some((at, present)) = self.0
+            && now.saturating_duration_since(at)
+                < std::time::Duration::from_secs(if present { 10 } else { 30 })
+        {
+            return present;
+        }
+        let present = query();
+        self.0 = Some((now, present));
+        present
+    }
+}
+/// Native process enumeration, cached for ten seconds while a dock is running
+/// and thirty seconds when absent. Explicit UI/theme refreshes bypass the cache.
 /// This does not spawn PowerShell or require process query privileges.
-pub fn mydockfinder_running() -> bool {
+pub fn mydockfinder_running(force: bool) -> bool {
     use std::{
         sync::{Mutex, OnceLock},
-        time::{Duration, Instant},
+        time::Instant,
     };
     use windows::Win32::System::Diagnostics::ToolHelp::*;
-    static CACHE: OnceLock<Mutex<Option<(Instant, bool)>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<DockCache>> = OnceLock::new();
     let mut cache = CACHE
-        .get_or_init(|| Mutex::new(None))
+        .get_or_init(|| Mutex::new(DockCache::default()))
         .lock()
         .unwrap_or_else(|p| p.into_inner());
-    if let Some((at, value)) = *cache
-        && at.elapsed() < Duration::from_secs(10)
-    {
-        return value;
-    }
     struct Snapshot(HANDLE);
     impl Drop for Snapshot {
         fn drop(&mut self) {
@@ -446,33 +458,45 @@ pub fn mydockfinder_running() -> bool {
             }
         }
     }
-    let value = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }
-        .ok()
-        .map(|h| {
-            let snapshot = Snapshot(h);
-            let mut entry = PROCESSENTRY32W {
-                dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
-                ..Default::default()
-            };
-            let mut present = unsafe { Process32FirstW(snapshot.0, &mut entry) }.is_ok();
-            while present {
-                let end = entry
-                    .szExeFile
-                    .iter()
-                    .position(|x| *x == 0)
-                    .unwrap_or(entry.szExeFile.len());
-                let name = String::from_utf16_lossy(&entry.szExeFile[..end]);
-                if is_mydockfinder(&name) {
-                    return true;
+    cache.read(Instant::now(), force, || {
+        unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }
+            .ok()
+            .map(|h| {
+                let snapshot = Snapshot(h);
+                let mut entry = PROCESSENTRY32W {
+                    dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+                    ..Default::default()
+                };
+                let mut present = unsafe { Process32FirstW(snapshot.0, &mut entry) }.is_ok();
+                while present {
+                    let end = entry
+                        .szExeFile
+                        .iter()
+                        .position(|x| *x == 0)
+                        .unwrap_or(entry.szExeFile.len());
+                    if is_mydockfinder_wide(&entry.szExeFile[..end]) {
+                        return true;
+                    }
+                    present = unsafe { Process32NextW(snapshot.0, &mut entry) }.is_ok();
                 }
-                present = unsafe { Process32NextW(snapshot.0, &mut entry) }.is_ok();
-            }
-            false
-        })
-        .unwrap_or(false);
-    *cache = Some((Instant::now(), value));
-    value
+                false
+            })
+            .unwrap_or(false)
+    })
 }
+fn is_mydockfinder_wide(name: &[u16]) -> bool {
+    let matches = |part: &[u16], text: &[u8]| {
+        part.len() == text.len()
+            && part
+                .iter()
+                .zip(text)
+                .all(|(&unit, byte)| unit <= 0x7f && (unit as u8).eq_ignore_ascii_case(byte))
+    };
+    matches(name, b"dock_64.exe")
+        || matches(name, b"dock_32.exe")
+        || name.windows(6).any(|part| matches(part, b"mydock"))
+}
+#[cfg(test)]
 fn is_mydockfinder(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     matches!(
@@ -483,6 +507,50 @@ fn is_mydockfinder(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dock_detection_backs_off_when_absent_but_refreshes_explicit_changes() {
+        use std::time::{Duration, Instant};
+        let start = Instant::now();
+        let mut cache = DockCache::default();
+        assert!(!cache.read(start, false, || false));
+        for seconds in [5, 10, 20, 29] {
+            assert!(
+                !cache.read(start + Duration::from_secs(seconds), false, || panic!(
+                    "cached absent dock"
+                ))
+            );
+        }
+        assert!(cache.read(start + Duration::from_secs(30), false, || true));
+        assert!(
+            cache.read(start + Duration::from_secs(39), false, || panic!(
+                "cached dock"
+            ))
+        );
+        assert!(!cache.read(start + Duration::from_secs(40), false, || false));
+        assert!(cache.read(start + Duration::from_secs(41), true, || true));
+    }
+    #[test]
+    fn borrowed_dock_names_preserve_detection_without_string_allocations() {
+        for name in [
+            "",
+            "explorer.exe",
+            "Dock_64.EXE",
+            "dock_32.exe",
+            "MYDOCKFINDER.exe",
+            "MyDockBeta.exe",
+            "µmydock.exe",
+            "mydöck.exe",
+            "mydoc.exe",
+        ] {
+            assert_eq!(
+                is_mydockfinder_wide(&name.encode_utf16().collect::<Vec<_>>()),
+                is_mydockfinder(name)
+            );
+        }
+        let mut invalid = vec![0xd800];
+        invalid.extend("MYDOCK.exe".encode_utf16());
+        assert!(is_mydockfinder_wide(&invalid));
+    }
     #[test]
     fn app_and_system_theme_preferences_are_independent_and_default_light() {
         use windows::core::PCWSTR;
