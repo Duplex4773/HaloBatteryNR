@@ -97,6 +97,40 @@ not hardware verification.
 
 ## Performance compared with the original
 
+The latest portable executable is **2.93 MiB**. The [6 October CPU audit](docs/cpu-audit-20261006.md)
+compared the previous Rust build (`70e7c4a`) with the optimized build (`7a7bc11`)
+using the same simulated-device test and **three-minute windows**, with the
+dashboard closed and charging animation off:
+
+| Measurement | Previous Rust build | Latest Rust build |
+| --- | ---: | ---: |
+| CPU, one logical core | 0.165% | **0.043%** |
+| Average private memory | 6.30 MiB | **6.32 MiB** |
+| Peak private memory | 14.14 MiB | 14.20 MiB |
+
+That window used approximately **74% less CPU**, with essentially unchanged
+memory. A second latest-build window after 40 dashboard open/close cycles measured
+**0.095% CPU and 6.50 MiB average private memory**, with no native-handle growth.
+These simulated results demonstrate tray-work savings; they do not guarantee a
+fixed improvement on every device or replace a hardware benchmark.
+
+An earlier three-minute run on the same day compared the latest upstream source
+with the **previous** Rust executable. Status export was off and both used a
+60-second battery interval:
+
+| Measurement | Upstream 1.14.0, simulated mouse | Rust `70e7c4a`, real devices |
+| --- | ---: | ---: |
+| Average private memory | 33.38 MiB | 6.59 MiB |
+| Peak private memory | 34.33 MiB | 6.66 MiB |
+| CPU, one logical core | 0.095% | 0.113% |
+
+Rust used approximately **80% less private memory** in that run. The workloads
+differed: upstream's simulation disabled hardware polling and animation, while
+Rust retained its real-device settings. This does not establish a CPU advantage
+for either implementation, and the Rust figures precede the latest optimization.
+
+### Earlier measurements
+
 The [3 October audit](docs/performance-audit-20261003.md) addresses access-failure
 retry loops, bounded history recovery, departed-device caches and History resizing.
 The [4 October UI audit](docs/ui-audit-20261004.md) records the dashboard changes,
