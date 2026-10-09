@@ -3156,6 +3156,81 @@ mod tests {
         assert!(tracker.samples(vec![reading])[0].polling_rate.is_none());
     }
     #[test]
+    fn automatic_boost_restore_history_keeps_rates_and_transition_boundaries_separate() {
+        let mut tracker = UsageTracker::new(2, true);
+        let mut builder = InsightsBuilder::default();
+        let mut current = PollingRate::try_from(1000).unwrap();
+        let mut reading = control_reading();
+        reading.charging = Some(false);
+        let mut level = 90;
+        for (segment, hz) in [1000, 2000, 1000].into_iter().enumerate() {
+            let action = if segment == 0 {
+                ControlAction::Read
+            } else {
+                ControlAction::ApplyIf {
+                    rate: PollingRate::try_from(hz).unwrap(),
+                    expected: current,
+                }
+            };
+            let mut request = control_request(action, 2);
+            request.request = crate::boost::REQUEST_BIT | segment as u64;
+            let timestamp = segment as i64 * 4200;
+            tracker.observe(&simulate_control(&request, &mut current, 2, timestamp));
+            for step in 0..=6 {
+                reading.timestamp = timestamp + step * 600;
+                reading.level = Some(level);
+                builder.push(tracker.samples(vec![reading.clone()]).remove(0));
+                level -= if hz == 2000 { 2 } else { 1 };
+            }
+        }
+        let data = builder.finish();
+        assert_eq!(data.rates.len(), 2);
+        assert_eq!(data.rates[0].awake_seconds, 7200);
+        assert_eq!(data.rates[1].awake_seconds, 3600);
+        assert_eq!(data.rates[0].consumed_percent, 12);
+        assert_eq!(data.rates[1].consumed_percent, 12);
+        assert_eq!(data.cycles.len(), 1);
+        assert!((data.mixed_full_charge_hours().unwrap() - 12.5).abs() < 0.001);
+    }
+    #[test]
+    fn boost_and_restore_between_battery_samples_cannot_count_as_normal_rate_drain() {
+        let mut tracker = UsageTracker::new(2, true);
+        let mut rate = PollingRate::try_from(1000).unwrap();
+        tracker.observe(&simulate_control(
+            &control_request(ControlAction::Read, 2),
+            &mut rate,
+            2,
+            0,
+        ));
+        let mut reading = control_reading();
+        reading.timestamp = 0;
+        reading.level = Some(80);
+        reading.charging = Some(false);
+        let first = tracker.samples(vec![reading.clone()]).remove(0);
+        for (timestamp, hz) in [(10, 2000), (40, 1000)] {
+            let mut request = control_request(
+                ControlAction::ApplyIf {
+                    rate: PollingRate::try_from(hz).unwrap(),
+                    expected: rate,
+                },
+                2,
+            );
+            request.request |= crate::boost::REQUEST_BIT;
+            tracker.observe(&simulate_control(&request, &mut rate, 2, timestamp));
+        }
+        reading.timestamp = 60;
+        reading.level = Some(79);
+        let last = tracker.samples(vec![reading]).remove(0);
+        assert_eq!(first.polling_rate, last.polling_rate);
+        assert_ne!(first.session, last.session);
+        let mut builder = InsightsBuilder::default();
+        builder.push(first);
+        builder.push(last);
+        let summary = builder.finish();
+        assert!(summary.rates.is_empty());
+        assert_eq!(summary.coverage.awake_seconds, 0);
+    }
+    #[test]
     fn failed_changes_disable_and_backward_clock_revoke_usage_evidence() {
         let request = control_request(ControlAction::Read, 2);
         let mut reading = control_reading();

@@ -82,6 +82,33 @@ pub struct BatteryInsights {
     pub coverage: InsightCoverage,
 }
 
+impl BatteryInsights {
+    /// Project the observed time mix, weighting drain (not runtime) by usage.
+    /// Every represented rate must independently have enough measured evidence.
+    /// This is historical confirmed-rate use, not a prediction of future gaming.
+    pub fn mixed_full_charge_hours(&self) -> Option<f64> {
+        let mut count = 0;
+        let mut seconds = 0.0;
+        let mut weighted_drain = 0.0;
+        for rate in self.rates.iter().filter(|r| r.awake_seconds > 0) {
+            let hours = rate.projected_full_charge_hours?;
+            if !hours.is_finite()
+                || hours <= 0.0
+                || rate.projection_seconds < 1800
+                || rate.projection_consumed_percent < 3
+                || rate.confidence == InsightConfidence::Insufficient
+            {
+                return None;
+            }
+            count += 1;
+            seconds += rate.awake_seconds as f64;
+            weighted_drain += rate.awake_seconds as f64 / hours;
+        }
+        let hours = seconds / weighted_drain;
+        (count >= 2 && hours.is_finite() && hours > 0.0).then_some(hours)
+    }
+}
+
 pub struct InsightsBuilder {
     previous: Option<UsageObservation>,
     rates: [RateInsight; 7],

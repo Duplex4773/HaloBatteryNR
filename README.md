@@ -28,12 +28,16 @@ Python application is maintained externally as a reference.
   periods pause estimated awake time. Calendar views carry the last known level
   through missing readings. Original observations remain intact.
 - **Battery insights:** conservative remaining-use predictions, observed charge
-  summaries and drain comparisons by hardware-confirmed polling rate, with evidence
-  coverage and freshness. Awake time measures availability rather than input activity.
-- **Optional fullscreen boost:** supported mice can automatically switch to a
-  higher polling rate during Windows-reported fullscreen gaming, then restore
-  the previous rate on the desktop. Off by default, with separate per-device
-  choices, transition delays and no continuous rate enforcement.
+  summaries and drain comparisons by hardware-confirmed polling rate. Dynamic
+  polling summaries show recorded use at the boost rate and estimate full-charge
+  life for the observed mix of rates once each has enough evidence. Intervals
+  spanning rate changes are excluded. Awake time measures availability rather
+  than input activity; rate use is not a measure of gaming time.
+- **Optional burst polling (fullscreen boost):** supported mice can automatically
+  switch from, for example, **1000 to 2000 Hz** during Windows-reported fullscreen
+  gaming, then restore their previous rate on the desktop. Off by default and
+  configured separately for each mouse. Uses existing workers, without continuous
+  hardware polling or rate enforcement.
   [Setup and limits](docs/fullscreen-boost.md).
 - **Optional polling controls:** read, apply and restore for allowlisted Razer,
   Logitech and MCHOSE mice and five wired Razer keyboards. Supported mouse tray
@@ -65,6 +69,28 @@ See [supported battery devices](docs/device-support.md),
 it does not establish polling verification.
 See the [1.14.0 port review](docs/upstream-1.14.0-review.md) for implemented changes,
 existing equivalents and verification limits.
+
+### Enable burst polling
+
+Enable **Allow polling-rate changes** in Settings. On **Devices**, select a
+supported mouse, scroll to **Automatic fullscreen boost**, enable **Boost this
+mouse in fullscreen games**, choose a rate and select **Save boost settings**.
+The app checks Windows every five seconds, boosts after ten seconds of stable
+fullscreen and restores after fifteen seconds on the desktop; sampling and busy
+workers can add a little delay. Brief Alt-Tab changes do not immediately switch rates.
+
+Keep the app running for restoration. Some borderless games are missed, and the
+Windows signal can include other exclusive fullscreen Direct3D applications.
+Exiting, suspension or reconnection can leave the device at its current rate.
+The existing user-mode HID access requires no drivers, elevation or game-process
+access; this is not a guarantee of anti-cheat approval. The DeathAdder V4 Pro
+**1000 → 2000 → 1000 Hz** transition was verified by user testing, including
+restoration after minimizing.
+
+Open **Insights → Refresh** to see recorded use and battery-life estimates across
+rates. The mixed estimate weights measured drain by time spent at each rate; it
+stays in learning until enough evidence exists. It adds no background queries.
+See [Insights evidence and limits](docs/insights.md).
 
 The [6 October source audit](docs/source-audit-20261006.md) fixes recovery,
 notification and history edge cases, reduces repeated background work, and

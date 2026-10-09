@@ -58,6 +58,37 @@ remaining hours. Usage, transport and device conditions can differ across rates,
 the comparison is observational and does not prove that the rate caused the
 difference. Awake time comes from battery observations, without input tracking.
 
+## Dynamic polling rates
+
+Automatic boost and restoration use the same hardware-confirmed rate evidence as
+manual changes. Their battery observations appear under the actual rate (for
+example, 1000 and 2000 Hz), without splitting one discharge into separate physical
+battery sessions. Even a boost and restore between two battery samples breaks
+continuity: the interval is excluded rather than attributed to the normal rate.
+
+The summary below the sessions shows the configured boost rate and recorded time
+at that rate as a share of all confirmed-rate use. This includes manual use at the
+same rate; it does not measure gaming time or prove which action selected a rate.
+Use Refresh to include the newest retained samples. Existing history needs no
+migration and rates are never inferred from requested settings.
+
+Once every represented rate has enough independent evidence, Insights estimates
+full-charge life for the recorded mix. It weights drain by counted time:
+`mixed hours = total seconds / sum(seconds at rate / full-charge hours at rate)`.
+For example, two hours at a rate with a 100-hour projection and one hour at a rate
+with a 50-hour projection imply 75 hours for that mix, not an arithmetic average.
+A newly configured boost with no recorded use keeps this estimate in learning.
+Unknown-rate periods, pauses and switching intervals are excluded. Short sessions
+with insufficient drop-to-drop evidence cannot manufacture an estimate. This is
+an observational historical mix, not a prediction of future gaming habits or a
+new live tray estimate. It adds no timers, hardware queries or database tables.
+
+Local validation on 9 October 2026 passed 607 workspace tests, strict Clippy and
+formatting. Regressions cover 1000 → 2000 → 1000 Hz accounting, switches entirely
+between battery samples, insufficient/malformed projection evidence, weighted
+drain math and native summary visibility in both themes. No new hardware or
+performance measurement was performed for this on-demand summary calculation.
+
 ## Charge summaries
 
 The page retains at most ten recent discharge summaries, newest first, showing starting and

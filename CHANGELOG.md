@@ -1,5 +1,11 @@
 # Changelog
 
+## Dynamic polling Insights — 9 October 2026
+
+- Show recorded use at the configured boost rate and estimated full-charge life for the observed polling-rate mix.
+- Require measured evidence at every represented rate; exclude mixed-rate intervals, including boost/restore between battery samples.
+- Reuse existing history and storage queries with no additional background polling.
+
 ## Optional fullscreen polling boost — 9 October 2026
 
 - Show the successful boost-settings confirmation instead of incorrectly mapping it to a generic error.

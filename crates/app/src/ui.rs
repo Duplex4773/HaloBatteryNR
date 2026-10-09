@@ -783,6 +783,57 @@ fn rate_insight_row(rate: &RateInsight) -> String {
         .unwrap_or_else(|| "Still learning".into());
     format!("{} Hz · {estimate}", rate.hz)
 }
+fn dynamic_insight_text(data: Option<&BatteryInsights>, boost: Option<PollingRate>) -> String {
+    let heading = boost.map_or_else(
+        || "Recorded polling-rate mix".to_owned(),
+        |rate| format!("Automatic boost: {} Hz", rate.hz()),
+    );
+    let usage = data
+        .and_then(|data| {
+            boost.map(|boost| {
+                let total: f64 = data.rates.iter().map(|r| r.awake_seconds as f64).sum();
+                let used = data
+                    .rates
+                    .iter()
+                    .find(|r| r.hz == boost.hz())
+                    .map_or(0, |r| r.awake_seconds);
+                if total > 0.0 {
+                    format!(
+                        "{} at {} Hz ({:.0}% of confirmed-rate use).",
+                        insight_hours(used),
+                        boost.hz(),
+                        used as f64 / total * 100.0
+                    )
+                } else {
+                    "Waiting for confirmed use at normal and boosted rates.".into()
+                }
+            })
+        })
+        .unwrap_or_else(|| {
+            "Automatic and manual changes are counted at their confirmed rates.".into()
+        });
+    let estimate = data
+        .filter(|d| {
+            boost.is_none_or(|b| {
+                d.rates
+                    .iter()
+                    .any(|r| r.hz == b.hz() && r.awake_seconds > 0)
+            })
+        })
+        .and_then(BatteryInsights::mixed_full_charge_hours);
+    let projection = estimate.map_or_else(
+        || "Still learning battery life across rates.".into(),
+        |hours| {
+            format!(
+                "Full battery with this recorded mix: {} (estimate).",
+                insight_estimate(Some(hours))
+            )
+        },
+    );
+    format!(
+        "{heading}\r\n{usage}\r\n{projection}\r\nSwitching intervals are excluded. Recorded use is not a measure of gaming time."
+    )
+}
 fn charge_cycle_row(cycle: &ChargeCycle) -> String {
     let timestamp = timestamp_local(cycle.start_timestamp)
         .map(|date| {
@@ -1731,7 +1782,7 @@ impl State {
         self.page_height = match self.page {
             3 if self.more_options => 1206,
             3 => 666,
-            6 => 678,
+            6 => 788,
             _ => 708,
         } - PAGE_TOP;
         self.layout_page();
@@ -2734,9 +2785,19 @@ impl State {
         self.heading(75, "Recent battery sessions", 20, 382, 760);
         self.insights_list(71, 420, 176);
         self.insights_edit(76, 420, 176);
+        self.control(
+            79,
+            w!("STATIC"),
+            "",
+            WINDOW_STYLE::default(),
+            20,
+            608,
+            760,
+            88,
+        );
         self.control(77, w!("STATIC"),
             "Estimates use up to 30 days of battery history. Sleep and charging are excluded.\r\nTime used is approximate. Mouse and keyboard activity is never tracked.\r\nRefresh the rate after changing it in another app.",
-            WINDOW_STYLE::default(), 20, 608, 760, 64);
+            WINDOW_STYLE::default(), 20, 708, 760, 64);
         self.control(
             78,
             w!("STATIC"),
@@ -2784,6 +2845,17 @@ impl State {
         if self.dashboard.is_none() || self.page != 6 {
             return;
         }
+        let boost = self
+            .snapshot
+            .devices
+            .get(self.selected)
+            .and_then(|d| self.settings.devices.get(&d.reading.key))
+            .and_then(|p| p.fullscreen_boost_rate)
+            .filter(|_| self.settings.polling_controls);
+        self.set_control_text(
+            79,
+            &dynamic_insight_text(self.insights.data.as_ref(), boost),
+        );
         for id in [70, 71] {
             if let Some(h) = self.controls.get(&id) {
                 unsafe {
@@ -6416,6 +6488,11 @@ mod insights_tests {
     }
     #[test]
     fn insights_explain_projection_evidence_and_unsupported_devices() {
+        let boost = PollingRate::try_from(2000).unwrap();
+        let text = dynamic_insight_text(None, Some(boost));
+        assert!(text.contains("Automatic boost: 2000 Hz"));
+        assert!(text.contains("Still learning"));
+        assert!(text.contains("not a measure of gaming time"));
         let mut rate = RateInsight {
             hz: 1000,
             awake_seconds: 12 * 3600,
@@ -7054,6 +7131,16 @@ mod dashboard_lifecycle_tests {
                         state.build();
                         if advanced {
                             state.scroll_page(i32::MAX);
+                        }
+                        if page == 6 {
+                            state.scroll_page(i32::MAX);
+                            let mut pane = RECT::default();
+                            let mut details = RECT::default();
+                            GetWindowRect(state.page_host.unwrap(), &mut pane).unwrap();
+                            GetWindowRect(state.controls[&79], &mut details).unwrap();
+                            assert!(details.top >= pane.top && details.bottom <= pane.bottom);
+                            assert!(state.text(79).contains("polling-rate mix"));
+                            state.scroll_page(0);
                         }
                         if page == 1 {
                             assert!(state.controls.contains_key(&49));

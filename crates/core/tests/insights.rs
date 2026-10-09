@@ -1,5 +1,34 @@
 use hb_core::*;
 
+#[test]
+fn mixed_projection_weights_drain_and_requires_evidence_for_every_used_rate() {
+    let rate = |hz, seconds, hours| RateInsight {
+        hz,
+        awake_seconds: seconds,
+        projection_seconds: 1800,
+        projection_consumed_percent: 3,
+        projected_full_charge_hours: Some(hours),
+        confidence: InsightConfidence::Low,
+        ..Default::default()
+    };
+    let mut data = BatteryInsights {
+        rates: vec![rate(1000, 7200, 100.0), rate(2000, 3600, 50.0)],
+        ..Default::default()
+    };
+    assert!((data.mixed_full_charge_hours().unwrap() - 75.0).abs() < 0.001);
+    for invalid in [None, Some(0.0), Some(f64::NAN), Some(f64::INFINITY)] {
+        data.rates[1].projected_full_charge_hours = invalid;
+        assert!(data.mixed_full_charge_hours().is_none());
+    }
+    data.rates[1] = rate(2000, 3600, 50.0);
+    data.rates[1].projection_seconds = 1799;
+    assert!(data.mixed_full_charge_hours().is_none());
+    data.rates.pop();
+    assert!(data.mixed_full_charge_hours().is_none());
+    data.rates.clear();
+    assert!(data.mixed_full_charge_hours().is_none());
+}
+
 fn point(timestamp: i64, level: u8) -> UsageObservation {
     let mut reading = Reading::new("device", "Device", "test", timestamp);
     reading.level = Some(level);
