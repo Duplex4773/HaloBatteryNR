@@ -78,6 +78,24 @@ pub struct ControlTarget {
 pub enum ControlAction {
     Read,
     Apply(PollingRate),
+    ApplyIf {
+        rate: PollingRate,
+        expected: PollingRate,
+    },
+}
+impl ControlAction {
+    pub fn rate(self) -> Option<PollingRate> {
+        match self {
+            Self::Read => None,
+            Self::Apply(r) | Self::ApplyIf { rate: r, .. } => Some(r),
+        }
+    }
+    pub fn expected(self) -> Option<PollingRate> {
+        match self {
+            Self::ApplyIf { expected, .. } => Some(expected),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub struct ControlRequest {

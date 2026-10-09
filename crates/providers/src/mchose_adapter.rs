@@ -19,8 +19,7 @@ pub(crate) fn execute(
         return ControlOutcome::failed(request, "configuration cancelled or deadline reached");
     }
     let generation = hid.generation();
-    if matches!(request.action, ControlAction::Apply(_)) && request.target.generation != generation
-    {
+    if request.action.rate().is_some() && request.target.generation != generation {
         return ControlOutcome::failed(
             request,
             "device connection changed; refresh configuration before applying",
@@ -72,11 +71,14 @@ pub(crate) fn execute(
         Err(error) => return ControlOutcome::failed(request, error.message),
     };
     let mut session = GuardedSession::new(session, hid, context, generation);
-    let requested = match request.action {
-        ControlAction::Read => None,
-        ControlAction::Apply(rate) => Some(rate.hz()),
-    };
-    let result = mchose_controls::execute_rate(&mut session, context, info, requested);
+    let requested = request.action.rate().map(|r| r.hz());
+    let result = mchose_controls::execute_rate_checked(
+        &mut session,
+        context,
+        info,
+        requested,
+        request.action.expected().map(|r| r.hz()),
+    );
     let observation = result.observed_hz.map(|hz| PollingObservation {
         target: ControlTarget {
             device: reading.clone(),

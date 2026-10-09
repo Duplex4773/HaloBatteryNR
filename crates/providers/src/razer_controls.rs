@@ -181,6 +181,15 @@ pub fn execute_rate(
     protocol: Protocol,
     hz: Option<u32>,
 ) -> PollingResult {
+    execute_rate_checked(session, context, protocol, hz, None)
+}
+pub fn execute_rate_checked(
+    session: &mut dyn HidSession,
+    context: &PollContext<'_>,
+    protocol: Protocol,
+    hz: Option<u32>,
+    expected: Option<u32>,
+) -> PollingResult {
     let mut result = PollingResult {
         previous_hz: None,
         observed_hz: None,
@@ -200,6 +209,10 @@ pub fn execute_rate(
             result.failure = Some(e);
             return result;
         }
+    }
+    if expected.is_some_and(|rate| result.observed_hz != Some(rate)) {
+        result.failure = Some(ProtocolFailure::VerificationMismatch);
+        return result;
     }
     let Some(hz) = hz else {
         return result;

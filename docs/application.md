@@ -219,7 +219,7 @@ See [keyboard evidence](polling-keyboard-evidence.md).
 
 Configuration uses ordinary user-mode HID APIs, with no game-process memory
 access, injection, input hooks, input automation or custom drivers. Apply is
-blocked when Windows reports gaming/fullscreen/presentation activity. These
+blocked when Windows reports gaming/fullscreen/presentation activity, except for the separately enabled automatic mouse boost. These
 restrictions reduce risk but do not establish approval by every anti-cheat
 vendor; see [implementation restrictions](anti-cheat.md).
 
@@ -288,3 +288,12 @@ Rust evidence; full 601-ID behavioral equivalence is not claimed.
 Hardware configuration allowlists require separate target, protocol and readback
 evidence; catalog generation never extends rate-write permissions automatically.
 Preserve the original MIT notices, protocol credits and exact hardware-report scope.
+
+## Automatic fullscreen boost
+
+Enable polling-rate changes in Settings, select a supported mouse on Devices,
+then enable **Boost this mouse in fullscreen games**, choose the faster rate and
+click **Save boost settings**. The app raises the rate during stable Windows-reported
+fullscreen gaming and restores the previous rate after returning to the desktop.
+This feature defaults off. Keep the app running for restoration. Some borderless
+games are not detected. See [timing and restoration limits](fullscreen-boost.md).

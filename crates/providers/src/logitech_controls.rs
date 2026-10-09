@@ -253,6 +253,17 @@ pub fn execute_rate(
     capability: &Capabilities,
     hz: Option<u32>,
 ) -> PollingResult {
+    execute_rate_checked(long, short, context, info, capability, hz, None)
+}
+pub fn execute_rate_checked(
+    long: &mut dyn HidSession,
+    short: &mut Option<&mut dyn HidSession>,
+    context: &PollContext<'_>,
+    info: &HidInfo,
+    capability: &Capabilities,
+    hz: Option<u32>,
+    expected: Option<u32>,
+) -> PollingResult {
     let mut result = PollingResult {
         observed_hz: None,
         previous_hz: None,
@@ -289,6 +300,10 @@ pub fn execute_rate(
     result.previous_hz = (result.software_mode
         && current.supported_hz.contains(&current.observed_hz))
     .then_some(current.observed_hz);
+    if expected.is_some_and(|rate| result.observed_hz != Some(rate)) {
+        result.failure = Some(ProtocolFailure::VerificationMismatch);
+        return result;
+    }
     let Some(hz) = hz else { return result };
     if !current.supported_hz.contains(&current.observed_hz) {
         result.failure = Some(ProtocolFailure::Unsupported);

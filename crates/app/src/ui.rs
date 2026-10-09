@@ -67,6 +67,7 @@ fn user_message(message: &str) -> &str {
         || message.starts_with("Low battery alert ")
         || message == "Settings saved"
         || message == "Device settings saved"
+        || message == "Automatic boost settings saved"
     {
         return message;
     }
@@ -91,6 +92,7 @@ fn polling_message(message: &str) -> &str {
         || message.starts_with("Applying ")
         || message.starts_with("Restoring ")
         || message.starts_with("Rate checked")
+        || message == "Automatic fullscreen rate verified."
     {
         return message;
     }
@@ -2448,6 +2450,11 @@ impl State {
                     self.page_height = 220 - PAGE_TOP;
                 }
                 self.polling_controls();
+                let footer_y = if self.controls.contains_key(&49) {
+                    910
+                } else {
+                    680
+                };
                 let message = user_message(&self.error).to_owned();
                 self.control(
                     95,
@@ -2455,11 +2462,11 @@ impl State {
                     &message,
                     WINDOW_STYLE::default(),
                     245,
-                    680,
+                    footer_y,
                     535,
                     46,
                 );
-                self.button(5, "Export support report", 20, 725, 205);
+                self.button(5, "Export support report", 20, footer_y + 45, 205);
             }
             2 => {
                 self.heading(90, "Battery history", 20, 68, 740);
@@ -2948,6 +2955,32 @@ impl State {
                 self.query_insights()
             }
             70 | 71 if notification == LBN_SELCHANGE as u16 => self.insights_details(),
+            51 => {
+                if let Some(device) = self.visible_polling_device() {
+                    let rate = if self.checked(49) {
+                        self.polling.observations.get(&device.key).and_then(|o| {
+                            o.supported
+                                .iter()
+                                .filter(|r| r.hz() > 1000)
+                                .nth(self.choice(50))
+                                .copied()
+                        })
+                    } else {
+                        None
+                    };
+                    if self.checked(49) && rate.is_none() {
+                        return;
+                    }
+                    self.settings
+                        .devices
+                        .entry(device.key)
+                        .or_default()
+                        .fullscreen_boost_rate = rate;
+                    self.save();
+                    self.error = "Automatic boost settings saved".into();
+                    self.set_control_text(95, user_message(&self.error));
+                }
+            }
             40 => self.apply_polling(false),
             41 => self.read_polling(),
             42 => self.apply_polling(true),
@@ -3012,6 +3045,11 @@ impl State {
                             hidden,
                             icon,
                             low,
+                            fullscreen_boost_rate: self
+                                .settings
+                                .devices
+                                .get(&key)
+                                .and_then(|p| p.fullscreen_boost_rate),
                             requested_polling_rate: self
                                 .settings
                                 .devices
@@ -3232,9 +3270,22 @@ impl State {
         if self.dashboard.is_none() || self.page != 1 {
             return;
         }
+        self.page_height = if self.current_device().is_some() {
+            708
+        } else {
+            220
+        } - PAGE_TOP;
+        self.build_polling_controls();
+        self.layout_page();
+    }
+    fn build_polling_controls(&mut self) {
         let _redraw = DashboardRedraw::new(self.dashboard.unwrap());
+        let boost_draft = self
+            .controls
+            .contains_key(&49)
+            .then(|| (self.checked(49), self.text(50)));
         // Update only this group: an asynchronous hardware reply must not discard unsaved device edits.
-        for id in (40..=47).chain([98, 99]) {
+        for id in (40..=53).chain([98, 99]) {
             if let Some(h) = self.controls.remove(&id) {
                 unsafe {
                     let _ = DestroyWindow(h);
@@ -3300,6 +3351,8 @@ impl State {
             }
             _ => None,
         };
+        let boost_supported =
+            reading.kind == "mouse" && matches!(reading.capability, PollingCapability::ReadWrite);
         let key = reading.key;
         let observation = self.polling.observations.get(&key).cloned();
         let current = observation.as_ref().and_then(|o| o.rate);
@@ -3395,6 +3448,42 @@ impl State {
             750,
             28,
         );
+        if boost_supported {
+            self.page_height = 920 - PAGE_TOP;
+            self.heading(48, "Automatic fullscreen boost", 20, 708, 750);
+            let saved = self
+                .settings
+                .devices
+                .get(&key)
+                .and_then(|p| p.fullscreen_boost_rate);
+            self.check(
+                49,
+                "Boost this mouse in fullscreen games",
+                boost_draft.as_ref().map_or(saved.is_some(), |d| d.0),
+                20,
+                750,
+                750,
+            );
+            let rates: Vec<_> = supported
+                .iter()
+                .filter(|r| r.hz() > 1000)
+                .copied()
+                .collect();
+            let labels: Vec<_> = rates.iter().map(|r| format!("{} Hz", r.hz())).collect();
+            let selected = boost_draft
+                .as_ref()
+                .and_then(|d| labels.iter().position(|label| label == &d.1))
+                .or_else(|| saved.and_then(|r| rates.iter().position(|v| *v == r)))
+                .unwrap_or(0);
+            self.combo(50, &labels, selected, 20, 792, 230);
+            self.button(51, "Save boost settings", 270, 792, 210);
+            self.enable_control(49, !pending);
+            self.enable_control(50, !pending && !rates.is_empty());
+            self.enable_control(51, !pending && (!rates.is_empty() || saved.is_some()));
+            self.control(52, w!("STATIC"),
+                "Uses Windows fullscreen gaming detection; some borderless games are missed.\r\nBoosts after 10 seconds; restores after 15 seconds back on the desktop.\r\nKeep this app running for restoration. Anti-cheat compatibility is not guaranteed.",
+                WINDOW_STYLE::default(), 20, 838, 750, 62);
+        }
     }
     fn read_polling(&mut self) {
         if let Some(reading) = self.visible_polling_device()
@@ -3473,6 +3562,28 @@ impl State {
             self.settings.polling_controls,
         );
         self.sync_trays(TrayUpdate::Changed);
+        if outcome.request & crate::boost::REQUEST_BIT != 0 {
+            let message = outcome
+                .failure
+                .as_ref()
+                .map(|e| format!("Automatic boost stopped: {e}"))
+                .unwrap_or_else(|| "Automatic fullscreen rate verified.".into());
+            for polling in [&mut self.polling, &mut self.tray_polling] {
+                polling.status.insert(outcome.key.clone(), message.clone());
+                if outcome.may_have_changed
+                    && let Some(previous) = outcome.previous
+                {
+                    polling.previous.insert(outcome.key.clone(), previous);
+                }
+                if let Some(observation) = self.tooltip_rates.get(&outcome.key) {
+                    polling
+                        .observations
+                        .insert(outcome.key.clone(), observation.clone());
+                }
+            }
+            self.polling_controls();
+            return;
+        }
         if outcome.request & crate::runtime::STARTUP_POLLING_REQUEST_BIT != 0 {
             let initial_read = outcome.request & crate::runtime::STARTUP_POLLING_READ_BIT != 0;
             if let Some(observation) = self.tooltip_rates.get(&outcome.key) {
@@ -4451,6 +4562,14 @@ mod behaviour_tests {
     }
     #[test]
     fn user_messages_keep_recovery_actions_and_hide_protocol_details() {
+        assert_eq!(
+            user_message("Automatic boost settings saved"),
+            "Automatic boost settings saved"
+        );
+        assert_eq!(
+            polling_message("Automatic fullscreen rate verified."),
+            "Automatic fullscreen rate verified."
+        );
         let raw = "Hardware may have changed. HID interface 3 report 0x1F timed out after SET.";
         let message = polling_message(raw);
         assert!(message.starts_with("Refresh rate"));
@@ -6733,6 +6852,7 @@ mod dashboard_lifecycle_tests {
                 assert!(!state.controls.contains_key(&14));
                 assert!(state.visible_polling_device().is_none());
                 state.set_control_text(11, "Unsaved keyboard edit");
+                assert!(!state.controls.contains_key(&49));
                 let name_control = state.controls[&11];
                 let save_control = state.controls[&15];
                 let mut pending_device = state.configuration_devices[0].clone();
@@ -6843,6 +6963,7 @@ mod dashboard_lifecycle_tests {
                 );
                 reading.level = Some(50);
                 reading.charging = Some(false);
+                reading.kind = "mouse".into();
                 state.snapshot.devices = vec![DeviceView {
                     reading,
                     name: "Test mouse".into(),
@@ -6935,6 +7056,49 @@ mod dashboard_lifecycle_tests {
                             state.scroll_page(i32::MAX);
                         }
                         if page == 1 {
+                            assert!(state.controls.contains_key(&49));
+                            state.scroll_page(i32::MAX);
+                            let mut pane = RECT::default();
+                            GetWindowRect(state.page_host.unwrap(), &mut pane).unwrap();
+                            for id in [49, 50, 51, 52] {
+                                let mut bounds = RECT::default();
+                                GetWindowRect(state.controls[&id], &mut bounds).unwrap();
+                                assert!(
+                                    bounds.top >= pane.top && bounds.bottom <= pane.bottom,
+                                    "boost control {id} must be reachable by scrolling"
+                                );
+                            }
+                            // A hardware reply rebuilds this group at the current
+                            // scroll position; it must retain the full range.
+                            state.polling_controls();
+                            assert_eq!(state.page_height, 920 - PAGE_TOP);
+                            state.scroll_page(0);
+                            assert!(!state.checked(49));
+                            send(state.controls[&49], BM_SETCHECK, WPARAM(1), LPARAM(0));
+                            state.command(51, 0);
+                            assert_eq!(state.text(95), "Automatic boost settings saved");
+                            assert_eq!(
+                                state.settings.devices["synthetic-mouse"]
+                                    .fullscreen_boost_rate
+                                    .unwrap()
+                                    .hz(),
+                                2000
+                            );
+                            state.command(15, 0);
+                            assert_eq!(
+                                state.settings.devices["synthetic-mouse"]
+                                    .fullscreen_boost_rate
+                                    .unwrap()
+                                    .hz(),
+                                2000
+                            );
+                            send(state.controls[&49], BM_SETCHECK, WPARAM(0), LPARAM(0));
+                            state.command(51, 0);
+                            assert!(
+                                state.settings.devices["synthetic-mouse"]
+                                    .fullscreen_boost_rate
+                                    .is_none()
+                            );
                             // A combo's selected-item callback and a static's
                             // color callback reenter the parent while State is
                             // held, exactly as during a page rebuild. Print the
@@ -6984,14 +7148,22 @@ mod dashboard_lifecycle_tests {
                                 let _ = DeleteDC(dc);
                                 ReleaseDC(Some(child), source);
                             }
-                            let dc = GetDC(Some(reopened));
+                            // Use an offscreen surface: desktop occlusion must not
+                            // turn this paint test into GetPixel(CLR_INVALID).
+                            let source = GetDC(Some(reopened));
+                            let dc = CreateCompatibleDC(Some(source));
+                            let bitmap = CreateCompatibleBitmap(source, 8, 8);
+                            let old = SelectObject(dc, bitmap.into());
                             send(reopened, WM_ERASEBKGND, WPARAM(dc.0 as usize), LPARAM(0));
                             assert_eq!(
                                 GetPixel(dc, 4, 4),
                                 palette.background,
                                 "reentrant dashboard erase, dark={dark}"
                             );
-                            ReleaseDC(Some(reopened), dc);
+                            SelectObject(dc, old);
+                            let _ = DeleteObject(bitmap.into());
+                            let _ = DeleteDC(dc);
+                            ReleaseDC(Some(reopened), source);
                         }
                     }
                     let _ = RedrawWindow(

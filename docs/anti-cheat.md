@@ -7,11 +7,20 @@ guarantee. Include it with portable release documentation and notices.
 
 ## Enforced behavior
 
-- Polling controls are off by default. Enabling them permits explicit reads and
-  user Apply actions; saved choices are not applied at startup, reconnect,
-  resume, or on a timer. There is no automatic rate enforcement.
+- Polling controls are off by default. Startup restoration and automatic fullscreen
+  boosting are separate opt-ins. Neither continuously enforces a rate.
+- **Automatic fullscreen boost** is available for supported battery mice only.
+  After ten seconds of stable `QUNS_RUNNING_D3D_FULL_SCREEN`, a guarded job may
+  raise the rate. After fifteen seconds of stable `QUNS_ACCEPTS_NOTIFICATIONS`
+  or `QUNS_QUIET_TIME`, it may restore the pre-boost rate. This is a narrow
+  exception to the manual Apply restriction below. Unknown, locked, busy,
+  presentation and Store-app states authorize neither operation. Each exchange
+  checks the required state, cancellation and ordinary device/permission guards.
+  The Shell signal denotes exclusive Direct3D fullscreen, not proof that an app
+  is a game; some borderless games are missed. No process inspection is added.
+  See [setup and restoration limits](fullscreen-boost.md).
 - The configuration worker checks Windows Shell notification state through
-  `SHQueryUserNotificationState`. Apply is refused for
+  `SHQueryUserNotificationState`. Manual Apply is refused for
   `QUNS_RUNNING_D3D_FULL_SCREEN`, `QUNS_PRESENTATION_MODE`, `QUNS_BUSY`, or
   `QUNS_APP`. Failed queries and unknown states also block writes. Only
   `QUNS_NOT_PRESENT`, `QUNS_ACCEPTS_NOTIFICATIONS` and `QUNS_QUIET_TIME` permit
@@ -38,7 +47,7 @@ guarantee. Include it with portable release documentation and notices.
   inventory is passive, dashboard-only and active only while Devices is visible.
   Known Corsair keyboards are recognition-only: no command collection is opened,
   and no polling query, mode change, SET or heartbeat is implemented. Maintained
-  software sessions and automatic rate reapplication are disabled by design.
+  software sessions and automatic keyboard fullscreen boosting are disabled by design.
 - Settings and suspension revoke configuration permission synchronously, even
   with a full command queue. A latest-settings mailbox and acknowledged epochs
   prevent old jobs or lifecycle events from reviving permission. Shutdown drains

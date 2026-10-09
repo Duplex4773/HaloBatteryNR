@@ -9,6 +9,8 @@ pub struct DevicePreferences {
     pub icon: Option<String>,
     pub low: Option<u8>,
     pub requested_polling_rate: Option<crate::PollingRate>,
+    /// Opt-in target for Windows-reported exclusive fullscreen applications.
+    pub fullscreen_boost_rate: Option<crate::PollingRate>,
 }
 
 /// A device label is one bounded line in menus, notifications and native edits.
@@ -137,6 +139,12 @@ impl Settings {
                                         .and_then(|v| v.as_u64())
                                         .and_then(|n| u32::try_from(n).ok())
                                         .and_then(|n| crate::PollingRate::try_from(n).ok()),
+                                    fullscreen_boost_rate: fields
+                                        .get("fullscreen_boost_rate")
+                                        .and_then(|v| v.as_u64())
+                                        .filter(|n| *n > 1000)
+                                        .and_then(|n| u32::try_from(n).ok())
+                                        .and_then(|n| crate::PollingRate::try_from(n).ok()),
                                 },
                             ))
                         })
@@ -193,4 +201,36 @@ pub fn valid_repository(s: &str) -> bool {
                 && p.bytes()
                     .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
         })
+}
+#[test]
+fn fullscreen_boost_defaults_off_and_validates_saved_rates() {
+    use serde_json::json;
+    assert!(DevicePreferences::default().fullscreen_boost_rate.is_none());
+    for value in [
+        json!(null),
+        json!("2000"),
+        json!(-1),
+        json!(1000),
+        json!(3000),
+        json!(999999),
+    ] {
+        let settings =
+            Settings::from_value(json!({"devices":{"test":{"fullscreen_boost_rate":value}}}))
+                .unwrap();
+        assert!(settings.devices["test"].fullscreen_boost_rate.is_none());
+    }
+    for hz in [2000, 4000, 8000] {
+        let settings =
+            Settings::from_value(json!({"devices":{"test":{"fullscreen_boost_rate":hz}}})).unwrap();
+        assert_eq!(
+            settings.devices["test"].fullscreen_boost_rate.unwrap().hz(),
+            hz
+        );
+        let restored = Settings::from_value(serde_json::to_value(&settings).unwrap()).unwrap();
+        assert_eq!(
+            restored.devices["test"].fullscreen_boost_rate,
+            settings.devices["test"].fullscreen_boost_rate
+        );
+        assert!(!restored.polling_controls);
+    }
 }

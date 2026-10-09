@@ -1,5 +1,17 @@
 # Changelog
 
+## Optional fullscreen polling boost — 9 October 2026
+
+- Show the successful boost-settings confirmation instead of incorrectly mapping it to a generic error.
+
+- Fix the Devices scroll range so the fullscreen boost switch, rate selector and Save button are reachable, including after asynchronous rate replies.
+
+- Add a per-mouse opt-in boost rate using Windows' conservative fullscreen signal.
+- Debounce entry/exit, verify rate changes and condition restoration on the rate remaining unchanged by other software.
+- Reuse existing workers; no background HID rate polling or new thread. Manual changes take priority and uncertain writes are not continuously retried.
+- Skip idle boost inventory rebuilding and suspended fullscreen queries; retain reconnect invalidation and restoration guards.
+- Keep keyboard controls manual and document restoration limits and anti-cheat boundaries.
+
 ## Insights and allocation follow-up — 6 October 2026
 
 - Avoid rebuilding unchanged device snapshots on freshness ticks when status export is off; retain updates, theme checks and rejected-state recovery.

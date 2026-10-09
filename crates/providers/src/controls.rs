@@ -213,9 +213,7 @@ impl DeviceController for HidDeviceController {
             return ControlOutcome::failed(request, "configuration cancelled or deadline reached");
         }
         let generation = hid.generation();
-        if matches!(request.action, ControlAction::Apply(_))
-            && request.target.generation != generation
-        {
+        if request.action.rate().is_some() && request.target.generation != generation {
             return ControlOutcome::failed(
                 request,
                 "device connection changed; refresh configuration before applying",
@@ -275,10 +273,7 @@ impl DeviceController for HidDeviceController {
             );
         }
         let protocol = razer_controls::protocol(info).unwrap();
-        let requested = match request.action {
-            ControlAction::Read => None,
-            ControlAction::Apply(r) => Some(r.hz()),
-        };
+        let requested = request.action.rate().map(|r| r.hz());
         if requested.is_some_and(|r| !protocol.rates().contains(&r)) {
             return ControlOutcome::failed(request, "polling rate is unsupported on this device");
         }
@@ -293,7 +288,13 @@ impl DeviceController for HidDeviceController {
             Err(e) => return ControlOutcome::failed(request, e.message),
         };
         let mut guarded = GuardedSession::new(session, hid, context, generation);
-        let result = razer_controls::execute_rate(&mut guarded, context, protocol, requested);
+        let result = razer_controls::execute_rate_checked(
+            &mut guarded,
+            context,
+            protocol,
+            requested,
+            request.action.expected().map(|r| r.hz()),
+        );
         let failure = result
             .failure
             .map(|f| format!("Razer polling configuration failed: {f:?}"));

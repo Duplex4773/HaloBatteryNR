@@ -30,6 +30,11 @@ Python application is maintained externally as a reference.
 - **Battery insights:** conservative remaining-use predictions, observed charge
   summaries and drain comparisons by hardware-confirmed polling rate, with evidence
   coverage and freshness. Awake time measures availability rather than input activity.
+- **Optional fullscreen boost:** supported mice can automatically switch to a
+  higher polling rate during Windows-reported fullscreen gaming, then restore
+  the previous rate on the desktop. Off by default, with separate per-device
+  choices, transition delays and no continuous rate enforcement.
+  [Setup and limits](docs/fullscreen-boost.md).
 - **Optional polling controls:** read, apply and restore for allowlisted Razer,
   Logitech and MCHOSE mice and five wired Razer keyboards. Supported mouse tray
   menus select a rate directly; tooltips retain the last confirmed rate without

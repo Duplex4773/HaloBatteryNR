@@ -129,7 +129,13 @@ fn battery_completion_current(
 }
 enum WorkerJob {
     Battery(Job),
-    Polling(Box<ControlRequest>, Arc<AtomicBool>, u64, Option<u64>),
+    Polling(
+        Box<ControlRequest>,
+        Arc<AtomicBool>,
+        u64,
+        Option<u64>,
+        Option<crate::boost::Guard>,
+    ),
     Configuration(Arc<ConfigurationWatch>, u64, u64),
 }
 enum WorkerCompleted {
@@ -822,7 +828,7 @@ fn worker(
                         .filter(|d| d.provider == job.provider.id())
                         .map(|d| d.vid)
                         .collect(),
-                    WorkerJob::Polling(request, _, _, _) => {
+                    WorkerJob::Polling(request, _, _, _, _) => {
                         control_vendors(&request.target.device.source)
                             .into_iter()
                             .collect()
@@ -843,25 +849,30 @@ fn worker(
                     WorkerJob::Battery(job) => {
                         WorkerCompleted::Battery(execute_job(job, &*hid, &clock, &cancel))
                     }
-                    WorkerJob::Polling(request, request_cancel, epoch, configuration_epoch) => {
-                        WorkerCompleted::Polling(
-                            Box::new(execute_control_inner(
-                                &request,
-                                &*hid,
-                                &clock,
-                                &cancel,
-                                &request_cancel,
-                                hb_windows::system::polling_apply_blocked(),
-                                ControlGuards {
-                                    permission: Some((access.permission.clone(), epoch)),
-                                    configuration: configuration_epoch
-                                        .map(|epoch| (access.configuration.clone(), epoch)),
-                                },
-                            )),
-                            epoch,
-                            configuration_epoch,
-                        )
-                    }
+                    WorkerJob::Polling(
+                        request,
+                        request_cancel,
+                        epoch,
+                        configuration_epoch,
+                        boost,
+                    ) => WorkerCompleted::Polling(
+                        Box::new(execute_control_inner(
+                            &request,
+                            &*hid,
+                            &clock,
+                            &cancel,
+                            &request_cancel,
+                            hb_windows::system::polling_apply_blocked(),
+                            ControlGuards {
+                                boost,
+                                permission: Some((access.permission.clone(), epoch)),
+                                configuration: configuration_epoch
+                                    .map(|epoch| (access.configuration.clone(), epoch)),
+                            },
+                        )),
+                        epoch,
+                        configuration_epoch,
+                    ),
                     WorkerJob::Configuration(watch, epoch, generation) => {
                         WorkerCompleted::Configuration(
                             epoch,
@@ -1222,6 +1233,7 @@ struct ControlTransport<'a> {
     permission: Option<(Arc<ControlPermission>, u64)>,
     configuration: Option<(Arc<ConfigurationWatch>, u64)>,
     block_while_gaming: bool,
+    boost: Option<crate::boost::Guard>,
 }
 struct ControlSession {
     inner: Box<dyn HidSession>,
@@ -1230,10 +1242,16 @@ struct ControlSession {
     permission: Option<(Arc<ControlPermission>, u64)>,
     configuration: Option<(Arc<ConfigurationWatch>, u64)>,
     block_while_gaming: bool,
+    boost: Option<crate::boost::Guard>,
     notification_state: fn() -> bool,
 }
 impl ControlSession {
     fn active(&self) -> Result<(), ProviderError> {
+        if self.boost.as_ref().is_some_and(|g| !g.active()) {
+            return Err(ProviderError::new(
+                "Fullscreen polling transition cancelled",
+            ));
+        }
         if self.shutdown.load(Ordering::Relaxed) || self.cancelled.load(Ordering::Relaxed) {
             Err(ProviderError::new("configuration cancelled"))
         } else if self
@@ -1284,6 +1302,11 @@ impl HidTransport for ControlTransport<'_> {
         self.hid.generation()
     }
     fn enumerate(&self, vendor: u16) -> Result<Vec<HidInfo>, ProviderError> {
+        if self.boost.as_ref().is_some_and(|g| !g.active()) {
+            return Err(ProviderError::new(
+                "Fullscreen polling transition cancelled",
+            ));
+        }
         if self.shutdown.load(Ordering::Relaxed) || self.cancelled.load(Ordering::Relaxed) {
             return Err(ProviderError::new("configuration cancelled"));
         }
@@ -1299,6 +1322,11 @@ impl HidTransport for ControlTransport<'_> {
         self.hid.enumerate(vendor)
     }
     fn open(&self, info: &HidInfo) -> Result<Box<dyn HidSession>, ProviderError> {
+        if self.boost.as_ref().is_some_and(|g| !g.active()) {
+            return Err(ProviderError::new(
+                "Fullscreen polling transition cancelled",
+            ));
+        }
         if self.shutdown.load(Ordering::Relaxed) || self.cancelled.load(Ordering::Relaxed) {
             return Err(ProviderError::new("configuration cancelled"));
         }
@@ -1318,6 +1346,7 @@ impl HidTransport for ControlTransport<'_> {
             permission: self.permission.clone(),
             configuration: self.configuration.clone(),
             block_while_gaming: self.block_while_gaming,
+            boost: self.boost.clone(),
             notification_state: hb_windows::system::polling_apply_blocked,
         }))
     }
@@ -1339,6 +1368,7 @@ pub(crate) fn execute_control(
         cancelled,
         gaming,
         ControlGuards {
+            boost: None,
             permission,
             configuration: None,
         },
@@ -1346,6 +1376,7 @@ pub(crate) fn execute_control(
 }
 #[derive(Default)]
 struct ControlGuards {
+    boost: Option<crate::boost::Guard>,
     permission: Option<(Arc<ControlPermission>, u64)>,
     configuration: Option<(Arc<ConfigurationWatch>, u64)>,
 }
@@ -1362,7 +1393,10 @@ fn execute_control_inner(
         return ControlOutcome::failed(request, "Configuration cancelled");
     }
     // Uses Shell's public notification state only; no game-process inspection.
-    if gaming && matches!(request.action, ControlAction::Apply(_)) {
+    if guards.boost.as_ref().is_some_and(|g| !g.active()) {
+        return ControlOutcome::failed(request, "Fullscreen polling transition cancelled");
+    }
+    if gaming && guards.boost.is_none() && request.action.rate().is_some() {
         return ControlOutcome::failed(
             request,
             "Close the game or presentation and verify the Windows notification state before changing the rate",
@@ -1380,7 +1414,8 @@ fn execute_control_inner(
         cancelled: cancelled.clone(),
         permission: guards.permission,
         configuration: guards.configuration,
-        block_while_gaming: matches!(request.action, ControlAction::Apply(_)),
+        block_while_gaming: request.action.rate().is_some() && guards.boost.is_none(),
+        boost: guards.boost,
     };
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         hb_providers::controls::HidDeviceController.execute(request, &transport, &context)
@@ -1401,8 +1436,7 @@ fn simulate_control(
     if let PollingCapability::Unavailable(reason) = &request.target.device.capability {
         return ControlOutcome::failed(request, reason.clone());
     }
-    if matches!(request.action, ControlAction::Apply(_)) && request.target.generation != generation
-    {
+    if request.action.rate().is_some() && request.target.generation != generation {
         return ControlOutcome::failed(request, "Connection changed; refresh before applying");
     }
     let supported = if request.target.device.kind == "keyboard" {
@@ -1411,7 +1445,17 @@ fn simulate_control(
         vec![125, 500, 1000, 2000, 4000, 8000]
     };
     let previous = *current;
-    if let ControlAction::Apply(rate) = request.action {
+    if request
+        .action
+        .expected()
+        .is_some_and(|expected| expected != *current)
+    {
+        return ControlOutcome::failed(
+            request,
+            "Rate changed externally; automatic change cancelled",
+        );
+    }
+    if let Some(rate) = request.action.rate() {
         if !supported.contains(&rate.hz()) {
             return ControlOutcome::failed(request, "Unsupported rate for simulated device");
         }
@@ -1622,6 +1666,7 @@ fn run(
     events: Events,
 ) {
     let mut startup_polling = StartupPolling::new(&settings, Instant::now());
+    let mut boost = crate::boost::Boost::new(Instant::now());
     let Lifecycle {
         cancel,
         permission,
@@ -1801,6 +1846,16 @@ fn run(
             engine.settings.polling_controls && !suspended,
         );
         usage_tracker.synchronize_clock(clock.unix());
+        boost.observe_generation(hid.generation());
+        if suspended || stop || !engine.settings.polling_controls {
+            boost.clear();
+        }
+        if !suspended && !stop && boost.due(Instant::now()) && boost.wanted(&engine.settings) {
+            boost.sample(
+                Instant::now(),
+                hb_windows::system::fullscreen_polling_state(),
+            );
+        }
         let quiet = engine.settings.quiet_fullscreen && hb_windows::system::gaming();
         leave_quiet_mode(
             was_quiet,
@@ -1969,7 +2024,24 @@ fn run(
                 simulate || !jobs.is_full(),
             )
         };
-        let work = if let Some(command) = startup_command {
+        let boost_command = if startup_command.is_none()
+            && boost.needs_inventory(&engine.settings)
+            && !suspended
+            && !stop
+            && inflight == 0
+            && !startup_polling.active()
+            && !jobs.is_full()
+            && commands.is_empty()
+        {
+            boost
+                .next(&engine.settings, hid.generation(), &engine.readings())
+                .map(|request| {
+                    Command::Polling(request, permission.epoch.load(Ordering::Acquire), None)
+                })
+        } else {
+            None
+        };
+        let work = if let Some(command) = startup_command.or(boost_command) {
             Work::Command(Ok(command))
         } else {
             select! {recv(commands)->m=>Work::Command(m),recv(event_rx)->_=>Work::ConnectionEvent,recv(result_rx)->r=>Work::Completed(r),default(wait)=>Work::Idle}
@@ -2180,10 +2252,16 @@ fn run(
                 }
             }
             Work::Command(Ok(Command::Polling(request, epoch, configuration_epoch))) => {
+                let automatic = request.request & crate::boost::REQUEST_BIT != 0;
+                if !automatic && request.action.rate().is_some() {
+                    boost.manual(&request.target.device.key);
+                }
+                let boost_guard = boost.guard(request.request);
                 startup_polling
                     .reads
                     .observe_request(&request.target.device.key);
-                let allowed = epoch == permission.epoch.load(Ordering::Acquire)
+                let allowed = (!automatic || boost_guard.is_some())
+                    && epoch == permission.epoch.load(Ordering::Acquire)
                     && permission.enabled.load(Ordering::Acquire)
                     && permission.desired_enabled.load(Ordering::Acquire)
                     && permission.acknowledged.load(Ordering::Acquire) == epoch
@@ -2202,10 +2280,12 @@ fn run(
                                 .iter()
                                 .any(|d| configuration_matches(&request.target.device, d))));
                 if !allowed {
-                    let _ = events.send(Event::Polling(Box::new(ControlOutcome::failed(
+                    let outcome = ControlOutcome::failed(
                         &request,
                         "Enable polling controls and select an online device before configuring it",
-                    ))));
+                    );
+                    boost.complete(&outcome);
+                    let _ = events.send(Event::Polling(Box::new(outcome)));
                 } else if simulate {
                     let outcome = simulate_control(
                         &request,
@@ -2225,6 +2305,7 @@ fn run(
                         engine.settings.polling_controls && !suspended,
                     );
                     usage_tracker.observe(&outcome);
+                    boost.complete(&outcome);
                     let _ = events.send(Event::Polling(Box::new(outcome)));
                 } else {
                     match jobs.try_send(WorkerJob::Polling(
@@ -2232,13 +2313,16 @@ fn run(
                         control_cancel.clone(),
                         epoch,
                         configuration_epoch,
+                        boost_guard,
                     )) {
                         Ok(()) => inflight += 1,
                         Err(_) => {
-                            let _ = events.send(Event::Polling(Box::new(ControlOutcome::failed(
+                            let outcome = ControlOutcome::failed(
                                 &request,
                                 "Device workers are busy; retry Refresh or Apply",
-                            ))));
+                            );
+                            boost.complete(&outcome);
+                            let _ = events.send(Event::Polling(Box::new(outcome)));
                         }
                     }
                 }
@@ -2280,6 +2364,7 @@ fn run(
                     engine.settings.polling_controls && !suspended,
                 );
                 usage_tracker.observe(&outcome);
+                boost.complete(&outcome);
                 let _ = events.send(Event::Polling(outcome));
             }
             Work::Command(Ok(
@@ -2886,6 +2971,7 @@ mod tests {
                 &cancel,
                 false,
                 ControlGuards {
+                    boost: None,
                     permission: None,
                     configuration: Some((watch.clone(), epoch)),
                 },
@@ -3798,6 +3884,7 @@ mod tests {
             cancelled: Arc::new(AtomicBool::new(false)),
             permission: Some((permission.clone(), 0)),
             block_while_gaming: false,
+            boost: None,
             notification_state: || false,
         };
         assert!(session.send_feature(&[0]).is_err());

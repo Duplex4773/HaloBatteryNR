@@ -126,7 +126,7 @@ enumeration epoch are checked around every HID operation. Confirmed rate changes
 clear affected remaining-use learning, including proven serial aliases, while
 the 30-day battery history remains intact.
 
-Rate changes are blocked when Windows' public notification state reports gaming,
+Manual rate changes are blocked when Windows' public notification state reports gaming,
 fullscreen, presentation or Windows Store app activity, and when its query fails
 or returns an unknown state. Only known non-gaming states permit Apply, checked
 before execution and each HID exchange. Apply before starting a game. That signal
@@ -158,3 +158,10 @@ and adds invented Huntsman V2 and K70 RGB Pro records to the existing mouse.
 The original project's verified/unverified labels remain unchanged. Reference
 captures support protocol implementation, and synthetic tests exercise behavior;
 neither establishes local hardware verification or anti-cheat vendor approval.
+
+## Optional fullscreen boost
+
+Supported battery mice can opt into **Automatic fullscreen boost** on Devices.
+Choose a supported rate above 1000 Hz and save. A 1000 Hz mouse can, for example,
+boost to 2000 Hz during Windows-reported fullscreen gaming, then restore its
+previous rate on the desktop. See [configuration, timing and limits](fullscreen-boost.md).

@@ -88,6 +88,26 @@ fn capability(d: &HidInfo, slot: u8) -> Capabilities {
     cap
 }
 #[test]
+fn conditional_restore_refuses_external_rate_changes_without_set() {
+    let d = device(0xc54d);
+    let cap = capability(&d, 1);
+    let h = FakeHid::new(vec![d.clone()], normal(1, 3, Some(2)));
+    let clock = FakeClock::default();
+    let cancel = AtomicBool::new(false);
+    let result = execute_rate_checked(
+        &mut *h.open(&d).unwrap(),
+        &mut None,
+        &context(&clock, &cancel),
+        &d,
+        &cap,
+        Some(1000),
+        Some(2000),
+    );
+    assert_eq!(result.failure, Some(ProtocolFailure::VerificationMismatch));
+    assert!(!result.may_have_changed);
+    h.done();
+}
+#[test]
 fn models_capability_mask_exact_current_and_wired_limit() {
     for (slot, pid, wpid, usb) in [
         (1, 0xc54d, 0x40a9, 0xc09b),

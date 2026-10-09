@@ -49,8 +49,7 @@ pub(crate) fn execute(
         return ControlOutcome::failed(request, "configuration cancelled or deadline reached");
     }
     let generation = hid.generation();
-    if matches!(request.action, ControlAction::Apply(_)) && request.target.generation != generation
-    {
+    if request.action.rate().is_some() && request.target.generation != generation {
         return ControlOutcome::failed(
             request,
             "device connection changed; refresh configuration before applying",
@@ -192,10 +191,7 @@ pub(crate) fn execute(
             format!("Receiver identity could not be fully resolved: {error}"),
         );
     }
-    let requested = match request.action {
-        ControlAction::Read => None,
-        ControlAction::Apply(r) => Some(r.hz()),
-    };
+    let requested = request.action.rate().map(|r| r.hz());
     let previous = route.capability.observed_hz;
     let result = if requested.is_none() {
         logitech_controls::PollingResult {
@@ -211,13 +207,14 @@ pub(crate) fn execute(
         }
     } else {
         let mut short = route.short.as_mut().map(|s| s as &mut dyn HidSession);
-        logitech_controls::execute_rate(
+        logitech_controls::execute_rate_checked(
             &mut route.long,
             &mut short,
             context,
             route.info,
             &route.capability,
             requested,
+            request.action.expected().map(|r| r.hz()),
         )
     };
     let mode_verified = result.software_mode;

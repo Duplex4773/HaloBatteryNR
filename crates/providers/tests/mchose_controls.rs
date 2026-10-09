@@ -158,6 +158,22 @@ fn run(s: &mut Session, hz: Option<u32>, deadline: u64, cancel: bool) -> Polling
     execute_rate(s, &context, &info(), hz)
 }
 #[test]
+fn conditional_restore_refuses_external_rate_changes_without_set() {
+    let mut s = Session::new();
+    let clock = TestClock::default();
+    let cancel = AtomicBool::new(false);
+    let context = PollContext {
+        clock: &clock,
+        cancelled: &cancel,
+        deadline: Duration::from_secs(10),
+        playstation_full_mode: false,
+    };
+    let result = execute_rate_checked(&mut s, &context, &info(), Some(1000), Some(8000));
+    assert_eq!(result.failure, Some(ProtocolFailure::ConfigurationChanged));
+    assert!(!result.may_have_changed);
+    assert!(s.sets().is_empty());
+}
+#[test]
 fn exact_candidate_only() {
     let i = info();
     assert!(candidate(&i));

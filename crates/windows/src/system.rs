@@ -331,6 +331,43 @@ fn polling_notification_state_blocked(state: Option<QUERY_USER_NOTIFICATION_STAT
 pub fn polling_apply_blocked() -> bool {
     polling_notification_state_blocked(unsafe { SHQueryUserNotificationState() }.ok())
 }
+/// Conservative automatic polling trigger. Unknown, locked, busy and presentation
+/// states authorize neither boosting nor restoration.
+pub fn fullscreen_polling_state() -> Option<bool> {
+    fullscreen_polling_notification_state(unsafe { SHQueryUserNotificationState() }.ok())
+}
+fn fullscreen_polling_notification_state(
+    state: Option<QUERY_USER_NOTIFICATION_STATE>,
+) -> Option<bool> {
+    match state? {
+        QUNS_RUNNING_D3D_FULL_SCREEN => Some(true),
+        QUNS_ACCEPTS_NOTIFICATIONS | QUNS_QUIET_TIME => Some(false),
+        _ => None,
+    }
+}
+#[test]
+fn automatic_polling_requires_conservative_shell_state() {
+    assert_eq!(
+        fullscreen_polling_notification_state(Some(QUNS_RUNNING_D3D_FULL_SCREEN)),
+        Some(true)
+    );
+    for state in [QUNS_ACCEPTS_NOTIFICATIONS, QUNS_QUIET_TIME] {
+        assert_eq!(
+            fullscreen_polling_notification_state(Some(state)),
+            Some(false)
+        );
+    }
+    for state in [
+        None,
+        Some(QUNS_NOT_PRESENT),
+        Some(QUNS_BUSY),
+        Some(QUNS_PRESENTATION_MODE),
+        Some(QUNS_APP),
+        Some(QUERY_USER_NOTIFICATION_STATE(99)),
+    ] {
+        assert_eq!(fullscreen_polling_notification_state(state), None);
+    }
+}
 pub const APP_USER_MODEL_ID: &str = "HaloBatteryNext.Desktop";
 pub const APP_DISPLAY_NAME: &str = "Halo Battery Next";
 

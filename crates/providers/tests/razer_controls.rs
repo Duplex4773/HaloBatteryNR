@@ -68,6 +68,24 @@ fn context<'a>(clock: &'a TestClock, cancel: &'a AtomicBool) -> PollContext<'a> 
     }
 }
 #[test]
+fn conditional_rate_change_refuses_external_changes_before_any_set() {
+    let clock = TestClock::default();
+    let cancel = AtomicBool::new(false);
+    let mut session = Session::new(vec![reply(0xc0, 2, 0, 2)]); // now 4000 Hz
+    let result = execute_rate_checked(
+        &mut session,
+        &context(&clock, &cancel),
+        Protocol::Extended,
+        Some(1000),
+        Some(2000),
+    );
+    assert_eq!(result.failure, Some(ProtocolFailure::VerificationMismatch));
+    assert!(!result.may_have_changed);
+    let sent = session.sent.lock().unwrap();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0][8], 0xc0);
+}
+#[test]
 fn known_collection_only() {
     let i = HidInfo {
         vendor_id: 0x1532,
